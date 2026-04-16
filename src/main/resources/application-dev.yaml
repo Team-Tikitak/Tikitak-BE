@@ -1,0 +1,12 @@
+# 개발용(template)
+# 설정은 로컬 환경에 맞춰 수정해주세요
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update

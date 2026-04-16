@@ -1,3 +1,15 @@
+# 공통(개발/배포) 설정 파일
 spring:
   application:
-    name: tikitak
+    name: tikitac
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+springdoc:
+  default-flat-param-object: true
