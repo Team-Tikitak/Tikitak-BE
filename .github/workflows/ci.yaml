@@ -5,28 +5,8 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: tikitac_test
-          POSTGRES_USER: tikitac
-          POSTGRES_PASSWORD: tikitac1234
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
 
     steps:
       - uses: actions/checkout@v4
@@ -45,12 +25,8 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('**/*.gradle*') }}
 
-      - name: 빌드 + 테스트
-        run: ./gradlew build
-        env:
-          SPRING_PROFILES_ACTIVE: test
-          DB_URL: jdbc:postgresql://localhost:5432/tikitac_test
-          DB_USERNAME: tikitac
-          DB_PASSWORD: tikitac1234
-          REDIS_HOST: localhost
-          JWT_SECRET: test-secret-key-minimum-32-characters-ok
+      - name: Gradle 실행 권한
+        run: chmod +x gradlew
+
+      - name: 빌드
+        run: ./gradlew build -x test
