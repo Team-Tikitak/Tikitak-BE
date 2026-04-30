@@ -1,10 +1,19 @@
-FROM eclipse-temurin:21-jdk-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN chmod +x gradlew
-RUN ./gradlew build -x test --no-daemon
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /workspace
 
-FROM eclipse-temurin:21-jre-alpine
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle settings.gradle ./
+COPY src src
+
+RUN chmod +x gradlew
+RUN ./gradlew clean bootJar
+
+FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=builder /app/build/libs/*-SNAPSHOT.jar app.jar
-ENTRYPOINT ["java", "-Xmx512m", "-jar", "app.jar"]
+
+COPY --from=build /workspace/build/libs/*.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
