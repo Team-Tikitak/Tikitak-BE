@@ -14,8 +14,12 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                // swagger 허용
                 .requestMatchers(
+                    // health 체크
+                    "/api/v1/system/health",
+                    "/actuator/**",
+
+                    // swagger 허용
                     "/swagger-ui.html",
                     "/swagger-ui/**",
                     "/v3/api-docs/**",
