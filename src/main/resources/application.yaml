@@ -1,3 +1,19 @@
+# 공통(개발/배포) 설정 파일
 spring:
   application:
     name: tikitak
+
+  profiles:
+    default: dev
+
+springdoc:
+  default-flat-param-object: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
