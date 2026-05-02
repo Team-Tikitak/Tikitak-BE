@@ -1,10 +1,10 @@
-package kusitms.spin.tikitak.domain.feed;
+package kusitms.spin.tikitak.domain.feed.entity;
 
 import jakarta.persistence.*;
-import kusitms.spin.tikitak.domain.place.Place;
-import kusitms.spin.tikitak.domain.question.Question;
-import kusitms.spin.tikitak.domain.team.Team;
-import kusitms.spin.tikitak.domain.team.TeamMember;
+import kusitms.spin.tikitak.domain.place.entity.Place;
+import kusitms.spin.tikitak.domain.question.entity.Question;
+import kusitms.spin.tikitak.domain.team.entity.Team;
+import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

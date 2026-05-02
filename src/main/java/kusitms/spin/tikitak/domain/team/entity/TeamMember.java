@@ -1,7 +1,9 @@
-package kusitms.spin.tikitak.domain.feed;
+package kusitms.spin.tikitak.domain.team.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -9,8 +11,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
-import kusitms.spin.tikitak.domain.team.TeamMember;
+import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
+import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,38 +23,45 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-		name = "feed_reaction",
-		uniqueConstraints = @UniqueConstraint(
-				name = "uk_feed_reaction_feed_member",
-				columnNames = { "feed_id", "team_member_id" }
-		)
-)
+@Table(name = "team_member")
 @Getter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class FeedReaction {
+public class TeamMember {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "feed_id", nullable = false)
-	private Feed feed;
+	@JoinColumn(name = "team_id", nullable = false)
+	private Team team;
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "team_member_id", nullable = false)
-	private TeamMember teamMember;
+	@JoinColumn(name = "member_id", nullable = false)
+	private Member member;
+
+	@Column(length = 30)
+	private String nickname;
 
 	@Column(columnDefinition = "text")
-	private String emoji;
+	private String profileImgUrl;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 50)
+	private TeamMemberRole role;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 50)
+	private TeamMemberStatus status;
 
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
 
-	void setFeed(Feed feed) {
-		this.feed = feed;
+	private LocalDateTime deletedAt;
+
+	void setTeam(Team team) {
+		this.team = team;
 	}
 }

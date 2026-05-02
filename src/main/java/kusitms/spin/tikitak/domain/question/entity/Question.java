@@ -1,4 +1,4 @@
-package kusitms.spin.tikitak.domain.question;
+package kusitms.spin.tikitak.domain.question.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

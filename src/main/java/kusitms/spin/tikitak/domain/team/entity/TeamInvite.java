@@ -1,4 +1,4 @@
-package kusitms.spin.tikitak.domain.team;
+package kusitms.spin.tikitak.domain.team.entity;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
