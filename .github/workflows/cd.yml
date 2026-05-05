@@ -1,6 +1,7 @@
 name: CD
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - develop
@@ -12,79 +13,387 @@ permissions:
 
 concurrency:
   group: cd-${{ github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/team-tikitak/tikitak-be
+  GITOPS_APP_PATH: apps/tikitak-be
 
 jobs:
-  build-push-update-gitops:
+  build-and-push:
     runs-on: ubuntu-latest
 
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
     steps:
-      - name: Checkout app repo
+      - name: Checkout backend repo
         uses: actions/checkout@v4
 
-      - name: Set deploy variables
-        run: |
-          OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_NAME=ghcr.io/${OWNER_LC}/tikitak-be" >> $GITHUB_ENV
+      - name: Set image tag
+        id: meta
+        run: echo "image_tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then
-            echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
-          elif [ "${GITHUB_REF_NAME}" = "develop" ]; then
-            echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
-          else
-            echo "Unsupported branch: ${GITHUB_REF_NAME}"
-            exit 1
-          fi
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Test
+        run: ./gradlew clean test
 
       - name: Login to GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-            -u "${{ github.actor }}" \
-            --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t ${IMAGE_NAME}:${GITHUB_SHA} \
-            -t ${IMAGE_NAME}:${GITHUB_REF_NAME} \
-            .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Push Docker image
-        run: |
-          docker push ${IMAGE_NAME}:${GITHUB_SHA}
-          docker push ${IMAGE_NAME}:${GITHUB_REF_NAME}
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.image_tag }}
+            ${{ env.IMAGE_NAME }}:latest
 
+  update-gitops-and-deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
       - name: Checkout GitOps repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/Tikitak-GitOps
+          repository: ${{ secrets.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
+          ref: main
           path: gitops
 
-      - name: Update docker-compose image tag
+      - name: Install yq
         run: |
-          COMPOSE_FILE="gitops/${DEPLOY_ENV}/docker-compose.yaml"
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
 
-          if [ ! -f "$COMPOSE_FILE" ]; then
-            echo "docker-compose.yaml not found: $COMPOSE_FILE"
-            exit 1
-          fi
+      # =========================
+      # DEV: 단일 배포
+      # =========================
 
-          sed -i "s|image: ghcr.io/.*/tikitak-be:.*|image: ${IMAGE_NAME}:${GITHUB_SHA}|g" "$COMPOSE_FILE"
-
-      - name: Commit and push GitOps change
+      - name: Update dev compose
+        if: github.ref_name == 'develop'
+        working-directory: gitops
         run: |
-          cd gitops
+          set -e
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          COMPOSE_FILE="${{ env.GITOPS_APP_PATH }}/dev/docker-compose.yaml"
 
-          git add ${DEPLOY_ENV}/docker-compose.yaml
+          echo "Update dev image tag: ${IMAGE_TAG}"
+
+          yq -i ".services.app.image = \"${{ env.IMAGE_NAME }}:${IMAGE_TAG}\"" "$COMPOSE_FILE"
+
+      - name: Commit and push dev GitOps changes
+        id: dev_commit
+        if: github.ref_name == 'develop'
+        working-directory: gitops
+        run: |
+          set -e
+
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add "${{ env.GITOPS_APP_PATH }}/dev/docker-compose.yaml"
 
           if git diff --cached --quiet; then
-            echo "No GitOps changes to commit"
+            echo "No dev GitOps changes"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git commit -m "deploy(${DEPLOY_ENV}): ${GITHUB_SHA}"
+          git commit -m "deploy(dev): ${IMAGE_TAG}"
           git push
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Komodo dev stack
+        if: github.ref_name == 'develop'
+        env:
+          KOMODO_ADDRESS: ${{ secrets.KOMODO_ADDRESS }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_STACK: ${{ secrets.KOMODO_DEV_STACK }}
+        run: |
+          set -e
+
+          KOMODO_ADDRESS="${KOMODO_ADDRESS%/}"
+
+          echo "Deploy Komodo dev stack: ${KOMODO_STACK}"
+
+          HTTP_STATUS=$(curl -sS -o /tmp/komodo-response.json -w "%{http_code}" \
+            -X POST "${KOMODO_ADDRESS}/execute/DeployStack" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: ${KOMODO_API_KEY}" \
+            -H "X-Api-Secret: ${KOMODO_API_SECRET}" \
+            -d "{\"stack\":\"${KOMODO_STACK}\"}")
+
+          echo "Komodo API status: ${HTTP_STATUS}"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Komodo dev deploy failed"
+            cat /tmp/komodo-response.json || true
+            exit 1
+          fi
+
+          cat /tmp/komodo-response.json || true
+
+      # =========================
+      # PROD 1단계: inactive app만 새 이미지로 배포
+      # =========================
+
+      - name: Stage prod inactive app image
+        id: prod_target
+        if: github.ref_name == 'main'
+        working-directory: gitops
+        run: |
+          set -e
+
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          COMPOSE_FILE="${{ env.GITOPS_APP_PATH }}/prod/docker-compose.yaml"
+          STATE_FILE="${{ env.GITOPS_APP_PATH }}/prod/deploy-state.yaml"
+
+          ACTIVE_COLOR=$(yq -r '.service.activeColor' "$STATE_FILE")
+
+          if [ "$ACTIVE_COLOR" = "blue" ]; then
+            NEXT_COLOR="green"
+            NEXT_SERVICE="app-green"
+
+            yq -i ".services.\"app-green\".image = \"${{ env.IMAGE_NAME }}:${IMAGE_TAG}\"" "$COMPOSE_FILE"
+            yq -i ".image.greenTag = \"${IMAGE_TAG}\"" "$STATE_FILE"
+          elif [ "$ACTIVE_COLOR" = "green" ]; then
+            NEXT_COLOR="blue"
+            NEXT_SERVICE="app-blue"
+
+            yq -i ".services.\"app-blue\".image = \"${{ env.IMAGE_NAME }}:${IMAGE_TAG}\"" "$COMPOSE_FILE"
+            yq -i ".image.blueTag = \"${IMAGE_TAG}\"" "$STATE_FILE"
+          else
+            echo "Invalid activeColor: ${ACTIVE_COLOR}"
+            exit 1
+          fi
+
+          echo "active_color=${ACTIVE_COLOR}" >> "$GITHUB_OUTPUT"
+          echo "next_color=${NEXT_COLOR}" >> "$GITHUB_OUTPUT"
+          echo "next_service=${NEXT_SERVICE}" >> "$GITHUB_OUTPUT"
+
+          echo "active color: ${ACTIVE_COLOR}"
+          echo "next color: ${NEXT_COLOR}"
+          echo "next service: ${NEXT_SERVICE}"
+          echo "new image tag: ${IMAGE_TAG}"
+
+      - name: Commit and push prod stage 1
+        id: prod_stage1_commit
+        if: github.ref_name == 'main'
+        working-directory: gitops
+        run: |
+          set -e
+
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          NEXT_COLOR="${{ steps.prod_target.outputs.next_color }}"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add "${{ env.GITOPS_APP_PATH }}/prod/docker-compose.yaml"
+          git add "${{ env.GITOPS_APP_PATH }}/prod/deploy-state.yaml"
+
+          if git diff --cached --quiet; then
+            echo "No prod stage 1 changes"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "deploy(prod): stage ${NEXT_COLOR} ${IMAGE_TAG}"
+          git push
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Komodo prod stack for stage 1
+        if: github.ref_name == 'main'
+        env:
+          KOMODO_ADDRESS: ${{ secrets.KOMODO_ADDRESS }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_STACK: ${{ secrets.KOMODO_PROD_STACK }}
+        run: |
+          set -e
+
+          KOMODO_ADDRESS="${KOMODO_ADDRESS%/}"
+
+          echo "Deploy Komodo prod stack for stage 1: ${KOMODO_STACK}"
+
+          HTTP_STATUS=$(curl -sS -o /tmp/komodo-response.json -w "%{http_code}" \
+            -X POST "${KOMODO_ADDRESS}/execute/DeployStack" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: ${KOMODO_API_KEY}" \
+            -H "X-Api-Secret: ${KOMODO_API_SECRET}" \
+            -d "{\"stack\":\"${KOMODO_STACK}\"}")
+
+          echo "Komodo API status: ${HTTP_STATUS}"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Komodo prod stage 1 deploy failed"
+            cat /tmp/komodo-response.json || true
+            exit 1
+          fi
+
+          cat /tmp/komodo-response.json || true
+
+      - name: Wait for Komodo prod stage 1 deploy
+        if: github.ref_name == 'main'
+        run: |
+          echo "Wait for Komodo prod stage 1 deploy..."
+          sleep 25
+
+      - name: Wait for inactive prod app health
+        if: github.ref_name == 'main'
+        run: |
+          set -e
+
+          NEXT_COLOR="${{ steps.prod_target.outputs.next_color }}"
+          HEALTH_URL="${{ secrets.PROD_API_BASE_URL }}/__deploy/health/${NEXT_COLOR}"
+
+          echo "Check inactive prod app health: ${HEALTH_URL}"
+
+          for i in {1..30}; do
+            echo "Health check attempt ${i}/30"
+
+            if curl -fsS \
+              -H "X-Deploy-Token: ${{ secrets.DEPLOY_HEALTH_TOKEN }}" \
+              "$HEALTH_URL"; then
+              echo "Inactive app is healthy."
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Inactive app health check failed."
+          exit 1
+
+      # =========================
+      # PROD 2단계: nginx 트래픽 전환
+      # =========================
+
+      - name: Switch prod traffic
+        if: github.ref_name == 'main'
+        working-directory: gitops
+        run: |
+          set -e
+
+          COMPOSE_FILE="${{ env.GITOPS_APP_PATH }}/prod/docker-compose.yaml"
+          STATE_FILE="${{ env.GITOPS_APP_PATH }}/prod/deploy-state.yaml"
+
+          NEXT_COLOR="${{ steps.prod_target.outputs.next_color }}"
+          NEXT_SERVICE="${{ steps.prod_target.outputs.next_service }}"
+
+          echo "Switch prod traffic to ${NEXT_SERVICE}"
+
+          yq -i ".services.nginx.environment.ACTIVE_BACKEND = \"${NEXT_SERVICE}\"" "$COMPOSE_FILE"
+          yq -i ".service.activeColor = \"${NEXT_COLOR}\"" "$STATE_FILE"
+
+      - name: Commit and push prod stage 2
+        id: prod_stage2_commit
+        if: github.ref_name == 'main'
+        working-directory: gitops
+        run: |
+          set -e
+
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          NEXT_COLOR="${{ steps.prod_target.outputs.next_color }}"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add "${{ env.GITOPS_APP_PATH }}/prod/docker-compose.yaml"
+          git add "${{ env.GITOPS_APP_PATH }}/prod/deploy-state.yaml"
+
+          if git diff --cached --quiet; then
+            echo "No prod stage 2 changes"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "switch(prod): ${NEXT_COLOR} ${IMAGE_TAG}"
+          git push
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Komodo prod stack for stage 2
+        if: github.ref_name == 'main'
+        env:
+          KOMODO_ADDRESS: ${{ secrets.KOMODO_ADDRESS }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_STACK: ${{ secrets.KOMODO_PROD_STACK }}
+        run: |
+          set -e
+
+          KOMODO_ADDRESS="${KOMODO_ADDRESS%/}"
+
+          echo "Deploy Komodo prod stack for stage 2: ${KOMODO_STACK}"
+
+          HTTP_STATUS=$(curl -sS -o /tmp/komodo-response.json -w "%{http_code}" \
+            -X POST "${KOMODO_ADDRESS}/execute/DeployStack" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: ${KOMODO_API_KEY}" \
+            -H "X-Api-Secret: ${KOMODO_API_SECRET}" \
+            -d "{\"stack\":\"${KOMODO_STACK}\"}")
+
+          echo "Komodo API status: ${HTTP_STATUS}"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Komodo prod stage 2 deploy failed"
+            cat /tmp/komodo-response.json || true
+            exit 1
+          fi
+
+          cat /tmp/komodo-response.json || true
+
+      - name: Wait for Komodo prod stage 2 deploy
+        if: github.ref_name == 'main'
+        run: |
+          echo "Wait for Komodo prod stage 2 deploy..."
+          sleep 15
+
+      - name: Check active prod health after switch
+        if: github.ref_name == 'main'
+        run: |
+          set -e
+
+          HEALTH_URL="${{ secrets.PROD_API_BASE_URL }}/actuator/health"
+
+          echo "Check active prod health after switch: ${HEALTH_URL}"
+
+          for i in {1..20}; do
+            echo "Active health check attempt ${i}/20"
+
+            if curl -fsS "$HEALTH_URL"; then
+              echo "Active prod app is healthy after switch."
+              exit 0
+            fi
+
+            sleep 3
+          done
+
+          echo "Active health check after switch failed."
+          exit 1
