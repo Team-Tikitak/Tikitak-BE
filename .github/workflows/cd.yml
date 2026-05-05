@@ -11,6 +11,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: cd-${{ github.ref_name }}
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: ghcr.io/team-tikitak/tikitak-be
   GITOPS_APP_PATH: apps/tikitak-be
@@ -122,10 +126,36 @@ jobs:
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Call Komodo dev webhook
-        if: github.ref_name == 'develop' && steps.dev_commit.outputs.changed == 'true'
+      - name: Deploy Komodo dev stack
+        if: github.ref_name == 'develop'
+        env:
+          KOMODO_ADDRESS: ${{ secrets.KOMODO_ADDRESS }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_STACK: ${{ secrets.KOMODO_DEV_STACK }}
         run: |
-          curl -fsSL -X POST "${{ secrets.KOMODO_DEV_WEBHOOK_URL }}"
+          set -e
+
+          KOMODO_ADDRESS="${KOMODO_ADDRESS%/}"
+
+          echo "Deploy Komodo dev stack: ${KOMODO_STACK}"
+
+          HTTP_STATUS=$(curl -sS -o /tmp/komodo-response.json -w "%{http_code}" \
+            -X POST "${KOMODO_ADDRESS}/execute/DeployStack" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: ${KOMODO_API_KEY}" \
+            -H "X-Api-Secret: ${KOMODO_API_SECRET}" \
+            -d "{\"stack\":\"${KOMODO_STACK}\"}")
+
+          echo "Komodo API status: ${HTTP_STATUS}"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Komodo dev deploy failed"
+            cat /tmp/komodo-response.json || true
+            exit 1
+          fi
+
+          cat /tmp/komodo-response.json || true
 
       # =========================
       # PROD 1단계: inactive app만 새 이미지로 배포
@@ -197,10 +227,42 @@ jobs:
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Call Komodo prod webhook for stage 1
-        if: github.ref_name == 'main' && steps.prod_stage1_commit.outputs.changed == 'true'
+      - name: Deploy Komodo prod stack for stage 1
+        if: github.ref_name == 'main'
+        env:
+          KOMODO_ADDRESS: ${{ secrets.KOMODO_ADDRESS }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_STACK: ${{ secrets.KOMODO_PROD_STACK }}
         run: |
-          curl -fsSL -X POST "${{ secrets.KOMODO_PROD_WEBHOOK_URL }}"
+          set -e
+
+          KOMODO_ADDRESS="${KOMODO_ADDRESS%/}"
+
+          echo "Deploy Komodo prod stack for stage 1: ${KOMODO_STACK}"
+
+          HTTP_STATUS=$(curl -sS -o /tmp/komodo-response.json -w "%{http_code}" \
+            -X POST "${KOMODO_ADDRESS}/execute/DeployStack" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: ${KOMODO_API_KEY}" \
+            -H "X-Api-Secret: ${KOMODO_API_SECRET}" \
+            -d "{\"stack\":\"${KOMODO_STACK}\"}")
+
+          echo "Komodo API status: ${HTTP_STATUS}"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Komodo prod stage 1 deploy failed"
+            cat /tmp/komodo-response.json || true
+            exit 1
+          fi
+
+          cat /tmp/komodo-response.json || true
+
+      - name: Wait for Komodo prod stage 1 deploy
+        if: github.ref_name == 'main'
+        run: |
+          echo "Wait for Komodo prod stage 1 deploy..."
+          sleep 25
 
       - name: Wait for inactive prod app health
         if: github.ref_name == 'main'
@@ -276,10 +338,42 @@ jobs:
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Call Komodo prod webhook for stage 2
-        if: github.ref_name == 'main' && steps.prod_stage2_commit.outputs.changed == 'true'
+      - name: Deploy Komodo prod stack for stage 2
+        if: github.ref_name == 'main'
+        env:
+          KOMODO_ADDRESS: ${{ secrets.KOMODO_ADDRESS }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_STACK: ${{ secrets.KOMODO_PROD_STACK }}
         run: |
-          curl -fsSL -X POST "${{ secrets.KOMODO_PROD_WEBHOOK_URL }}"
+          set -e
+
+          KOMODO_ADDRESS="${KOMODO_ADDRESS%/}"
+
+          echo "Deploy Komodo prod stack for stage 2: ${KOMODO_STACK}"
+
+          HTTP_STATUS=$(curl -sS -o /tmp/komodo-response.json -w "%{http_code}" \
+            -X POST "${KOMODO_ADDRESS}/execute/DeployStack" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: ${KOMODO_API_KEY}" \
+            -H "X-Api-Secret: ${KOMODO_API_SECRET}" \
+            -d "{\"stack\":\"${KOMODO_STACK}\"}")
+
+          echo "Komodo API status: ${HTTP_STATUS}"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Komodo prod stage 2 deploy failed"
+            cat /tmp/komodo-response.json || true
+            exit 1
+          fi
+
+          cat /tmp/komodo-response.json || true
+
+      - name: Wait for Komodo prod stage 2 deploy
+        if: github.ref_name == 'main'
+        run: |
+          echo "Wait for Komodo prod stage 2 deploy..."
+          sleep 15
 
       - name: Check active prod health after switch
         if: github.ref_name == 'main'
