@@ -30,11 +30,11 @@ management:
 
 auth:
   oauth:
-    frontend-redirect-uri: ${GOOGLE_FRONTEND_REDIRECT_URI:}
+    frontend-redirect-uri: ${GOOGLE_FRONTEND_REDIRECT_URI}
     google:
-      client-id: ${GOOGLE_CLIENT_ID:${GOOGLE_OAUTH_CLIENT_ID:}}
-      client-secret: ${GOOGLE_CLIENT_SECRET:${GOOGLE_OAUTH_CLIENT_SECRET:}}
-      redirect-uri: ${GOOGLE_REDIRECT_URI:${GOOGLE_OAUTH_REDIRECT_URI:}}
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
+      redirect-uri: ${GOOGLE_REDIRECT_URI}
   jwt:
     secret: ${JWT_SECRET:}
     access-token-expires-in: ${JWT_ACCESS_TOKEN_EXPIRES_IN:3600}
