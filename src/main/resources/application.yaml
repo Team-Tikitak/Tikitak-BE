@@ -3,8 +3,18 @@ spring:
   application:
     name: tikitak
 
-  profiles:
-    default: dev
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: false
 
 springdoc:
   default-flat-param-object: true
@@ -17,3 +27,16 @@ management:
   endpoint:
     health:
       show-details: never
+
+auth:
+  oauth:
+    frontend-redirect-uri: ${GOOGLE_FRONTEND_REDIRECT_URI:}
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:${GOOGLE_OAUTH_CLIENT_ID:}}
+      client-secret: ${GOOGLE_CLIENT_SECRET:${GOOGLE_OAUTH_CLIENT_SECRET:}}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:${GOOGLE_OAUTH_REDIRECT_URI:}}
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-token-expires-in: ${JWT_ACCESS_TOKEN_EXPIRES_IN:3600}
+    refresh-token-expires-in: ${JWT_REFRESH_TOKEN_EXPIRES_IN:604800}
+    cookie-secure: ${REFRESH_COOKIE_SECURE:true}

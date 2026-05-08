@@ -68,4 +68,42 @@ public class Member {
 	private LocalDateTime updatedAt;
 
 	private LocalDateTime deletedAt;
+
+	public static Member createSocialMember(
+			String email,
+			String name,
+			String nickname,
+			String profileImgUrl,
+			SocialProvider socialProvider,
+			String providerId
+	) {
+		LocalDateTime now = LocalDateTime.now();
+		return Member.builder()
+				.email(email)
+				.name(name)
+				.nickname(nickname)
+				.profileImgUrl(profileImgUrl)
+				.socialProvider(socialProvider)
+				.providerId(providerId)
+				.status(MemberStatus.ACTIVE)
+				.termsAgreed(false)
+				.privacyAgreed(false)
+				.createdAt(now)
+				.updatedAt(now)
+				.build();
+	}
+
+	public void updateSocialProfile(String email, String name, String profileImgUrl) {
+		this.email = email;
+		this.name = name;
+		this.profileImgUrl = profileImgUrl;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void withdraw() {
+		LocalDateTime now = LocalDateTime.now();
+		this.status = MemberStatus.INACTIVE;
+		this.deletedAt = now;
+		this.updatedAt = now;
+	}
 }
