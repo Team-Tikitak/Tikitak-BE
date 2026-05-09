@@ -7,9 +7,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.global.dto.CommonResponse;
 import kusitms.spin.tikitak.service.auth.AuthService;
-import kusitms.spin.tikitak.service.auth.dto.GoogleAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.LogoutResponse;
+import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.RefreshTokenRequest;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
 import lombok.RequiredArgsConstructor;
@@ -43,7 +43,7 @@ public class AuthController {
 	)
 	@GetMapping("/api/v1/auth/oauth/{provider}/start")
 	public ResponseEntity<?> startOAuthLogin(
-			@Parameter(description = "OAuth Provider. google", example = "google")
+			@Parameter(description = "OAuth Provider. google, kakao", example = "kakao")
 			@PathVariable String provider,
 			@Parameter(
 					description = "true면 302 Redirect, false면 Swagger 테스트용 JSON 응답",
@@ -51,7 +51,7 @@ public class AuthController {
 			)
 			@RequestParam(required = false) Boolean redirect
 	) {
-		GoogleAuthorizeUrlResponse response = authService.getGoogleAuthorizeUrl(provider);
+		OAuthAuthorizeUrlResponse response = authService.getAuthorizeUrl(provider);
 		if (Boolean.FALSE.equals(redirect)) {
 			return ResponseEntity.ok()
 					.header(HttpHeaders.SET_COOKIE, oauthStateCookie(response.state()).toString())
@@ -70,7 +70,7 @@ public class AuthController {
 	)
 	@GetMapping("/api/v1/auth/oauth/{provider}/callback")
 	public ResponseEntity<Void> handleOAuthCallback(
-			@Parameter(description = "OAuth Provider. google", example = "google")
+			@Parameter(description = "OAuth Provider. google, kakao", example = "kakao")
 			@PathVariable String provider,
 			@Parameter(description = "Provider가 전달한 인가 코드")
 			@RequestParam(required = false) String code,
@@ -78,7 +78,7 @@ public class AuthController {
 			@RequestParam(required = false) String state,
 			@CookieValue(name = "oauthState", required = false) String savedState
 	) {
-		LoginResponse loginResponse = authService.loginWithGoogle(provider, code, state, savedState);
+		LoginResponse loginResponse = authService.loginWithOAuth(provider, code, state, savedState);
 		URI redirectUri = UriComponentsBuilder.fromUriString(authProperties.oauth().frontendRedirectUri())
 				.queryParam("accessToken", loginResponse.accessToken())
 				.queryParam("isNewMember", loginResponse.isNewMember())
@@ -132,7 +132,7 @@ public class AuthController {
 		return ResponseCookie.from("oauthState", state)
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
-				.path("/api/v1/auth/oauth/google/callback")
+				.path("/api/v1/auth/oauth")
 				.sameSite("Lax")
 				.maxAge(Duration.ofMinutes(5))
 				.build();
@@ -152,7 +152,7 @@ public class AuthController {
 		return ResponseCookie.from("oauthState", "")
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
-				.path("/api/v1/auth/oauth/google/callback")
+				.path("/api/v1/auth/oauth")
 				.sameSite("Lax")
 				.maxAge(Duration.ZERO)
 				.build();

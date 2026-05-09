@@ -10,11 +10,19 @@ public record AuthProperties(
 
 	public record OAuth(
 			String frontendRedirectUri,
-			Google google
+			Google google,
+			Kakao kakao
 	) {
 	}
 
 	public record Google(
+			String clientId,
+			String clientSecret,
+			String redirectUri
+	) {
+	}
+
+	public record Kakao(
 			String clientId,
 			String clientSecret,
 			String redirectUri

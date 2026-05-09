@@ -5,8 +5,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.config.AuthProperties;
-import kusitms.spin.tikitak.service.auth.dto.GoogleAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.GoogleOAuthTokenResponse;
+import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
 import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +36,7 @@ public class GoogleOAuthService {
 	private final ObjectMapper objectMapper;
 	private final HttpClient httpClient = HttpClient.newHttpClient();
 
-	public GoogleAuthorizeUrlResponse getAuthorizeUrl(String state) {
+	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String state) {
 		AuthProperties.Google google = authProperties.oauth().google();
 		validateGoogleClientConfig(google, false);
 		URI authorizeUrl = UriComponentsBuilder.fromUriString(AUTHORIZATION_URI)
@@ -51,7 +51,7 @@ public class GoogleOAuthService {
 				.encode()
 				.toUri();
 
-		return new GoogleAuthorizeUrlResponse(authorizeUrl, state);
+		return new OAuthAuthorizeUrlResponse(authorizeUrl, state);
 	}
 
 	public OAuthUserInfo getUserInfo(String code) {
