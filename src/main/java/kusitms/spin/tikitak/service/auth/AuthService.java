@@ -5,8 +5,8 @@ import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
-import kusitms.spin.tikitak.service.auth.dto.GoogleAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
+import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
 import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
@@ -25,14 +25,19 @@ import java.util.Locale;
 public class AuthService {
 
 	private final GoogleOAuthService googleOAuthService;
+	private final KakaoOAuthService kakaoOAuthService;
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
 	private final SecureRandom secureRandom = new SecureRandom();
 
-	public GoogleAuthorizeUrlResponse getGoogleAuthorizeUrl(String provider) {
-		validateGoogleProvider(provider);
+	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String provider) {
+		SocialProvider socialProvider = parseProvider(provider);
 		try {
-			return googleOAuthService.getAuthorizeUrl(createState());
+			String state = createState();
+			return switch (socialProvider) {
+				case GOOGLE -> googleOAuthService.getAuthorizeUrl(state);
+				case KAKAO -> kakaoOAuthService.getAuthorizeUrl(state);
+			};
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
@@ -56,12 +61,15 @@ public class AuthService {
 	}
 
 	@Transactional
-	public LoginResponse loginWithGoogle(String provider, String code, String state, String savedState) {
-		validateGoogleProvider(provider);
+	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState) {
+		SocialProvider socialProvider = parseProvider(provider);
 		validateCallbackRequest(code, state, savedState);
 
 		try {
-			OAuthUserInfo userInfo = googleOAuthService.getUserInfo(code);
+			OAuthUserInfo userInfo = switch (socialProvider) {
+				case GOOGLE -> googleOAuthService.getUserInfo(code);
+				case KAKAO -> kakaoOAuthService.getUserInfo(code);
+			};
 			boolean[] created = {false};
 			Member member = memberRepository
 					.findBySocialProviderAndProviderId(userInfo.provider(), userInfo.providerId())
@@ -99,8 +107,13 @@ public class AuthService {
 		}
 	}
 
-	private void validateGoogleProvider(String provider) {
-		if (provider == null || !provider.toLowerCase(Locale.ROOT).equals(SocialProvider.GOOGLE.name().toLowerCase(Locale.ROOT))) {
+	private SocialProvider parseProvider(String provider) {
+		if (provider == null || provider.isBlank()) {
+			throw new BusinessException(ErrorCode.AUTH101);
+		}
+		try {
+			return SocialProvider.valueOf(provider.toUpperCase(Locale.ROOT));
+		} catch (IllegalArgumentException e) {
 			throw new BusinessException(ErrorCode.AUTH101);
 		}
 	}
