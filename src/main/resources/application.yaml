@@ -3,6 +3,10 @@ spring:
   application:
     name: tikitak
 
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: false
   jpa:
     hibernate:
       ddl-auto: none
@@ -10,11 +14,6 @@ spring:
       hibernate:
         format_sql: true
     open-in-view: false
-
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    validate-on-migrate: false
 
 springdoc:
   default-flat-param-object: true
