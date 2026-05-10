@@ -17,10 +17,10 @@ public class TeamInactiveBatchService {
 
     private final TeamRepository teamRepository;
 
-    @Scheduled(cron = "0 * * * * *")
+    @Scheduled(cron = "0 0 4 * * *")
     @Transactional
     public void deleteInactiveTeams() {
-        // INACTIVE 상태이면서 deletedAt이 7일 지난 팀을 완전히 삭제
+        // 매일 새벽 4시에 INACTIVE 상태이면서 deletedAt이 7일 지난 팀을 완전히 삭제
         LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
         List<Team> teams = teamRepository.findAllByStatusAndDeletedAtBefore(TeamStatus.INACTIVE, cutoff);
         teamRepository.deleteAll(teams);
