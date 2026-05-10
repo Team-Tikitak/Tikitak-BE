@@ -31,7 +31,17 @@ public enum ErrorCode {
 
     // Me
     ME009("ME009", "팀장은 팀이 존재하는 동안 탈퇴할 수 없습니다.", 400),
-    ME010("ME010", "회원탈퇴 처리에 실패했습니다.", 500);
+    ME010("ME010", "회원탈퇴 처리에 실패했습니다.", 500),
+
+    // Member
+    MEMBER001("MEMBER001", "존재하지 않는 사용자입니다.", 404),
+
+    // Team
+    TEAM001("TEAM001", "존재하지 않는 팀입니다", 404),
+    TEAM002("TEAM002", "조회할 권한이 없는 팀입니다", 403),
+
+    // TeamMember
+    TEAM_Member001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404);
 
     private final String code;
     private final String message;
