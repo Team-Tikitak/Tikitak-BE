@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.domain.team.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -19,6 +20,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -26,6 +29,7 @@ import java.time.LocalDateTime;
 @Table(name = "team_member")
 @Getter
 @Builder
+@EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class TeamMember {
@@ -56,7 +60,8 @@ public class TeamMember {
 	@Column(nullable = false, length = 50)
 	private TeamMemberStatus status;
 
-	@Column(nullable = false)
+	@CreatedDate
+	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
 	private LocalDateTime deletedAt;
