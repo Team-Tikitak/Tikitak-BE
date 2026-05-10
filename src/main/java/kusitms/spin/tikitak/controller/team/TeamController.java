@@ -51,4 +51,30 @@ public class TeamController {
         return CommonResponse.success(response);
     }
 
+    @PostMapping("/{teamId}/deletion-requests")
+    @Operation(
+            summary = "팀 삭제 신청 API",
+            description = "팀 상태를 INACTIVE로 변경합니다. 7일 후 배치 작업으로 완전 삭제됩니다."
+    )
+    public CommonResponse<Void> deleteTeam(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable Long teamId
+    ) {
+        teamService.deleteTeam(memberId, teamId);
+        return CommonResponse.success(null);
+    }
+
+    @DeleteMapping("/{teamId}/deletion-requests")
+    @Operation(
+            summary = "팀 삭제 복구 API",
+            description = "INACTIVE 상태의 팀을 ACTIVE로 복구합니다."
+    )
+    public CommonResponse<Void> recoverTeam(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable Long teamId
+    ) {
+        teamService.recoverTeam(memberId, teamId);
+        return CommonResponse.success(null);
+    }
+
 }

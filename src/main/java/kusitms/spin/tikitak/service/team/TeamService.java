@@ -108,4 +108,51 @@ public class TeamService {
                 .teamMemberDTOList(teamMemberDTOList)
                 .build();
     }
+
+    @Transactional
+    public void deleteTeam(Long memberId, Long teamId) {
+        Team team = teamRepository.findTeamWithTeamMembersById(teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
+        // 이미 삭제 요청된 팀인지 확인
+        if (team.getStatus() == TeamStatus.INACTIVE) {
+            throw new BusinessException(ErrorCode.TEAM004);
+        }
+
+        TeamMember currentMember = team.getTeamMembers().stream()
+                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
+
+        // 삭제 요청한 사람이 팀장인지 확인
+        if (currentMember.getRole() != TeamMemberRole.OWNER) {
+            throw new BusinessException(ErrorCode.TEAM005);
+        }
+
+        // 팀의 status를 INACTIVE로 변경
+        team.inactive();
+    }
+
+    @Transactional
+    public void recoverTeam(Long memberId, Long teamId) {
+        Team team = teamRepository.findTeamWithTeamMembersById(teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
+        // 삭제 신청된 팀인지 확인
+        if (team.getStatus() != TeamStatus.INACTIVE) {
+            throw new BusinessException(ErrorCode.TEAM006);
+        }
+
+        TeamMember currentMember = team.getTeamMembers().stream()
+                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
+
+        if (currentMember.getRole() != TeamMemberRole.OWNER) {
+            throw new BusinessException(ErrorCode.TEAM007);
+        }
+
+        // 팀의 status를 ACTIVE로 변경
+        team.recover();
+    }
 }

@@ -69,4 +69,14 @@ public class Team {
 		if (name != null) this.name = name;
 		if (description != null) this.description = description;
 	}
+
+	public void inactive() {
+		this.status = TeamStatus.INACTIVE;
+		this.deletedAt = LocalDateTime.now();
+	}
+
+	public void recover() {
+		this.status = TeamStatus.ACTIVE;
+		this.deletedAt = null;
+	}
 }
