@@ -15,4 +15,12 @@ public class TeamRequestDTO {
         private String profileImageUrl;
         private String nickName;
     }
+
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TeamUpdateRequestDTO {
+        private String teamName;
+        private String introduction;
+    }
 }

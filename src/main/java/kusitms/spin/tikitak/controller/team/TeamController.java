@@ -40,4 +40,15 @@ public class TeamController {
         return CommonResponse.success(teamDetailResponseDTO);
     }
 
+    @PatchMapping("/{teamId}")
+    @Operation(summary = "팀 수정 API")
+    public CommonResponse<TeamResponseDTO.TeamUpdateResponseDTO> editTeam(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable Long teamId,
+            @RequestBody TeamRequestDTO.TeamUpdateRequestDTO request
+    ) {
+        TeamResponseDTO.TeamUpdateResponseDTO response = teamService.updateTeam(memberId, teamId, request);
+        return CommonResponse.success(response);
+    }
+
 }

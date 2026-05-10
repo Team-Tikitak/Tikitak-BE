@@ -39,6 +39,7 @@ public enum ErrorCode {
     // Team
     TEAM001("TEAM001", "존재하지 않는 팀입니다", 404),
     TEAM002("TEAM002", "조회할 권한이 없는 팀입니다", 403),
+    TEAM003("TEAM003", "수정할 권한이 없는 팀입니다", 403),
 
     // TeamMember
     TEAM_Member001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404);

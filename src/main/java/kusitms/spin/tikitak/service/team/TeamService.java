@@ -60,6 +60,29 @@ public class TeamService {
                 .build();
     }
 
+    @Transactional
+    public TeamResponseDTO.TeamUpdateResponseDTO updateTeam(Long memberId, Long teamId, TeamRequestDTO.TeamUpdateRequestDTO request) {
+        Team team = teamRepository.findTeamWithTeamMembersById(teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
+        TeamMember currentMember = team.getTeamMembers().stream()
+                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
+
+        // TeamMember가 팀장인지 확인
+        if (currentMember.getRole() != TeamMemberRole.OWNER) {
+            throw new BusinessException(ErrorCode.TEAM003);
+        }
+
+        team.update(request.getTeamName(), request.getIntroduction());
+
+        return TeamResponseDTO.TeamUpdateResponseDTO.builder()
+                .teamName(team.getName())
+                .introduction(team.getDescription())
+                .build();
+    }
+
     public TeamResponseDTO.TeamDetailResponseDTO viewTeamDetail(Long memberId, Long teamId) {
         // Team과 함께 TeamMember 들도 같이 가져옴
         Team team = teamRepository.findTeamWithTeamMembersById(teamId)

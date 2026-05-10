@@ -38,4 +38,13 @@ public class TeamResponseDTO {
         private String teamName;
         private List<TeamMemberDTO> teamMemberDTOList;
     }
+
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TeamUpdateResponseDTO {
+        private String teamName;
+        private String introduction;
+    }
 }

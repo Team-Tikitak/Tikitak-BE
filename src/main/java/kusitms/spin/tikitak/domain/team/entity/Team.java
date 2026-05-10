@@ -64,4 +64,9 @@ public class Team {
 	@Builder.Default
 	@OneToMany(mappedBy = "team", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<TeamMember> teamMembers = new ArrayList<>();
+
+	public void update(String name, String description) {
+		if (name != null) this.name = name;
+		if (description != null) this.description = description;
+	}
 }
