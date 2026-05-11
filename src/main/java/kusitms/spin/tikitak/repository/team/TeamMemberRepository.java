@@ -25,4 +25,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 			@Param("memberStatus") TeamMemberStatus memberStatus,
 			@Param("teamStatus") TeamStatus teamStatus
 	);
+
+	boolean existsByTeamIdAndMemberId(Long teamId, Long memberId);
 }
