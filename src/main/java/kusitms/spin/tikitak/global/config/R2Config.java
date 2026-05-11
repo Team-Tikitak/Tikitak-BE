@@ -23,28 +23,32 @@ public class R2Config {
     @Bean
     public S3Client s3Client() {
         return S3Client.builder()
-                .region(Region.of("auto")) // R2는 auto region 사용
+                .region(Region.of(r2Properties.getRegion()))
                 .endpointOverride(URI.create(r2Properties.getEndpoint()))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(r2Properties.getAccessKeyId(), r2Properties.getSecretAccessKey())
-                ))
-                .serviceConfiguration(S3Configuration.builder()
-                        .pathStyleAccessEnabled(true) // R2는 path style 사용
-                        .build())
+                .credentialsProvider(createCredentialsProvider())
+                .serviceConfiguration(createS3Configuration())
                 .build();
     }
 
     @Bean
     public S3Presigner s3Presigner() {
         return S3Presigner.builder()
-                .region(Region.of("auto"))
+                .region(Region.of(r2Properties.getRegion()))
                 .endpointOverride(URI.create(r2Properties.getEndpoint()))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(r2Properties.getAccessKeyId(), r2Properties.getSecretAccessKey())
-                ))
-                .serviceConfiguration(S3Configuration.builder()
-                        .pathStyleAccessEnabled(true)
-                        .build())
+                .credentialsProvider(createCredentialsProvider())
+                .serviceConfiguration(createS3Configuration())
+                .build();
+    }
+
+    private StaticCredentialsProvider createCredentialsProvider() {
+        return StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(r2Properties.getAccessKeyId(), r2Properties.getSecretAccessKey())
+        );
+    }
+
+    private S3Configuration createS3Configuration() {
+        return S3Configuration.builder()
+                .pathStyleAccessEnabled(true) // R2는 path style 사용
                 .build();
     }
 }

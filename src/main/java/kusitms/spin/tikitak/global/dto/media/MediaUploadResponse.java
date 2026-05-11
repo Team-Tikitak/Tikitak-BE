@@ -11,6 +11,10 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MediaUploadResponse {
+    /**
+     * Representative media id for this upload request.
+     */
     private Long uploadId;
+
     private List<MediaUploadItem> items;
 }
