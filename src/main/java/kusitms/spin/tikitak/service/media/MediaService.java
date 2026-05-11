@@ -15,7 +15,6 @@ import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -39,9 +38,7 @@ public class MediaService {
     private final R2Properties r2Properties;
     private final MediaRepository mediaRepository;
     private final TeamMemberRepository teamMemberRepository;
-
-    @Autowired(required = false)
-    private S3Presigner s3Presigner;
+    private final Optional<S3Presigner> s3Presigner;
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/jpg", "image/png", "image/heic"
@@ -63,10 +60,9 @@ public class MediaService {
                         .fileName(file.getFileName())
                         .contentType(file.getContentType())
                         .size(file.getSize())
-                        .teamId(request.getTeamId())
+                        .key(buildObjectKey(file.getFileName()))
+                        .teamId(resolveTeamId(request))
                         .memberId(memberId)
-                        .createdAt(LocalDateTime.now())
-                        .updatedAt(LocalDateTime.now())
                         .build())
                 .toList();
 
@@ -81,7 +77,7 @@ public class MediaService {
                 })
                 .toList();
 
-        return new MediaUploadResponse(1L, items); // uploadId는 임시로 1L
+        return new MediaUploadResponse(savedMedias.get(0).getId(), items);
     }
 
     private void validateRequest(MediaUploadRequest request, Long memberId) {
@@ -95,7 +91,10 @@ public class MediaService {
         }
 
         // 팀 이미지일 경우 팀 멤버십 검증
-        if (request.getPurpose() == MediaPurpose.TEAM_IMAGE && request.getTeamId() != null) {
+        if (request.getPurpose() == MediaPurpose.TEAM_IMAGE) {
+            if (request.getTeamId() == null) {
+                throw new BusinessException(ErrorCode.MEDIA003); // or appropriate error
+            }
             boolean isMember = teamMemberRepository.existsByTeamIdAndMemberId(request.getTeamId(), memberId);
             if (!isMember) {
                 throw new BusinessException(ErrorCode.TEAM004); // TEAM004: 해당 팀에 접근할 수 없습니다.
@@ -131,16 +130,16 @@ public class MediaService {
         }
     }
 
-    private String generatePresignedUrl(Media media) {
-        if (s3Presigner == null) {
-            throw new BusinessException(ErrorCode.MEDIA006);
-        }
-        try {
-            String key = "uploads/" + UUID.randomUUID() + "_" + media.getFileName();
+    private Long resolveTeamId(MediaUploadRequest request) {
+        return request.getPurpose() == MediaPurpose.TEAM_IMAGE ? request.getTeamId() : null;
+    }
 
+    private String generatePresignedUrl(Media media) {
+        S3Presigner presigner = s3Presigner.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA006));
+        try {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(r2Properties.getBucketName())
-                    .key(key)
+                    .key(media.getKey())
                     .contentType(media.getContentType())
                     .build();
 
@@ -149,11 +148,15 @@ public class MediaService {
                     .putObjectRequest(putObjectRequest)
                     .build();
 
-            return s3Presigner.presignPutObject(presignRequest).url().toString();
+            return presigner.presignPutObject(presignRequest).url().toString();
         } catch (Exception e) {
             log.error("Failed to generate presigned URL for media {}", media.getId(), e);
-            throw new BusinessException(ErrorCode.MEDIA006);
+            throw new BusinessException(ErrorCode.MEDIA006, e);
         }
+    }
+
+    private String buildObjectKey(String fileName) {
+        return "uploads/" + UUID.randomUUID() + "_" + fileName;
     }
 
     private Long getCurrentMemberId() {

@@ -8,12 +8,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "media")
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
@@ -44,6 +46,9 @@ public class Media {
     private String url;
 
     @Column
+    private String key;
+
+    @Column
     private LocalDateTime uploadedAt;
 
     @Column(nullable = false)
@@ -60,7 +65,6 @@ public class Media {
 
     public void updateStatus(MediaStatus status) {
         this.status = status;
-        this.updatedAt = LocalDateTime.now();
         if (status == MediaStatus.UPLOADED) {
             this.uploadedAt = LocalDateTime.now();
         }
@@ -68,6 +72,16 @@ public class Media {
 
     public void updateUrl(String url) {
         this.url = url;
-        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }
