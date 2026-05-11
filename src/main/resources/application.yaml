@@ -46,6 +46,7 @@ auth:
 
 r2:
   account-id: ${R2_ACCOUNT_ID}
+  region: ${R2_REGION:auto}
   access-key-id: ${R2_ACCESS_KEY_ID}
   secret-access-key: ${R2_SECRET_ACCESS_KEY}
   bucket-name: ${R2_BUCKET_NAME}
