@@ -78,7 +78,7 @@ public class AuthController {
 			@RequestParam(required = false) String state,
 			@CookieValue(name = "oauthState", required = false) String savedState
 	) {
-		LoginResponse loginResponse = authService.loginWithOAuth(provider, code, state, savedState);
+		LoginResponse loginResponse = authService.loginWithOAuth(provider, code, state, savedState, null);
 		URI redirectUri = UriComponentsBuilder.fromUriString(authProperties.oauth().frontendRedirectUri())
 				.queryParam("accessToken", loginResponse.accessToken())
 				.queryParam("isNewMember", loginResponse.isNewMember())
@@ -112,6 +112,37 @@ public class AuthController {
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, refreshTokenCookie(tokenResponse.refreshToken()).toString())
 				.body(CommonResponse.success(tokenResponse));
+	}
+
+	@Operation(
+			summary = "Apple OAuth 콜백 처리 및 로그인 완료",
+			description = "Apple에서 전달한 인가 코드와 id_token을 검증하고 로그인 또는 회원가입을 완료한 뒤 프론트 웹앱으로 리다이렉트합니다."
+	)
+	@PostMapping("/api/v1/auth/oauth/apple/callback")
+	public ResponseEntity<Void> handleAppleOAuthCallback(
+			@Parameter(description = "Apple에서 전달한 인가 코드")
+			@RequestParam(required = false) String code,
+			@Parameter(description = "OAuth 요청 검증용 state")
+			@RequestParam(required = false) String state,
+			@Parameter(description = "Apple 사용자 식별 정보를 포함한 JWT")
+			@RequestParam(required = false) String idToken,
+			@CookieValue(name = "oauthState", required = false) String savedState
+	) {
+		LoginResponse loginResponse = authService.loginWithOAuth("apple", code, state, savedState, idToken);
+		URI redirectUri = UriComponentsBuilder.fromUriString(authProperties.oauth().frontendRedirectUri())
+				.queryParam("accessToken", loginResponse.accessToken())
+				.queryParam("isNewMember", loginResponse.isNewMember())
+				.queryParam("hasAgreedRequiredTerms", loginResponse.hasAgreedRequiredTerms())
+				.queryParam("activeTeamId", loginResponse.activeTeamId())
+				.build()
+				.encode()
+				.toUri();
+
+		return ResponseEntity.status(HttpStatus.FOUND)
+				.header(HttpHeaders.LOCATION, redirectUri.toString())
+				.header(HttpHeaders.SET_COOKIE, refreshTokenCookie(loginResponse.refreshToken()).toString())
+				.header(HttpHeaders.SET_COOKIE, expireOAuthStateCookie().toString())
+				.build();
 	}
 
 	@Operation(
