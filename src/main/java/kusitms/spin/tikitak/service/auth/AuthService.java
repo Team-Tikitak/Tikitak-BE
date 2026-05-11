@@ -26,6 +26,7 @@ public class AuthService {
 
 	private final GoogleOAuthService googleOAuthService;
 	private final KakaoOAuthService kakaoOAuthService;
+	private final AppleOAuthService appleOAuthService;
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
 	private final SecureRandom secureRandom = new SecureRandom();
@@ -37,6 +38,7 @@ public class AuthService {
 			return switch (socialProvider) {
 				case GOOGLE -> googleOAuthService.getAuthorizeUrl(state);
 				case KAKAO -> kakaoOAuthService.getAuthorizeUrl(state);
+				case APPLE -> appleOAuthService.getAuthorizeUrl(state);
 			};
 		} catch (BusinessException e) {
 			throw e;
@@ -61,7 +63,7 @@ public class AuthService {
 	}
 
 	@Transactional
-	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState) {
+	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState, String idToken) {
 		SocialProvider socialProvider = parseProvider(provider);
 		validateCallbackRequest(code, state, savedState);
 
@@ -69,6 +71,12 @@ public class AuthService {
 			OAuthUserInfo userInfo = switch (socialProvider) {
 				case GOOGLE -> googleOAuthService.getUserInfo(code);
 				case KAKAO -> kakaoOAuthService.getUserInfo(code);
+				case APPLE -> {
+					if (idToken == null || idToken.isBlank()) {
+						throw new BusinessException(ErrorCode.AUTH103);
+					}
+					yield appleOAuthService.getUserInfo(code, idToken);
+				}
 			};
 			boolean[] created = {false};
 			Member member = memberRepository
