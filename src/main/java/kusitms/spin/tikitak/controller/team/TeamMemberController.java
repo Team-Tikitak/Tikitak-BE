@@ -56,4 +56,15 @@ public class TeamMemberController {
         teamMemberService.leaveTeam(memberId, teamId);
         return CommonResponse.success(null);
     }
+
+    @DeleteMapping("/{targetMemberId}")
+    @Operation(summary = "팀 멤버 강퇴 API", description = "팀장만 사용할 수 있습니다.")
+    public CommonResponse<Void> kickMember(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable Long teamId,
+            @PathVariable Long targetMemberId
+    ) {
+        teamMemberService.kickMember(memberId, teamId, targetMemberId);
+        return CommonResponse.success(null);
+    }
 }

@@ -85,4 +85,33 @@ public class TeamMemberService {
 
         teamMember.leaveTeam();
     }
+
+    @Transactional
+    public void kickMember(Long callerId, Long teamId, Long targetMemberId) {
+        TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(callerId, teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+
+        if (caller.getStatus() != TeamMemberStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER003);
+        }
+
+        // 호출한 사용자가 팀장인지 검증
+        if (caller.getRole() != TeamMemberRole.OWNER) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER004);
+        }
+
+        // 강퇴 대상 팀 멤버
+        TeamMember target = teamMemberRepository.findByMemberIdAndTeamId(targetMemberId, teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+
+        if (target.getStatus() != TeamMemberStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER001);
+        }
+
+        if (target.getRole() == TeamMemberRole.OWNER) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER005);
+        }
+
+        target.kickTeamMember();
+    }
 }

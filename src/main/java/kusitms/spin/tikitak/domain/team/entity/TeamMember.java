@@ -79,4 +79,9 @@ public class TeamMember {
 		this.status = TeamMemberStatus.LEFT;
 		this.deletedAt = LocalDateTime.now();
 	}
+
+	public void kickTeamMember() {
+		this.status = TeamMemberStatus.BANNED;
+		this.deletedAt = LocalDateTime.now();
+	}
 }
