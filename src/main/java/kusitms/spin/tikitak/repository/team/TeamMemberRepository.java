@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
 	@Query("""
@@ -25,4 +27,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 			@Param("memberStatus") TeamMemberStatus memberStatus,
 			@Param("teamStatus") TeamStatus teamStatus
 	);
+
+	Optional<TeamMember> findByMemberIdAndTeamId(Long memberId, Long teamId);
 }
