@@ -28,4 +28,13 @@ public class TeamMemberResponseDTO {
         private TeamMemberRole role;
         private String profileImgUrl;
     }
+
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TeamMemberUpdateResponseDTO {
+        private String nickname;
+        private String profileImgUrl;
+    }
 }

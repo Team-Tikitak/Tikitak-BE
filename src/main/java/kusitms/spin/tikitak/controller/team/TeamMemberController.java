@@ -3,13 +3,17 @@ package kusitms.spin.tikitak.controller.team;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import kusitms.spin.tikitak.global.dto.CommonResponse;
 import kusitms.spin.tikitak.global.security.CurrentMemberId;
 import kusitms.spin.tikitak.service.team.TeamMemberService;
+import kusitms.spin.tikitak.service.team.dto.TeamMemberRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,6 +32,17 @@ public class TeamMemberController {
             @PathVariable Long teamId
     ) {
         TeamMemberResponseDTO.TeamMemberListResponseDTO response = teamMemberService.listTeamMembers(memberId, teamId);
+        return CommonResponse.success(response);
+    }
+
+    @PatchMapping("/me")
+    @Operation(summary = "내 팀 프로필 수정 API")
+    public CommonResponse<TeamMemberResponseDTO.TeamMemberUpdateResponseDTO> updateMyProfile(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable Long teamId,
+            @Valid @RequestBody TeamMemberRequestDTO.TeamMemberUpdateRequestDTO request
+    ) {
+        TeamMemberResponseDTO.TeamMemberUpdateResponseDTO response = teamMemberService.updateMyProfile(memberId, teamId, request);
         return CommonResponse.success(response);
     }
 }
