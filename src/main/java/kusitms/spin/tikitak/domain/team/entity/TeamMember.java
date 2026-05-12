@@ -74,4 +74,9 @@ public class TeamMember {
 		if (nickname != null) this.nickname = nickname;
 		if (profileImgUrl != null) this.profileImgUrl = profileImgUrl;
 	}
+
+	public void leaveTeam() {
+		this.status = TeamMemberStatus.LEFT;
+		this.deletedAt = LocalDateTime.now();
+	}
 }

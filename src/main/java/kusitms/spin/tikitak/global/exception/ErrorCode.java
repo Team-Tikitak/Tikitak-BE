@@ -56,7 +56,9 @@ public enum ErrorCode {
     TEAM009("TEAM009", "팀을 찾을 수 없습니다.", 404),
 
     // TeamMember
-    TEAM_MEMBER001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404);
+    TEAM_MEMBER001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404),
+    TEAM_MEMBER002("TEAM_MEMBER002", "팀장은 팀이 존재하는 동안 나갈 수 없습니다", 400),
+    TEAM_MEMBER003("TEAM_MEMBER003", "해당 팀 멤버가 아닙니다.", 400);
 
     private final String code;
     private final String message;

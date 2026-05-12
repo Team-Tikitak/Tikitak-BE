@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
+import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
@@ -67,5 +68,21 @@ public class TeamMemberService {
                 .nickname(teamMember.getNickname())
                 .profileImgUrl(teamMember.getProfileImgUrl())
                 .build();
+    }
+
+    @Transactional
+    public void leaveTeam(Long memberId, Long teamId) {
+        TeamMember teamMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+
+        if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER003);
+        }
+
+        if (teamMember.getRole() == TeamMemberRole.OWNER) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER002);
+        }
+
+        teamMember.leaveTeam();
     }
 }

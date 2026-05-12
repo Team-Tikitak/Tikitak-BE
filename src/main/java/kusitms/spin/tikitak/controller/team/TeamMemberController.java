@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.service.team.TeamMemberService;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberResponseDTO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,5 +45,15 @@ public class TeamMemberController {
     ) {
         TeamMemberResponseDTO.TeamMemberUpdateResponseDTO response = teamMemberService.updateMyProfile(memberId, teamId, request);
         return CommonResponse.success(response);
+    }
+
+    @DeleteMapping("/me")
+    @Operation(summary = "팀 나가기 API")
+    public CommonResponse<Void> leaveTeam(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable Long teamId
+    ) {
+        teamMemberService.leaveTeam(memberId, teamId);
+        return CommonResponse.success(null);
     }
 }
