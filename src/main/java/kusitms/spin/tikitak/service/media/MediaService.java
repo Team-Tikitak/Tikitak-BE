@@ -111,10 +111,16 @@ public class MediaService {
         }
 
         // 기존 업로드 개수 검증 (PENDING 포함)
-        List<Media> existing = mediaRepository.findByMemberIdAndPurpose(memberId, request.getPurpose());
-        long pendingCount = existing.stream()
-                .filter(m -> m.getStatus() == MediaStatus.PENDING)
-                .count();
+        long pendingCount;
+        if (request.getPurpose() == MediaPurpose.TEAM_IMAGE) {
+            pendingCount = mediaRepository.countByTeamIdAndPurposeAndStatus(
+                    request.getTeamId(), MediaPurpose.TEAM_IMAGE, MediaStatus.PENDING);
+        } else {
+            List<Media> existing = mediaRepository.findByMemberIdAndPurpose(memberId, request.getPurpose());
+            pendingCount = existing.stream()
+                    .filter(m -> m.getStatus() == MediaStatus.PENDING)
+                    .count();
+        }
         if (pendingCount + request.getFiles().size() > maxCount) {
             throw new BusinessException(ErrorCode.MEDIA005);
         }
