@@ -66,7 +66,8 @@ public class TeamService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
 
         TeamMember currentMember = team.getTeamMembers().stream()
-                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .filter(tm -> tm.getMember().getId().equals(memberId)
+                        && tm.getStatus() == TeamMemberStatus.ACTIVE)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
@@ -90,7 +91,8 @@ public class TeamService {
 
         // 사용자가 해당 팀에 속해 있는지 확인
         TeamMember currentMember = team.getTeamMembers().stream()
-                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .filter(tm -> tm.getMember().getId().equals(memberId)
+                        && tm.getStatus() == TeamMemberStatus.ACTIVE)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
@@ -120,7 +122,8 @@ public class TeamService {
         }
 
         TeamMember currentMember = team.getTeamMembers().stream()
-                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .filter(tm -> tm.getMember().getId().equals(memberId)
+                        && tm.getStatus() == TeamMemberStatus.ACTIVE)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
@@ -144,7 +147,8 @@ public class TeamService {
         }
 
         TeamMember currentMember = team.getTeamMembers().stream()
-                .filter(tm -> tm.getMember().getId().equals(memberId))
+                .filter(tm -> tm.getMember().getId().equals(memberId)
+                        && tm.getStatus() == TeamMemberStatus.ACTIVE)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
