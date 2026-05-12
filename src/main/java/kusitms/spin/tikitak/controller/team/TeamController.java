@@ -24,7 +24,7 @@ public class TeamController {
     @Operation(summary = "팀 생성 API")
     public CommonResponse<TeamResponseDTO.TeamCreateResponseDTO> createTeam(
             @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @RequestBody TeamRequestDTO.TeamCreateRequestDTO request
+            @Valid @RequestBody TeamRequestDTO.TeamCreateRequestDTO request
     ) {
         TeamResponseDTO.TeamCreateResponseDTO teamCreateDTO = teamService.createTeam(memberId, request);
         return CommonResponse.success(teamCreateDTO);
@@ -45,7 +45,7 @@ public class TeamController {
     public CommonResponse<TeamResponseDTO.TeamUpdateResponseDTO> editTeam(
             @Parameter(hidden = true) @CurrentMemberId Long memberId,
             @PathVariable Long teamId,
-            @RequestBody TeamRequestDTO.TeamUpdateRequestDTO request
+            @Valid @RequestBody TeamRequestDTO.TeamUpdateRequestDTO request
     ) {
         TeamResponseDTO.TeamUpdateResponseDTO response = teamService.updateTeam(memberId, teamId, request);
         return CommonResponse.success(response);
