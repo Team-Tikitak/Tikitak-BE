@@ -41,9 +41,22 @@ public enum ErrorCode {
     MEDIA005("MEDIA005", "업로드 가능한 이미지 개수를 초과했습니다.", 400),
     MEDIA006("MEDIA006", "업로드 URL 발급에 실패했습니다.", 500),
 
+    // Member
+    MEMBER001("MEMBER001", "존재하지 않는 사용자입니다.", 404),
+
     // Team
-    TEAM004("TEAM004", "해당 팀에 접근할 수 없습니다.", 403),
-    TEAM005("TEAM005", "팀을 찾을 수 없습니다.", 404);
+    TEAM001("TEAM001", "존재하지 않는 팀입니다", 404),
+    TEAM002("TEAM002", "조회할 권한이 없는 팀입니다", 403),
+    TEAM003("TEAM003", "수정할 권한이 없는 팀입니다", 403),
+    TEAM004("TEAM004", "이미 삭제 신청된 팀입니다", 400),
+    TEAM005("TEAM005", "삭제할 권한이 없는 팀입니다", 403),
+    TEAM006("TEAM006", "삭제 신청되지 않은 팀입니다", 400),
+    TEAM007("TEAM007", "복구할 권한이 없는 팀입니다", 403),
+    TEAM008("TEAM008", "해당 팀에 접근할 수 없습니다.", 403),
+    TEAM009("TEAM009", "팀을 찾을 수 없습니다.", 404),
+
+    // TeamMember
+    TEAM_MEMBER001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404);
 
     private final String code;
     private final String message;

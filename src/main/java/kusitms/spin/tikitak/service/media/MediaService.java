@@ -97,7 +97,7 @@ public class MediaService {
             }
             boolean isMember = teamMemberRepository.existsByTeamIdAndMemberId(request.getTeamId(), memberId);
             if (!isMember) {
-                throw new BusinessException(ErrorCode.TEAM004); // TEAM004: 해당 팀에 접근할 수 없습니다.
+                throw new BusinessException(ErrorCode.TEAM008);
             }
         }
 
