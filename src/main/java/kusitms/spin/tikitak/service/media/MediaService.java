@@ -3,6 +3,9 @@ package kusitms.spin.tikitak.service.media;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.team.entity.Team;
+import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
+import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.dto.media.FileUploadRequest;
 import kusitms.spin.tikitak.global.dto.media.MediaUploadItem;
@@ -11,8 +14,10 @@ import kusitms.spin.tikitak.global.dto.media.MediaUploadResponse;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.global.security.AuthPrincipal;
+import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.repository.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -38,6 +43,8 @@ public class MediaService {
     private final R2Properties r2Properties;
     private final MediaRepository mediaRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final TeamRepository teamRepository;
+    private final MemberRepository memberRepository;
     private final Optional<S3Presigner> s3Presigner;
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
@@ -93,12 +100,16 @@ public class MediaService {
         // 팀 이미지일 경우 팀 멤버십 검증
         if (request.getPurpose() == MediaPurpose.TEAM_IMAGE) {
             if (request.getTeamId() == null) {
-                throw new BusinessException(ErrorCode.MEDIA003); // or appropriate error
+                throw new BusinessException(ErrorCode.COMMON002);
             }
-            boolean isMember = teamMemberRepository.existsByTeamIdAndMemberId(request.getTeamId(), memberId);
+            lockActiveTeam(request.getTeamId());
+            boolean isMember = teamMemberRepository.existsByTeamIdAndMemberIdAndStatusAndTeamStatus(
+                    request.getTeamId(), memberId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
             if (!isMember) {
                 throw new BusinessException(ErrorCode.TEAM008);
             }
+        } else {
+            lockMember(memberId);
         }
 
         // 파일 개수 검증
@@ -138,6 +149,19 @@ public class MediaService {
 
     private Long resolveTeamId(MediaUploadRequest request) {
         return request.getPurpose() == MediaPurpose.TEAM_IMAGE ? request.getTeamId() : null;
+    }
+
+    private void lockActiveTeam(Long teamId) {
+        Team team = teamRepository.findByIdForUpdate(teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM009));
+        if (team.getStatus() != TeamStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.TEAM008);
+        }
+    }
+
+    private void lockMember(Long memberId) {
+        memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER001));
     }
 
     private String generatePresignedUrl(Media media) {
