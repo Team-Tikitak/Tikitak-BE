@@ -20,5 +20,5 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     @Modifying
     @Query("DELETE FROM Team t WHERE t.status = :status AND t.deletedAt < :cutoff")
-    void bulkDeleteInactiveTeams(@Param("status") TeamStatus status, @Param("deadline") LocalDateTime cutoff);
+    void bulkDeleteInactiveTeams(@Param("status") TeamStatus status, @Param("cutoff") LocalDateTime cutoff);
 }
