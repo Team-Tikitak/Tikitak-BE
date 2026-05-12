@@ -46,7 +46,7 @@ public enum ErrorCode {
     TEAM007("TEAM007", "복구할 권한이 없는 팀입니다", 403),
 
     // TeamMember
-    TEAM_Member001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404);
+    TEAM_MEMBER001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404);
 
     private final String code;
     private final String message;
