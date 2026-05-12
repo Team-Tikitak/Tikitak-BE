@@ -12,4 +12,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+
+r2:
+  access-key-id: test-access-key
+  secret-access-key: test-secret-key
+  bucket-name: test-bucket
+  endpoint: https://example.com
       

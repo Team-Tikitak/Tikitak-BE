@@ -28,5 +28,21 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 			@Param("teamStatus") TeamStatus teamStatus
 	);
 
+	@Query("""
+			select count(tm) > 0
+			from TeamMember tm
+			join tm.team t
+			where t.id = :teamId
+				and tm.member.id = :memberId
+				and tm.status = :memberStatus
+				and t.status = :teamStatus
+			""")
+	boolean existsByTeamIdAndMemberIdAndStatusAndTeamStatus(
+			@Param("teamId") Long teamId,
+			@Param("memberId") Long memberId,
+			@Param("memberStatus") TeamMemberStatus memberStatus,
+			@Param("teamStatus") TeamStatus teamStatus
+	);
+
 	Optional<TeamMember> findByMemberIdAndTeamId(Long memberId, Long teamId);
 }
