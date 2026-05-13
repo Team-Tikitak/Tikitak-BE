@@ -38,7 +38,7 @@ public class TeamInvite {
 	private boolean active;
 
 	@CreatedDate
-	@Column(nullable = false)
+	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
 	public void update(String newToken, LocalDateTime newExpiresAt) {
