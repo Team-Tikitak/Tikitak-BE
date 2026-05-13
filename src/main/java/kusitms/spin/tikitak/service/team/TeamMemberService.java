@@ -87,7 +87,7 @@ public class TeamMemberService {
     }
 
     @Transactional
-    public void kickMember(Long callerId, Long teamId, Long targetMemberId) {
+    public void kickMember(Long callerId, Long teamId, Long targetTeamMemberId) {
         TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(callerId, teamId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
@@ -95,14 +95,17 @@ public class TeamMemberService {
             throw new BusinessException(ErrorCode.TEAM_MEMBER003);
         }
 
-        // 호출한 사용자가 팀장인지 검증
         if (caller.getRole() != TeamMemberRole.OWNER) {
             throw new BusinessException(ErrorCode.TEAM_MEMBER004);
         }
 
         // 강퇴 대상 팀 멤버
-        TeamMember target = teamMemberRepository.findByMemberIdAndTeamId(targetMemberId, teamId)
+        TeamMember target = teamMemberRepository.findById(targetTeamMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+
+        if (!target.getTeam().getId().equals(teamId)) {
+            throw new BusinessException(ErrorCode.TEAM_MEMBER001);
+        }
 
         if (target.getStatus() != TeamMemberStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.TEAM_MEMBER001);
