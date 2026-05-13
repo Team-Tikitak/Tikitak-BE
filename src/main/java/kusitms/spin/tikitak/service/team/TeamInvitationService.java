@@ -16,6 +16,7 @@ import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationResponseDTO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,19 +57,26 @@ public class TeamInvitationService {
 		String newToken = UUID.randomUUID().toString().replace("-", "");
 		LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(INVITE_EXPIRE_DAYS);
 
-		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
+		TeamInvite invite;
+		try {
+			invite = teamInviteRepository.findByTeamId(teamId)
 				.map(existing -> {
-					existing.update(newToken, newExpiresAt); // 기존 초대링크가 있으면 무효화 후 재발급
+					existing.update(newToken, newExpiresAt);	// 기존 초대링크가 있으면 무효화 후 재발급
 					return existing;
 				})
 				.orElseGet(() -> teamInviteRepository.save(
-						TeamInvite.builder() 				// 기존 초대링크가 없으면 생성
+					TeamInvite.builder()					// 기존 초대링크가 없으면 생성
 								.team(team)
 								.inviteToken(newToken)
 								.expiresAt(newExpiresAt)
 								.active(true)
 								.build()
 				));
+		} catch (DataIntegrityViolationException e) {
+			invite = teamInviteRepository.findByTeamId(teamId)
+					.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
+			invite.update(newToken, newExpiresAt);
+		}
 
 		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
 				.inviteToken(invite.getInviteToken())
@@ -96,6 +104,10 @@ public class TeamInvitationService {
 		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.filter(TeamInvite::isActive)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE002));
+
+		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+			throw new BusinessException(ErrorCode.INVITE005);
+		}
 
 		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
 				.inviteToken(invite.getInviteToken())
