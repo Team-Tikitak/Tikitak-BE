@@ -59,7 +59,7 @@ public class TeamMemberService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
         if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM002);
+            throw new BusinessException(ErrorCode.TEAM003);
         }
 
         teamMember.updateProfile(request.getNickname(), request.getProfileImgUrl());
