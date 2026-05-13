@@ -65,7 +65,11 @@ public enum ErrorCode {
     // Invite
     INVITE001("INVITE001", "초대 링크를 생성할 권한이 없습니다.", 403),
     INVITE002("INVITE002", "활성화된 초대 링크가 없습니다.", 404),
-    INVITE003("INVITE003", "초대 링크를 조회할 권한이 없습니다.", 403);
+    INVITE003("INVITE003", "초대 링크를 조회할 권한이 없습니다.", 403),
+    INVITE004("INVITE004", "유효하지 않은 초대 링크입니다.", 400),
+    INVITE005("INVITE005", "만료된 초대 링크입니다.", 400),
+    INVITE006("INVITE006", "이미 팀에 참여 중인 멤버입니다.", 400),
+    INVITE007("INVITE007", "강퇴된 멤버는 초대 링크로 참여할 수 없습니다.", 403);
 
     private final String code;
     private final String message;

@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface TeamInviteRepository extends JpaRepository<TeamInvite, Long> {
 
 	Optional<TeamInvite> findByTeamId(Long teamId);
+
+	Optional<TeamInvite> findByInviteToken(String inviteToken);
 }

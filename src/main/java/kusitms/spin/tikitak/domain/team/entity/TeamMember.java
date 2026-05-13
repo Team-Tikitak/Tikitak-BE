@@ -84,4 +84,9 @@ public class TeamMember {
 		this.status = TeamMemberStatus.BANNED;
 		this.deletedAt = LocalDateTime.now();
 	}
+
+	public void rejoin() {
+		this.status = TeamMemberStatus.ACTIVE;
+		this.deletedAt = null;
+	}
 }
