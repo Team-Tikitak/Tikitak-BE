@@ -70,4 +70,31 @@ public class TeamInvitationService {
 				.expiresAt(invite.getExpiresAt())
 				.build();
 	}
+
+	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO getActiveInviteLink(
+			Long memberId, Long teamId
+	) {
+		teamRepository.findById(teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
+		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+
+		if (caller.getStatus() != TeamMemberStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
+		}
+
+		if (caller.getRole() != TeamMemberRole.OWNER) {
+			throw new BusinessException(ErrorCode.INVITE003);
+		}
+
+		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
+				.filter(TeamInvite::isActive)
+				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE002));
+
+		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
+				.inviteToken(invite.getInviteToken())
+				.expiresAt(invite.getExpiresAt())
+				.build();
+	}
 }

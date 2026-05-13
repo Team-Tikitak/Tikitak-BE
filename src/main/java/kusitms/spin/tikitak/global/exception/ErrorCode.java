@@ -63,7 +63,9 @@ public enum ErrorCode {
     TEAM_MEMBER005("TEAM_MEMBER005", "팀장은 강퇴할 수 없습니다", 400),
 
     // Invite
-    INVITE001("INVITE001", "초대 링크를 생성할 권한이 없습니다.", 403);
+    INVITE001("INVITE001", "초대 링크를 생성할 권한이 없습니다.", 403),
+    INVITE002("INVITE002", "활성화된 초대 링크가 없습니다.", 404),
+    INVITE003("INVITE003", "초대 링크를 조회할 권한이 없습니다.", 403);
 
     private final String code;
     private final String message;
