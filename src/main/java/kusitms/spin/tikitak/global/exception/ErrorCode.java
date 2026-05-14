@@ -60,7 +60,16 @@ public enum ErrorCode {
     TEAM_MEMBER002("TEAM_MEMBER002", "팀장은 팀이 존재하는 동안 나갈 수 없습니다", 400),
     TEAM_MEMBER003("TEAM_MEMBER003", "해당 팀 멤버가 아닙니다.", 400),
     TEAM_MEMBER004("TEAM_MEMBER004", "강퇴할 권한이 없습니다", 403),
-    TEAM_MEMBER005("TEAM_MEMBER005", "팀장은 강퇴할 수 없습니다", 400);
+    TEAM_MEMBER005("TEAM_MEMBER005", "팀장은 강퇴할 수 없습니다", 400),
+
+    // Invite
+    INVITE001("INVITE001", "초대 링크를 생성할 권한이 없습니다.", 403),
+    INVITE002("INVITE002", "활성화된 초대 링크가 없습니다.", 404),
+    INVITE003("INVITE003", "초대 링크를 조회할 권한이 없습니다.", 403),
+    INVITE004("INVITE004", "유효하지 않은 초대 링크입니다.", 400),
+    INVITE005("INVITE005", "만료된 초대 링크입니다.", 400),
+    INVITE006("INVITE006", "이미 팀에 참여 중인 멤버입니다.", 400),
+    INVITE007("INVITE007", "강퇴된 멤버는 초대 링크로 참여할 수 없습니다.", 403);
 
     private final String code;
     private final String message;

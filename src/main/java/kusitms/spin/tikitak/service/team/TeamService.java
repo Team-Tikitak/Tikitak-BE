@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
+import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -9,6 +10,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.team.dto.TeamRequestDTO;
@@ -17,7 +19,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final TeamInviteRepository teamInviteRepository;
 
     @Transactional
     public TeamResponseDTO.TeamCreateResponseDTO createTeam(Long memberId, TeamRequestDTO.TeamCreateRequestDTO request) {
@@ -54,6 +59,14 @@ public class TeamService {
                 .build();
 
         teamMemberRepository.save(teamMember);
+
+        // 팀 초대링크 생성
+        teamInviteRepository.save(TeamInvite.builder()
+                .team(team)
+                .inviteToken(UUID.randomUUID().toString().replace("-", ""))
+                .expiresAt(LocalDateTime.now().plusDays(7))
+                .active(true)
+                .build());
 
         return TeamResponseDTO.TeamCreateResponseDTO.builder()
                 .teamName(team.getName())
