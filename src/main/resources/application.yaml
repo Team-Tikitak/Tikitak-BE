@@ -21,6 +21,9 @@ spring:
 springdoc:
   default-flat-param-object: true
 
+server:
+  forward-headers-strategy: framework
+
 management:
   endpoints:
     web:
