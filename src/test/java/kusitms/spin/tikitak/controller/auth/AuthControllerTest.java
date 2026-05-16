@@ -3,7 +3,6 @@ package kusitms.spin.tikitak.controller.auth;
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.service.auth.AuthService;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
-import kusitms.spin.tikitak.service.auth.dto.LogoutResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
 import kusitms.spin.tikitak.support.ApiTest;

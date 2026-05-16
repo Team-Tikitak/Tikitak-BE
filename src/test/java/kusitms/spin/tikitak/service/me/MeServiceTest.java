@@ -52,8 +52,6 @@ class MeServiceTest extends UnitTest {
 	@DisplayName("내 계정 정보는 활성 팀과 참여 팀 보유 여부를 분리해서 반환한다")
 	void getMyProfileReturnsActiveTeamAndHasTeamSeparately() {
 		Member member = activeMemberWithActiveTeam(1L, 10L);
-		Team team = activeTeam(10L);
-		TeamMember teamMember = activeOwner(100L, member, team);
 		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 		when(activeTeamService.resolveActiveTeamId(member)).thenReturn(10L);
 		when(teamMemberRepository.existsActiveMembership(1L, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE))
