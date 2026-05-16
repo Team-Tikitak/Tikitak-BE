@@ -9,8 +9,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-
 @Component
 @RequiredArgsConstructor
 public class TeamInactiveBatchService {
@@ -22,10 +20,7 @@ public class TeamInactiveBatchService {
     @Transactional
     public void deleteInactiveTeams() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
-        List<Long> teamIds = teamRepository.findInactiveTeamIdsForDeletion(TeamStatus.INACTIVE, cutoff);
-        if (!teamIds.isEmpty()) {
-            memberRepository.clearActiveTeamIdByTeamIds(teamIds);
-        }
+        memberRepository.clearActiveTeamIdsByInactiveTeamPredicate(TeamStatus.INACTIVE, cutoff);
         teamRepository.bulkDeleteInactiveTeams(TeamStatus.INACTIVE, cutoff);
     }
 }
