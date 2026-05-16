@@ -59,9 +59,7 @@ public class TeamService {
                 .build();
 
         teamMemberRepository.save(teamMember);
-        if (member.getActiveTeamId() == null) {
-            member.changeActiveTeam(team.getId());
-        }
+        memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
 
         // 팀 초대링크 생성
         teamInviteRepository.save(TeamInvite.builder()

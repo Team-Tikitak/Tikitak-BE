@@ -194,9 +194,7 @@ public class TeamInvitationService {
 								.build())
 				);
 
-		if (member.getActiveTeamId() == null) {
-			member.changeActiveTeam(team.getId());
-		}
+		memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
 
 		return TeamInvitationResponseDTO.JoinTeamResponseDTO.builder()
 				.teamId(team.getId())

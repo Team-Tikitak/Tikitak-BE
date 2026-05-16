@@ -52,7 +52,7 @@ public class MeService {
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.ME002);
+			throw new BusinessException(ErrorCode.ME002, e);
 		}
 	}
 
@@ -85,7 +85,7 @@ public class MeService {
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.ME003);
+			throw new BusinessException(ErrorCode.ME003, e);
 		}
 	}
 
@@ -105,7 +105,7 @@ public class MeService {
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.ME008);
+			throw new BusinessException(ErrorCode.ME008, e);
 		}
 	}
 
@@ -117,7 +117,7 @@ public class MeService {
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.AGREEMENT001);
+			throw new BusinessException(ErrorCode.AGREEMENT001, e);
 		}
 	}
 
@@ -137,7 +137,7 @@ public class MeService {
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.AGREEMENT003);
+			throw new BusinessException(ErrorCode.AGREEMENT003, e);
 		}
 	}
 
@@ -162,7 +162,7 @@ public class MeService {
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.ME010);
+			throw new BusinessException(ErrorCode.ME010, e);
 		}
 	}
 
@@ -176,11 +176,11 @@ public class MeService {
 	}
 
 	private boolean hasActiveTeam(Long memberId) {
-		return !teamMemberRepository.findActiveTeamMemberships(
+		return teamMemberRepository.existsActiveMembership(
 				memberId,
 				TeamMemberStatus.ACTIVE,
 				TeamStatus.ACTIVE
-		).isEmpty();
+		);
 	}
 
 	private Map<Long, Long> countActiveMembers(List<Long> teamIds) {

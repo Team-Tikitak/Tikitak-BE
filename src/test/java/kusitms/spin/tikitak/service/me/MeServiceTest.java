@@ -56,8 +56,8 @@ class MeServiceTest extends UnitTest {
 		TeamMember teamMember = activeOwner(100L, member, team);
 		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 		when(activeTeamService.resolveActiveTeamId(member)).thenReturn(10L);
-		when(teamMemberRepository.findActiveTeamMemberships(1L, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE))
-				.thenReturn(List.of(teamMember));
+		when(teamMemberRepository.existsActiveMembership(1L, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE))
+				.thenReturn(true);
 
 		MeResponseDTO.MeProfileResponseDTO response = meService.getMyProfile(1L);
 

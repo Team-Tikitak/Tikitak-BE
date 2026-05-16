@@ -128,6 +128,21 @@ class MeControllerTest extends ApiTest {
 	}
 
 	@Test
+	@DisplayName("PATCH /api/v1/me/active-team은 teamId가 양수가 아니면 400을 반환한다")
+	void updateActiveTeamReturnsBadRequestWhenTeamIdIsNotPositive() throws Exception {
+		mockMvc.perform(patch("/api/v1/me/active-team")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "teamId": 0
+								}
+								"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.status").value(400));
+	}
+
+	@Test
 	@DisplayName("GET /api/v1/me/agreements는 약관 동의 상태를 반환한다")
 	void getAgreements() throws Exception {
 		when(meService.getAgreements(TEST_MEMBER_ID)).thenReturn(MeResponseDTO.AgreementResponseDTO.builder()

@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.me.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -12,6 +13,7 @@ public class MeRequestDTO {
 	@AllArgsConstructor
 	public static class ActiveTeamUpdateRequestDTO {
 		@NotNull
+		@Positive
 		private Long teamId;
 	}
 
