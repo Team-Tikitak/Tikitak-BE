@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
@@ -25,10 +24,6 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("update Member m set m.activeTeamId = null where m.activeTeamId = :teamId")
 	void clearActiveTeamIdByTeamId(@Param("teamId") Long teamId);
-
-	@Modifying(clearAutomatically = true, flushAutomatically = true)
-	@Query("update Member m set m.activeTeamId = null where m.activeTeamId in :teamIds")
-	void clearActiveTeamIdByTeamIds(@Param("teamIds") Collection<Long> teamIds);
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("""

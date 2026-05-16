@@ -16,23 +16,23 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.time.LocalDateTime;
 
 @Tag("integration")
-@Testcontainers
 @DataJpaTest
 @ActiveProfiles("integration-test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 public abstract class IntegrationTest {
 
-	@Container
 	private static final PostgreSQLContainer POSTGRESQL = new PostgreSQLContainer("postgres:16-alpine");
 
 	protected static final LocalDateTime BASE_TIME = LocalDateTime.of(2026, 3, 4, 20, 30);
+
+	static {
+		POSTGRESQL.start();
+	}
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -50,10 +50,11 @@ public abstract class IntegrationTest {
 	}
 
 	protected Member member(String suffix, MemberStatus status, Long activeTeamId) {
+		String token = token(suffix);
 		return Member.builder()
 				.email("user" + suffix + "@example.com")
-				.name("User " + suffix)
-				.nickname("user" + suffix)
+				.name("User " + token)
+				.nickname("user" + token)
 				.profileImgUrl("https://example.com/profile" + suffix + ".png")
 				.socialProvider(SocialProvider.KAKAO)
 				.providerId("provider-" + suffix)
@@ -86,7 +87,7 @@ public abstract class IntegrationTest {
 		return TeamMember.builder()
 				.team(team)
 				.member(member)
-				.nickname("nickname-" + member.getProviderId())
+				.nickname("tm" + token(member.getProviderId()))
 				.profileImgUrl("https://example.com/team-member.png")
 				.role(role)
 				.status(status)
@@ -106,5 +107,9 @@ public abstract class IntegrationTest {
 
 	protected EntityManager entityManager() {
 		return entityManager;
+	}
+
+	private String token(String value) {
+		return Integer.toUnsignedString(value.hashCode(), 36);
 	}
 }
