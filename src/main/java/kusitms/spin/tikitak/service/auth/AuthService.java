@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
 import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
+import kusitms.spin.tikitak.service.me.ActiveTeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class AuthService {
 	private final KakaoOAuthService kakaoOAuthService;
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
+	private final ActiveTeamService activeTeamService;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String provider) {
@@ -95,7 +97,7 @@ public class AuthService {
 					token.refreshToken(),
 					created[0],
 					member.isTermsAgreed() && member.isPrivacyAgreed(),
-					null
+					activeTeamService.resolveActiveTeamId(member)
 			);
 		} catch (OAuthAuthenticationException e) {
 			log.warn("OAuth authentication failed. provider={}, reason={}", provider, e.getMessage());

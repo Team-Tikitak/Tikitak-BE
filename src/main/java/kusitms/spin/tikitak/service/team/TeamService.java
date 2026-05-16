@@ -59,6 +59,7 @@ public class TeamService {
                 .build();
 
         teamMemberRepository.save(teamMember);
+        memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
 
         // 팀 초대링크 생성
         teamInviteRepository.save(TeamInvite.builder()
@@ -147,6 +148,7 @@ public class TeamService {
 
         // 팀의 status를 INACTIVE로 변경
         team.inactive();
+        memberRepository.clearActiveTeamIdByTeamId(teamId);
     }
 
     @Transactional
