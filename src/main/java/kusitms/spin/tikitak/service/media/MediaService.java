@@ -217,9 +217,6 @@ public class MediaService {
                     .build();
             client.deleteObject(request);
         } catch (S3Exception e) {
-            if (e.statusCode() == 404) {
-                return;
-            }
             log.error("Failed to delete media object. mediaId={}, key={}", media.getId(), media.getKey(), e);
             throw new BusinessException(ErrorCode.MEDIA010, e);
         } catch (Exception e) {

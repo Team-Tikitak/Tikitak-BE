@@ -141,20 +141,6 @@ class MediaServiceTest extends UnitTest {
     }
 
     @Test
-    @DisplayName("R2 객체가 없어도 DB 상태를 DELETED로 변경한다")
-    void deleteUnusedMediaIgnoresMissingObject() {
-        Media media = media(MediaStatus.PENDING, MEMBER_ID);
-        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
-        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
-        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
-                .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
-
-        mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
-
-        assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
-    }
-
-    @Test
     @DisplayName("R2 삭제 실패 시 MEDIA010 예외가 발생한다")
     void deleteUnusedMediaThrowsWhenObjectDeleteFails() {
         Media media = media(MediaStatus.PENDING, MEMBER_ID);
@@ -162,6 +148,22 @@ class MediaServiceTest extends UnitTest {
         when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
         when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
+
+        assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("R2 404 예외가 발생하면 MEDIA010 예외가 발생한다")
+    void deleteUnusedMediaThrowsWhenObjectDeleteReturnsNotFoundError() {
+        Media media = media(MediaStatus.PENDING, MEMBER_ID);
+        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
 
         assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
