@@ -24,7 +24,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
@@ -46,6 +49,7 @@ public class MediaService {
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
     private final Optional<S3Presigner> s3Presigner;
+    private final Optional<S3Client> s3Client;
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/jpg", "image/png", "image/heic"
@@ -80,11 +84,30 @@ public class MediaService {
                 .map(media -> {
                     String uploadUrl = generatePresignedUrl(media);
                     LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(15); // 15분 유효
-                    return new MediaUploadItem(media.getId(), uploadUrl, media.getContentType(), expiresAt);
+                    return new MediaUploadItem(media.getPublicId(), uploadUrl, media.getContentType(), expiresAt);
                 })
                 .toList();
 
-        return new MediaUploadResponse(savedMedias.get(0).getId(), items);
+        return new MediaUploadResponse(savedMedias.get(0).getPublicId(), items);
+    }
+
+    @Transactional
+    public void deleteUnusedMedia(Long memberId, UUID mediaPublicId) {
+        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA009));
+
+        if (media.getStatus() == MediaStatus.DELETED) {
+            throw new BusinessException(ErrorCode.MEDIA009);
+        }
+        if (!media.getMemberId().equals(memberId)) {
+            throw new BusinessException(ErrorCode.MEDIA008);
+        }
+        if (media.getStatus() != MediaStatus.PENDING) {
+            throw new BusinessException(ErrorCode.MEDIA007);
+        }
+
+        deleteObject(media);
+        media.updateStatus(MediaStatus.DELETED);
     }
 
     private void validateRequest(MediaUploadRequest request, Long memberId) {
@@ -182,6 +205,26 @@ public class MediaService {
         } catch (Exception e) {
             log.error("Failed to generate presigned URL for media {}", media.getId(), e);
             throw new BusinessException(ErrorCode.MEDIA006, e);
+        }
+    }
+
+    private void deleteObject(Media media) {
+        S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA010));
+        try {
+            DeleteObjectRequest request = DeleteObjectRequest.builder()
+                    .bucket(r2Properties.getBucketName())
+                    .key(media.getKey())
+                    .build();
+            client.deleteObject(request);
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return;
+            }
+            log.error("Failed to delete media object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+            throw new BusinessException(ErrorCode.MEDIA010, e);
+        } catch (Exception e) {
+            log.error("Failed to delete media object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+            throw new BusinessException(ErrorCode.MEDIA010, e);
         }
     }
 
