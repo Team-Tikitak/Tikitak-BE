@@ -84,6 +84,9 @@ public class TeamMemberService {
         }
 
         teamMember.leaveTeam();
+        if (teamId.equals(teamMember.getMember().getActiveTeamId())) {
+            teamMember.getMember().clearActiveTeam();
+        }
     }
 
     @Transactional
