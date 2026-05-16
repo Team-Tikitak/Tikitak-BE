@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -27,4 +28,7 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     @Modifying
     @Query("DELETE FROM Team t WHERE t.status = :status AND t.deletedAt < :cutoff")
     void bulkDeleteInactiveTeams(@Param("status") TeamStatus status, @Param("cutoff") LocalDateTime cutoff);
+
+    @Query("select t.id from Team t where t.status = :status and t.deletedAt < :cutoff")
+    List<Long> findInactiveTeamIdsForDeletion(@Param("status") TeamStatus status, @Param("cutoff") LocalDateTime cutoff);
 }

@@ -61,6 +61,8 @@ public class Member {
 
 	private LocalDateTime termsAgreedAt;
 
+	private Long activeTeamId;
+
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
 
@@ -103,7 +105,27 @@ public class Member {
 	public void withdraw() {
 		LocalDateTime now = LocalDateTime.now();
 		this.status = MemberStatus.INACTIVE;
+		this.activeTeamId = null;
 		this.deletedAt = now;
 		this.updatedAt = now;
+	}
+
+	public void changeActiveTeam(Long teamId) {
+		this.activeTeamId = teamId;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void clearActiveTeam() {
+		this.activeTeamId = null;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void agreeRequiredTerms() {
+		this.termsAgreed = true;
+		this.privacyAgreed = true;
+		if (this.termsAgreedAt == null) {
+			this.termsAgreedAt = LocalDateTime.now();
+		}
+		this.updatedAt = LocalDateTime.now();
 	}
 }
