@@ -132,7 +132,7 @@ public class MediaService {
             throw new ExpiredUploadException();
         }
 
-        List<Media> medias = mediaRepository.findByUploadId(upload.getId());
+        List<Media> medias = mediaRepository.findByUploadIdForUpdate(upload.getId());
         if (medias.size() != request.getItems().size()) {
             throw new BusinessException(ErrorCode.MEDIA013);
         }
@@ -358,6 +358,9 @@ public class MediaService {
 
     private void deleteObject(Media media, boolean ignoreNotFound) {
         S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA010));
+        if (!ignoreNotFound) {
+            headObjectForDelete(client, media);
+        }
         try {
             DeleteObjectRequest request = DeleteObjectRequest.builder()
                     .bucket(r2Properties.getBucketName())
@@ -380,6 +383,28 @@ public class MediaService {
         } catch (Exception e) {
             log.error(
                     "Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
+                    media.getId(), media.getPublicId(), media.getKey(), e
+            );
+            throw new BusinessException(ErrorCode.MEDIA010, e);
+        }
+    }
+
+    private void headObjectForDelete(S3Client client, Media media) {
+        try {
+            HeadObjectRequest request = HeadObjectRequest.builder()
+                    .bucket(r2Properties.getBucketName())
+                    .key(media.getKey())
+                    .build();
+            client.headObject(request);
+        } catch (S3Exception e) {
+            log.error(
+                    "Failed to verify media object before delete. mediaId={}, mediaPublicId={}, key={}",
+                    media.getId(), media.getPublicId(), media.getKey(), e
+            );
+            throw new BusinessException(ErrorCode.MEDIA010, e);
+        } catch (Exception e) {
+            log.error(
+                    "Failed to verify media object before delete. mediaId={}, mediaPublicId={}, key={}",
                     media.getId(), media.getPublicId(), media.getKey(), e
             );
             throw new BusinessException(ErrorCode.MEDIA010, e);

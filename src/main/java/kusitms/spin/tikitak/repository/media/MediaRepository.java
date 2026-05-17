@@ -57,6 +57,7 @@ public interface MediaRepository extends JpaRepository<Media, Long> {
 
     long countByTeamIdAndPurposeAndStatus(Long teamId, MediaPurpose purpose, MediaStatus status);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from Media m where m.upload.id = :uploadId")
-    List<Media> findByUploadId(@Param("uploadId") Long uploadId);
+    List<Media> findByUploadIdForUpdate(@Param("uploadId") Long uploadId);
 }

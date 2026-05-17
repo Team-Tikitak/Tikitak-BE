@@ -204,6 +204,23 @@ class MediaServiceTest extends UnitTest {
     }
 
     @Test
+    @DisplayName("UPLOADED 미디어 삭제 전 R2 객체가 없으면 MEDIA010 예외가 발생한다")
+    void deleteUnusedUploadedMediaThrowsWhenObjectHeadReturnsNotFound() {
+        Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
+        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
+
+        assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
     @DisplayName("만료된 PENDING 미디어 id 목록을 최대 처리 개수만큼 조회한다")
     void findExpiredPendingMediaIds() {
         LocalDateTime cutoff = LocalDateTime.of(2026, 3, 4, 20, 30);
@@ -276,7 +293,7 @@ class MediaServiceTest extends UnitTest {
         ));
 
         when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
-        when(mediaRepository.findByUploadId(UPLOAD_ID)).thenReturn(List.of(media));
+        when(mediaRepository.findByUploadIdForUpdate(UPLOAD_ID)).thenReturn(List.of(media));
         when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
         when(r2Properties.getPublicBaseUrl()).thenReturn("https://media.tikitak.xyz");
         when(s3Client.headObject(any(HeadObjectRequest.class))).thenReturn(HeadObjectResponse.builder()
@@ -335,7 +352,7 @@ class MediaServiceTest extends UnitTest {
         MediaUploadCompleteRequest request = completeRequest();
 
         when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
-        when(mediaRepository.findByUploadId(UPLOAD_ID)).thenReturn(List.of(media));
+        when(mediaRepository.findByUploadIdForUpdate(UPLOAD_ID)).thenReturn(List.of(media));
         when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
         when(s3Client.headObject(any(HeadObjectRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
@@ -353,7 +370,7 @@ class MediaServiceTest extends UnitTest {
         MediaUploadCompleteRequest request = completeRequest();
 
         when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
-        when(mediaRepository.findByUploadId(UPLOAD_ID)).thenReturn(List.of(media));
+        when(mediaRepository.findByUploadIdForUpdate(UPLOAD_ID)).thenReturn(List.of(media));
         when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
         when(s3Client.headObject(any(HeadObjectRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
