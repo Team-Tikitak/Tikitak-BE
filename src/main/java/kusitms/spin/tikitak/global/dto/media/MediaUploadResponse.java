@@ -4,17 +4,17 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
 public class MediaUploadResponse {
     /**
-     * Representative media id for this upload request.
+     * Representative public id for this upload request.
      */
-    private Long uploadId;
+    private UUID uploadId;
 
     private List<MediaUploadItem> items;
 }

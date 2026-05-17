@@ -5,12 +5,13 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
 public class MediaUploadItem {
-    private Long mediaId;
+    private UUID mediaPublicId;
     private String uploadUrl;
     private String contentType;
     private LocalDateTime expiresAt;

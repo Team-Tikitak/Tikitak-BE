@@ -20,10 +20,13 @@ import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -46,6 +49,7 @@ public class MediaService {
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
     private final Optional<S3Presigner> s3Presigner;
+    private final Optional<S3Client> s3Client;
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/jpg", "image/png", "image/heic"
@@ -61,16 +65,20 @@ public class MediaService {
 
         // Media 엔티티 생성 및 저장
         List<Media> medias = request.getFiles().stream()
-                .map(file -> Media.builder()
-                        .purpose(request.getPurpose())
-                        .status(MediaStatus.PENDING)
-                        .fileName(file.getFileName())
-                        .contentType(file.getContentType())
-                        .size(file.getSize())
-                        .key(buildObjectKey(file.getFileName()))
-                        .teamId(resolveTeamId(request))
-                        .memberId(memberId)
-                        .build())
+                .map(file -> {
+                    UUID publicId = UUID.randomUUID();
+                    return Media.builder()
+                            .publicId(publicId)
+                            .purpose(request.getPurpose())
+                            .status(MediaStatus.PENDING)
+                            .fileName(file.getFileName())
+                            .contentType(file.getContentType())
+                            .size(file.getSize())
+                            .key(buildObjectKey(request.getPurpose(), publicId, file.getContentType()))
+                            .teamId(resolveTeamId(request))
+                            .memberId(memberId)
+                            .build();
+                })
                 .toList();
 
         List<Media> savedMedias = mediaRepository.saveAll(medias);
@@ -80,11 +88,52 @@ public class MediaService {
                 .map(media -> {
                     String uploadUrl = generatePresignedUrl(media);
                     LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(15); // 15분 유효
-                    return new MediaUploadItem(media.getId(), uploadUrl, media.getContentType(), expiresAt);
+                    return new MediaUploadItem(media.getPublicId(), uploadUrl, media.getContentType(), expiresAt);
                 })
                 .toList();
 
-        return new MediaUploadResponse(savedMedias.get(0).getId(), items);
+        return new MediaUploadResponse(savedMedias.get(0).getPublicId(), items);
+    }
+
+    @Transactional
+    public void deleteUnusedMedia(Long memberId, UUID mediaPublicId) {
+        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA009));
+
+        if (media.getStatus() == MediaStatus.DELETED) {
+            throw new BusinessException(ErrorCode.MEDIA009);
+        }
+        if (!media.getMemberId().equals(memberId)) {
+            throw new BusinessException(ErrorCode.MEDIA008);
+        }
+        if (media.getStatus() != MediaStatus.PENDING) {
+            throw new BusinessException(ErrorCode.MEDIA007);
+        }
+
+        deleteObject(media);
+        media.updateStatus(MediaStatus.DELETED);
+    }
+
+    public List<Long> findExpiredPendingMediaIds(LocalDateTime cutoff, int limit) {
+        return mediaRepository.findExpiredMediaIds(
+                MediaStatus.PENDING,
+                cutoff,
+                PageRequest.of(0, limit)
+        );
+    }
+
+    @Transactional
+    public boolean deleteExpiredPendingMedia(Long mediaId) {
+        Media media = mediaRepository.findByIdForUpdate(mediaId)
+                .orElse(null);
+
+        if (media == null || media.getStatus() != MediaStatus.PENDING) {
+            return false;
+        }
+
+        deleteObject(media);
+        media.updateStatus(MediaStatus.DELETED);
+        return true;
     }
 
     private void validateRequest(MediaUploadRequest request, Long memberId) {
@@ -185,8 +234,38 @@ public class MediaService {
         }
     }
 
-    private String buildObjectKey(String fileName) {
-        return "uploads/" + UUID.randomUUID() + "_" + fileName;
+    private void deleteObject(Media media) {
+        S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA010));
+        try {
+            DeleteObjectRequest request = DeleteObjectRequest.builder()
+                    .bucket(r2Properties.getBucketName())
+                    .key(media.getKey())
+                    .build();
+            client.deleteObject(request);
+        } catch (Exception e) {
+            log.error(
+                    "Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
+                    media.getId(), media.getPublicId(), media.getKey(), e
+            );
+            throw new BusinessException(ErrorCode.MEDIA010, e);
+        }
+    }
+
+    private String buildObjectKey(MediaPurpose purpose, UUID publicId, String contentType) {
+        return "media/" + toKeySegment(purpose) + "/" + publicId + "." + extensionOf(contentType);
+    }
+
+    private String toKeySegment(MediaPurpose purpose) {
+        return purpose.name().toLowerCase().replace("_", "-");
+    }
+
+    private String extensionOf(String contentType) {
+        return switch (contentType) {
+            case "image/jpeg", "image/jpg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/heic" -> "heic";
+            default -> throw new BusinessException(ErrorCode.MEDIA001);
+        };
     }
 
     private Long getCurrentMemberId() {
