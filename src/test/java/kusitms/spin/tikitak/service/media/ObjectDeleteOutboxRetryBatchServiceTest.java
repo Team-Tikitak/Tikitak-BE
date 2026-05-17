@@ -1,7 +1,5 @@
 package kusitms.spin.tikitak.service.media;
 
-import kusitms.spin.tikitak.domain.media.enums.ObjectDeleteStatus;
-import kusitms.spin.tikitak.domain.media.entity.ObjectDeleteOutbox;
 import kusitms.spin.tikitak.repository.media.ObjectDeleteOutboxRepository;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,9 +36,6 @@ class ObjectDeleteOutboxRetryBatchServiceTest extends UnitTest {
 	@DisplayName("삭제 outbox를 30분 배치 기준 최대 50건까지 재시도한다")
 	void retryObjectDeletes() {
 		when(objectDeleteOutboxRepository.findRetryTargetIds(
-				eq(ObjectDeleteStatus.PENDING),
-				eq(ObjectDeleteStatus.FAILED),
-				eq(ObjectDeleteOutbox.MAX_RETRY_COUNT),
 				eq(PageRequest.of(0, 50))
 		)).thenReturn(List.of(1L, 2L));
 

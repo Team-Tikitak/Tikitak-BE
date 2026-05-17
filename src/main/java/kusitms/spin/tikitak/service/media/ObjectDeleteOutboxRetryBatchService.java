@@ -1,6 +1,5 @@
 package kusitms.spin.tikitak.service.media;
 
-import kusitms.spin.tikitak.domain.media.enums.ObjectDeleteStatus;
 import kusitms.spin.tikitak.domain.media.entity.ObjectDeleteOutbox;
 import kusitms.spin.tikitak.repository.media.ObjectDeleteOutboxRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +23,6 @@ public class ObjectDeleteOutboxRetryBatchService {
 	@Scheduled(cron = "0 */30 * * * *")
 	public void retryObjectDeletes() {
 		List<Long> targetIds = objectDeleteOutboxRepository.findRetryTargetIds(
-				ObjectDeleteStatus.PENDING,
-				ObjectDeleteStatus.FAILED,
-				ObjectDeleteOutbox.MAX_RETRY_COUNT,
 				PageRequest.of(0, RETRY_BATCH_SIZE)
 		);
 		int attemptedCount = 0;

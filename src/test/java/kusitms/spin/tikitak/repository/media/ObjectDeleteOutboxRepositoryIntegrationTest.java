@@ -18,24 +18,20 @@ class ObjectDeleteOutboxRepositoryIntegrationTest extends IntegrationTest {
 	private ObjectDeleteOutboxRepository objectDeleteOutboxRepository;
 
 	@Test
-	@DisplayName("retry targets include pending rows and failed rows below max retry count")
+	@DisplayName("retry targets include pending and failed rows but exclude exhausted rows")
 	void findRetryTargetIds() {
 		ObjectDeleteOutbox pending = persist(deleteRequest("pending", ObjectDeleteStatus.PENDING, 0));
 		ObjectDeleteOutbox failedBelowLimit = persist(deleteRequest("failed-below", ObjectDeleteStatus.FAILED, 4));
-		ObjectDeleteOutbox failedAtLimit = persist(deleteRequest("failed-limit", ObjectDeleteStatus.FAILED, 5));
 		ObjectDeleteOutbox exhausted = persist(deleteRequest("exhausted", ObjectDeleteStatus.EXHAUSTED, 5));
 		flushAndClear();
 
 		List<Long> targetIds = objectDeleteOutboxRepository.findRetryTargetIds(
-				ObjectDeleteStatus.PENDING,
-				ObjectDeleteStatus.FAILED,
-				ObjectDeleteOutbox.MAX_RETRY_COUNT,
 				PageRequest.of(0, 50)
 		);
 
 		assertThat(targetIds)
 				.contains(pending.getId(), failedBelowLimit.getId())
-				.doesNotContain(failedAtLimit.getId(), exhausted.getId());
+				.doesNotContain(exhausted.getId());
 	}
 
 	private ObjectDeleteOutbox deleteRequest(String suffix, ObjectDeleteStatus status, int retryCount) {

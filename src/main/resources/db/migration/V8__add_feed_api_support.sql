@@ -39,4 +39,6 @@ CREATE TABLE object_delete_outbox (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_object_delete_outbox_status_created_at ON object_delete_outbox(status, created_at);
+CREATE INDEX idx_object_delete_outbox_retry_lookup
+    ON object_delete_outbox(updated_at, id)
+    WHERE status IN ('PENDING', 'FAILED');
