@@ -7,7 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Collection;
 import java.util.List;
 
 public interface ObjectDeleteOutboxRepository extends JpaRepository<ObjectDeleteOutbox, Long> {
@@ -15,8 +14,14 @@ public interface ObjectDeleteOutboxRepository extends JpaRepository<ObjectDelete
 	@Query("""
 			select o.id
 			from ObjectDeleteOutbox o
-			where o.status in :statuses
+			where o.status = :pendingStatus
+				or (o.status = :failedStatus and o.retryCount < :maxRetryCount)
 			order by o.updatedAt, o.id
 			""")
-	List<Long> findRetryTargetIds(@Param("statuses") Collection<ObjectDeleteStatus> statuses, Pageable pageable);
+	List<Long> findRetryTargetIds(
+			@Param("pendingStatus") ObjectDeleteStatus pendingStatus,
+			@Param("failedStatus") ObjectDeleteStatus failedStatus,
+			@Param("maxRetryCount") int maxRetryCount,
+			Pageable pageable
+	);
 }

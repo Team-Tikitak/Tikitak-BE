@@ -27,6 +27,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class ObjectDeleteOutbox {
 
+	public static final int MAX_RETRY_COUNT = 5;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -57,8 +59,10 @@ public class ObjectDeleteOutbox {
 	private LocalDateTime updatedAt;
 
 	public void markFailed(String lastError) {
-		this.status = ObjectDeleteStatus.FAILED;
 		this.retryCount++;
+		this.status = retryCount >= MAX_RETRY_COUNT
+				? ObjectDeleteStatus.EXHAUSTED
+				: ObjectDeleteStatus.FAILED;
 		this.lastError = lastError;
 	}
 

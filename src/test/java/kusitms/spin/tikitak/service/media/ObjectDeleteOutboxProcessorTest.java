@@ -81,6 +81,31 @@ class ObjectDeleteOutboxProcessorTest extends UnitTest {
 		verify(s3Client, never()).deleteObject(org.mockito.ArgumentMatchers.any(DeleteObjectRequest.class));
 	}
 
+	@Test
+	@DisplayName("최대 재시도 횟수에 도달하면 outbox row를 소진 상태로 남긴다")
+	void processMarksExhaustedWhenRetryCountReachesLimit() {
+		processor = new ObjectDeleteOutboxProcessor(
+				objectDeleteOutboxRepository,
+				r2Properties,
+				Optional.empty()
+		);
+		ObjectDeleteOutbox deleteRequest = ObjectDeleteOutbox.builder()
+				.id(OUTBOX_ID)
+				.bucket(BUCKET_NAME)
+				.objectKey(OBJECT_KEY)
+				.mediaId(MEDIA_ID)
+				.status(ObjectDeleteStatus.FAILED)
+				.retryCount(ObjectDeleteOutbox.MAX_RETRY_COUNT - 1)
+				.build();
+		when(objectDeleteOutboxRepository.findById(OUTBOX_ID)).thenReturn(Optional.of(deleteRequest));
+
+		processor.process(OUTBOX_ID);
+
+		assertThat(deleteRequest.getStatus()).isEqualTo(ObjectDeleteStatus.EXHAUSTED);
+		assertThat(deleteRequest.getRetryCount()).isEqualTo(ObjectDeleteOutbox.MAX_RETRY_COUNT);
+		assertThat(deleteRequest.getLastError()).isEqualTo("S3 client is not configured");
+	}
+
 	private ObjectDeleteOutbox deleteRequest(String objectKey) {
 		return ObjectDeleteOutbox.builder()
 				.id(OUTBOX_ID)

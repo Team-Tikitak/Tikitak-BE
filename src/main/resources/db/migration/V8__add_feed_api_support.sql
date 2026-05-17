@@ -32,7 +32,7 @@ CREATE TABLE object_delete_outbox (
     bucket VARCHAR(255) NOT NULL,
     object_key TEXT,
     media_id BIGINT,
-    status VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL CHECK (status IN ('PENDING', 'FAILED', 'EXHAUSTED')),
     retry_count INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
