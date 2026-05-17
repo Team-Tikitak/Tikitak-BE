@@ -4,7 +4,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import kusitms.spin.tikitak.global.dto.CommonResponse;
+import kusitms.spin.tikitak.global.dto.media.MediaUploadCompleteRequest;
+import kusitms.spin.tikitak.global.dto.media.MediaUploadCompleteResponse;
 import kusitms.spin.tikitak.global.dto.media.MediaUploadRequest;
 import kusitms.spin.tikitak.global.dto.media.MediaUploadResponse;
 import kusitms.spin.tikitak.global.security.CurrentMemberId;
@@ -18,12 +21,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import jakarta.validation.Valid;
 import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Media", description = "미디어 업로드 API")
+@Tag(name = "Media", description = "미디어 API")
 public class MediaController {
 
     private final MediaService mediaService;
@@ -43,8 +45,23 @@ public class MediaController {
     }
 
     @Operation(
+            summary = "미디어 업로드 완료 처리",
+            description = "프론트가 R2 업로드를 마친 뒤 실제 객체 존재 여부를 확인하고 업로드 상태를 완료 처리합니다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/api/v1/media/uploads/{uploadId}/complete")
+    public CommonResponse<MediaUploadCompleteResponse> completeUpload(
+            @Parameter(hidden = true) @CurrentMemberId Long memberId,
+            @PathVariable UUID uploadId,
+            @Valid @RequestBody MediaUploadCompleteRequest request
+    ) {
+        MediaUploadCompleteResponse response = mediaService.completeUpload(memberId, uploadId, request);
+        return CommonResponse.success(response);
+    }
+
+    @Operation(
             summary = "미사용 미디어 삭제",
-            description = "아직 피드, 팀, 프로필 등에 연결되지 않은 PENDING 상태의 미디어를 삭제합니다."
+            description = "아직 피드, 팀, 프로필 등에 연결되지 않은 PENDING 또는 UPLOADED 상태의 미디어를 삭제합니다."
     )
     @SecurityRequirement(name = "bearerAuth")
     @DeleteMapping("/api/v1/media/{mediaPublicId}")
