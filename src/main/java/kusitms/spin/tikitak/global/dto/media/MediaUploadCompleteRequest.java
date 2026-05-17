@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.global.dto.media;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -33,7 +34,7 @@ public class MediaUploadCompleteRequest {
         private UUID mediaPublicId;
 
         @Schema(description = "MIME 타입", example = "image/png")
-        @NotNull
+        @NotBlank
         private String contentType;
 
         @Schema(description = "파일 크기(byte)", example = "345000")

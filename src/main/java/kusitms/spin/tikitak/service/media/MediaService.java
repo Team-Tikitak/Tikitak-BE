@@ -113,7 +113,7 @@ public class MediaService {
         return new MediaUploadResponse(upload.getPublicId(), upload.getStatus(), items);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ExpiredUploadException.class)
     public MediaUploadCompleteResponse completeUpload(Long memberId, UUID uploadId, MediaUploadCompleteRequest request) {
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new BusinessException(ErrorCode.MEDIA011);
@@ -129,7 +129,7 @@ public class MediaService {
         }
         if (upload.isExpired(LocalDateTime.now())) {
             upload.expire();
-            throw new BusinessException(ErrorCode.MEDIA014);
+            throw new ExpiredUploadException();
         }
 
         List<Media> medias = mediaRepository.findByUploadId(upload.getId());
@@ -420,5 +420,11 @@ public class MediaService {
             return principal.memberId();
         }
         throw new BusinessException(ErrorCode.AUTH009);
+    }
+
+    private static class ExpiredUploadException extends BusinessException {
+        private ExpiredUploadException() {
+            super(ErrorCode.MEDIA014);
+        }
     }
 }
