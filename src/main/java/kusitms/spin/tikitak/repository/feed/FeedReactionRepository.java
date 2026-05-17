@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.repository.feed;
 
 import kusitms.spin.tikitak.domain.feed.entity.FeedReaction;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,19 @@ public interface FeedReactionRepository extends JpaRepository<FeedReaction, Long
 	Optional<FeedReaction> findByFeedIdAndTeamMemberId(Long feedId, Long teamMemberId);
 
 	void deleteByFeedIdAndTeamMemberId(Long feedId, Long teamMemberId);
+
+	@Modifying
+	@Query(value = """
+			insert into feed_reaction (feed_id, team_member_id, reaction_type, created_at)
+			values (:feedId, :teamMemberId, :reactionType, current_timestamp)
+			on conflict (feed_id, team_member_id)
+			do update set reaction_type = excluded.reaction_type
+			""", nativeQuery = true)
+	void upsertReaction(
+			@Param("feedId") Long feedId,
+			@Param("teamMemberId") Long teamMemberId,
+			@Param("reactionType") String reactionType
+	);
 
 	@Query("""
 			select fr.reactionType, count(fr)

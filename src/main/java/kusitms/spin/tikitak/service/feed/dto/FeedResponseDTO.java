@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.feed.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import kusitms.spin.tikitak.domain.feed.enums.FeedReactionType;
 import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import lombok.AllArgsConstructor;
@@ -55,6 +56,7 @@ public class FeedResponseDTO {
 		private long commentCount;
 		private ReactionSummaryDTO reactionSummary;
 		private FeedReactionType myReaction;
+		@JsonProperty("isMine")
 		private boolean isMine;
 		private LocalDateTime createdAt;
 		private LocalDateTime updatedAt;
@@ -104,6 +106,7 @@ public class FeedResponseDTO {
 		private Long teamMemberId;
 		private String nickname;
 		private String profileImageUrl;
+		@JsonProperty("isAnonymous")
 		private boolean isAnonymous;
 	}
 

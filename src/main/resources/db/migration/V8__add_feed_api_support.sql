@@ -22,5 +22,7 @@ UPDATE feed_reaction
 SET reaction_type = 'TAK_LEADER'
 WHERE reaction_type IS NULL;
 
+-- Existing feed reactions were not active before fixed TAK_* reaction types were introduced.
+-- If legacy emoji data exists in an environment, map it explicitly before applying this migration.
 ALTER TABLE feed_reaction
     ALTER COLUMN reaction_type SET NOT NULL;

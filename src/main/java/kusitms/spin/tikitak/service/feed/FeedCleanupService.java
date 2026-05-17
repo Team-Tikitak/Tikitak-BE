@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -41,7 +43,7 @@ public class FeedCleanupService {
 	public boolean hardDeleteExpiredFeed(Long feedId, LocalDateTime cutoff) {
 		Feed feed = feedRepository.findDeletedForHardDelete(feedId)
 				.orElse(null);
-		if (feed == null || feed.getDeletedAt() == null || !feed.getDeletedAt().isBefore(cutoff)) {
+		if (feed == null || feed.getDeletedAt() == null || feed.getDeletedAt().isAfter(cutoff)) {
 			return false;
 		}
 
@@ -50,33 +52,54 @@ public class FeedCleanupService {
 				.filter(Objects::nonNull)
 				.distinct()
 				.toList();
+		List<MediaObject> mediaObjects = medias.stream()
+				.map(media -> new MediaObject(media.getId(), media.getKey()))
+				.toList();
 
-		medias.forEach(this::deleteObject);
 		feedRepository.delete(feed);
 		feedRepository.flush();
 		mediaRepository.deleteAll(medias);
+		registerObjectDeletionAfterCommit(mediaObjects);
 		return true;
 	}
 
-	private void deleteObject(Media media) {
-		if (media.getKey() == null || media.getKey().isBlank()) {
+	private void registerObjectDeletionAfterCommit(List<MediaObject> mediaObjects) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			mediaObjects.forEach(this::deleteObject);
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				mediaObjects.forEach(FeedCleanupService.this::deleteObject);
+			}
+		});
+	}
+
+	private void deleteObject(MediaObject mediaObject) {
+		if (mediaObject.key() == null || mediaObject.key().isBlank()) {
 			throw new BusinessException(ErrorCode.FEED016);
 		}
 		S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.FEED016));
 		try {
 			DeleteObjectRequest request = DeleteObjectRequest.builder()
 					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
+					.key(mediaObject.key())
 					.build();
 			client.deleteObject(request);
 		} catch (S3Exception e) {
 			if (e.statusCode() == 404) {
-				log.info("Feed media object already absent. mediaId={}, key={}", media.getId(), media.getKey());
+				log.info("Feed media object already absent. mediaId={}, key={}", mediaObject.mediaId(), mediaObject.key());
 				return;
 			}
-			throw new BusinessException(ErrorCode.FEED016, e);
+			log.error("Failed to delete feed media object after commit. mediaId={}, key={}",
+					mediaObject.mediaId(), mediaObject.key(), e);
 		} catch (Exception e) {
-			throw new BusinessException(ErrorCode.FEED016, e);
+			log.error("Failed to delete feed media object after commit. mediaId={}, key={}",
+					mediaObject.mediaId(), mediaObject.key(), e);
 		}
+	}
+
+	private record MediaObject(Long mediaId, String key) {
 	}
 }

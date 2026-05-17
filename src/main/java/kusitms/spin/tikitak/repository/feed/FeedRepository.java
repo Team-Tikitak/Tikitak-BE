@@ -110,7 +110,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			select f.id
 			from Feed f
 			where f.deletedAt is not null
-				and f.deletedAt < :cutoff
+				and f.deletedAt <= :cutoff
 			order by f.deletedAt asc, f.id asc
 			""")
 	List<Long> findExpiredDeletedFeedIds(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);

@@ -15,25 +15,40 @@ public class FeedCleanupBatchService {
 
 	private static final int RETENTION_DAYS = 7;
 	private static final int BATCH_SIZE = 100;
+	private static final int MAX_BATCH_PAGES = 100;
 
 	private final FeedCleanupService feedCleanupService;
 
 	@Scheduled(cron = "0 30 4 * * *")
 	public void hardDeleteExpiredFeeds() {
 		LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
-		List<Long> feedIds = feedCleanupService.findExpiredDeletedFeedIds(cutoff, BATCH_SIZE);
-
+		int targetCount = 0;
 		int deletedCount = 0;
-		for (Long feedId : feedIds) {
-			try {
-				if (feedCleanupService.hardDeleteExpiredFeed(feedId, cutoff)) {
-					deletedCount++;
+
+		for (int page = 0; page < MAX_BATCH_PAGES; page++) {
+			List<Long> feedIds = feedCleanupService.findExpiredDeletedFeedIds(cutoff, BATCH_SIZE);
+			if (feedIds.isEmpty()) {
+				break;
+			}
+
+			targetCount += feedIds.size();
+			int deletedInBatch = 0;
+			for (Long feedId : feedIds) {
+				try {
+					if (feedCleanupService.hardDeleteExpiredFeed(feedId, cutoff)) {
+						deletedCount++;
+						deletedInBatch++;
+					}
+				} catch (Exception e) {
+					log.error("Failed to hard delete expired feed. feedId={}", feedId, e);
 				}
-			} catch (Exception e) {
-				log.error("Failed to hard delete expired feed. feedId={}", feedId, e);
+			}
+
+			if (feedIds.size() < BATCH_SIZE || deletedInBatch == 0) {
+				break;
 			}
 		}
 
-		log.info("Expired feed cleanup completed. targetCount={}, deletedCount={}", feedIds.size(), deletedCount);
+		log.info("Expired feed cleanup completed. targetCount={}, deletedCount={}", targetCount, deletedCount);
 	}
 }

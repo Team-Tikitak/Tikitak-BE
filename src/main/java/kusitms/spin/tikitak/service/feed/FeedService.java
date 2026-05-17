@@ -222,20 +222,11 @@ public class FeedService {
 			Long memberId, Long teamId, Long feedId, FeedRequestDTO.ReactionRequestDTO request
 	) {
 		TeamMember reactor = getActiveTeamMember(memberId, teamId);
-		Feed feed = feedRepository.findActiveForUpdate(teamId, feedId)
+		feedRepository.findActiveDetail(teamId, feedId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.FEED003));
 		FeedReactionType reactionType = parseReactionType(request.getReactionType());
 
-		Optional<FeedReaction> existing = feedReactionRepository.findByFeedIdAndTeamMemberId(feedId, reactor.getId());
-		if (existing.isPresent()) {
-			existing.get().updateReactionType(reactionType);
-		} else {
-			feedReactionRepository.save(FeedReaction.builder()
-					.feed(feed)
-					.teamMember(reactor)
-					.reactionType(reactionType)
-					.build());
-		}
+		feedReactionRepository.upsertReaction(feedId, reactor.getId(), reactionType.name());
 
 		return reactionResponse(feedId, reactionType);
 	}
@@ -243,7 +234,7 @@ public class FeedService {
 	@Transactional
 	public FeedResponseDTO.FeedReactionResponseDTO deleteReaction(Long memberId, Long teamId, Long feedId) {
 		TeamMember reactor = getActiveTeamMember(memberId, teamId);
-		feedRepository.findActiveForUpdate(teamId, feedId)
+		feedRepository.findActiveDetail(teamId, feedId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.FEED003));
 		feedReactionRepository.deleteByFeedIdAndTeamMemberId(feedId, reactor.getId());
 		return reactionResponse(feedId, null);
@@ -264,7 +255,7 @@ public class FeedService {
 		try {
 			return FeedReactionType.valueOf(reactionType);
 		} catch (RuntimeException e) {
-			throw new BusinessException(ErrorCode.FEED013);
+			throw new BusinessException(ErrorCode.FEED013, e);
 		}
 	}
 
@@ -617,7 +608,7 @@ public class FeedService {
 					Long.parseLong(cursor.substring(separator + 1))
 			);
 		} catch (RuntimeException e) {
-			throw new BusinessException(ErrorCode.COMMON001);
+			throw new BusinessException(ErrorCode.COMMON001, e);
 		}
 	}
 
