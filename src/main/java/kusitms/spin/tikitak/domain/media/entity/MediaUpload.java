@@ -1,8 +1,17 @@
 package kusitms.spin.tikitak.domain.media.entity;
 
-import jakarta.persistence.*;
-import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaUploadStatus;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,12 +22,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "media")
+@Table(name = "media_upload")
 @Getter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class Media {
+public class MediaUpload {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,32 +42,8 @@ public class Media {
     private MediaPurpose purpose;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private MediaStatus status;
-
-    @Column(nullable = false, length = 255)
-    private String fileName;
-
-    @Column(nullable = false, length = 100)
-    private String contentType;
-
-    @Column(nullable = false)
-    private Long size;
-
-    @Column(columnDefinition = "text")
-    private String url;
-
-    @Column
-    private String key;
-
-    @Column
-    private LocalDateTime uploadedAt;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    @Column(nullable = false, length = 30)
+    private MediaUploadStatus status;
 
     @Column
     private Long teamId;
@@ -66,25 +51,27 @@ public class Media {
     @Column(nullable = false)
     private Long memberId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "upload_id")
-    private MediaUpload upload;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-    public void updateStatus(MediaStatus status) {
-        this.status = status;
-        if (status == MediaStatus.UPLOADED) {
-            this.uploadedAt = LocalDateTime.now();
-        }
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    private LocalDateTime completedAt;
+
+    private LocalDateTime expiresAt;
+
+    public void complete() {
+        this.status = MediaUploadStatus.COMPLETED;
+        this.completedAt = LocalDateTime.now();
     }
 
-    public void updateUrl(String url) {
-        this.url = url;
+    public void expire() {
+        this.status = MediaUploadStatus.EXPIRED;
     }
 
-    public void completeUpload(String url) {
-        this.status = MediaStatus.UPLOADED;
-        this.url = url;
-        this.uploadedAt = LocalDateTime.now();
+    public boolean isExpired(LocalDateTime now) {
+        return expiresAt != null && expiresAt.isBefore(now);
     }
 
     @PrePersist

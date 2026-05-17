@@ -1,12 +1,17 @@
 package kusitms.spin.tikitak.service.media;
 
 import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.entity.MediaUpload;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import kusitms.spin.tikitak.domain.media.enums.MediaUploadStatus;
 import kusitms.spin.tikitak.global.config.R2Properties;
+import kusitms.spin.tikitak.global.dto.media.MediaUploadCompleteRequest;
+import kusitms.spin.tikitak.global.dto.media.MediaUploadCompleteResponse;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
+import kusitms.spin.tikitak.repository.media.MediaUploadRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
@@ -19,6 +24,8 @@ import org.mockito.Mock;
 import org.springframework.data.domain.Pageable;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
@@ -30,6 +37,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,7 +47,9 @@ class MediaServiceTest extends UnitTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long OTHER_MEMBER_ID = 2L;
     private static final Long MEDIA_ID = 10L;
+    private static final Long UPLOAD_ID = 20L;
     private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID UPLOAD_PUBLIC_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final String BUCKET_NAME = "test-bucket";
     private static final String OBJECT_KEY = "media/feed-image/11111111-1111-1111-1111-111111111111.png";
 
@@ -48,6 +58,9 @@ class MediaServiceTest extends UnitTest {
 
     @Mock
     private MediaRepository mediaRepository;
+
+    @Mock
+    private MediaUploadRepository mediaUploadRepository;
 
     @Mock
     private TeamMemberRepository teamMemberRepository;
@@ -71,6 +84,7 @@ class MediaServiceTest extends UnitTest {
         mediaService = new MediaService(
                 r2Properties,
                 mediaRepository,
+                mediaUploadRepository,
                 teamMemberRepository,
                 teamRepository,
                 memberRepository,
@@ -132,9 +146,9 @@ class MediaServiceTest extends UnitTest {
     }
 
     @Test
-    @DisplayName("PENDING 상태가 아니면 MEDIA007 예외가 발생한다")
+    @DisplayName("USED 상태 미디어는 MEDIA007 예외가 발생한다")
     void deleteUnusedMediaThrowsWhenMediaIsUsed() {
-        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media(MediaStatus.UPLOADED, MEMBER_ID)));
+        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media(MediaStatus.USED, MEMBER_ID)));
 
         assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -161,8 +175,22 @@ class MediaServiceTest extends UnitTest {
 
     @Test
     @DisplayName("R2 404 예외가 발생하면 MEDIA010 예외가 발생한다")
-    void deleteUnusedMediaThrowsWhenObjectDeleteReturnsNotFoundError() {
+    void deleteUnusedPendingMediaIgnoresObjectNotFound() {
         Media media = media(MediaStatus.PENDING, MEMBER_ID);
+        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
+
+        mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
+
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+    }
+
+    @Test
+    @DisplayName("UPLOADED 미디어 삭제 시 R2 객체가 없으면 MEDIA010 예외가 발생한다")
+    void deleteUnusedUploadedMediaThrowsWhenObjectDeleteReturnsNotFoundError() {
+        Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
         when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
         when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
         when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
@@ -172,7 +200,24 @@ class MediaServiceTest extends UnitTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
 
-        assertThat(media.getStatus()).isEqualTo(MediaStatus.PENDING);
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
+    }
+
+    @Test
+    @DisplayName("UPLOADED 미디어 삭제 전 R2 객체가 없으면 MEDIA010 예외가 발생한다")
+    void deleteUnusedUploadedMediaThrowsWhenObjectHeadReturnsNotFound() {
+        Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
+        when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
+
+        assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
     @Test
@@ -192,6 +237,25 @@ class MediaServiceTest extends UnitTest {
         );
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
         assertThat(mediaIds).containsExactly(1L, 2L);
+    }
+
+    @Test
+    @DisplayName("만료된 UPLOADED 미디어는 uploadedAt 기준으로 조회한다")
+    void findExpiredUploadedMediaIds() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 3, 4, 20, 30);
+        when(mediaRepository.findExpiredUploadedMediaIds(any(MediaStatus.class), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(4L, 5L));
+
+        List<Long> mediaIds = mediaService.findExpiredUploadedMediaIds(cutoff, 100);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(mediaRepository).findExpiredUploadedMediaIds(
+                eq(MediaStatus.UPLOADED),
+                eq(cutoff),
+                pageableCaptor.capture()
+        );
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
+        assertThat(mediaIds).containsExactly(4L, 5L);
     }
 
     @Test
@@ -219,7 +283,108 @@ class MediaServiceTest extends UnitTest {
         verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
+    @Test
+    @DisplayName("업로드 완료 요청은 R2 객체 확인 후 미디어와 업로드 묶음을 완료 상태로 변경한다")
+    void completeUpload() {
+        MediaUpload upload = upload(MediaUploadStatus.PENDING, MEMBER_ID);
+        Media media = media(MediaStatus.PENDING, MEMBER_ID, upload);
+        MediaUploadCompleteRequest request = new MediaUploadCompleteRequest(List.of(
+                new MediaUploadCompleteRequest.Item(MEDIA_PUBLIC_ID, "image/png", 1000L)
+        ));
+
+        when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
+        when(mediaRepository.findByUploadIdForUpdate(UPLOAD_ID)).thenReturn(List.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(r2Properties.getPublicBaseUrl()).thenReturn("https://media.tikitak.xyz");
+        when(s3Client.headObject(any(HeadObjectRequest.class))).thenReturn(HeadObjectResponse.builder()
+                .contentType("image/png")
+                .contentLength(1000L)
+                .build());
+
+        MediaUploadCompleteResponse response = mediaService.completeUpload(MEMBER_ID, UPLOAD_PUBLIC_ID, request);
+
+        assertThat(upload.getStatus()).isEqualTo(MediaUploadStatus.COMPLETED);
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
+        assertThat(media.getUrl()).isEqualTo("https://media.tikitak.xyz/" + OBJECT_KEY);
+        assertThat(response.getUploadStatus()).isEqualTo(MediaUploadStatus.COMPLETED);
+        assertThat(response.getItems()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("업로드 완료 요청자가 생성자가 아니면 MEDIA015 예외가 발생한다")
+    void completeUploadThrowsWhenNotOwner() {
+        when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID))
+                .thenReturn(Optional.of(upload(MediaUploadStatus.PENDING, OTHER_MEMBER_ID)));
+
+        MediaUploadCompleteRequest request = new MediaUploadCompleteRequest(List.of(
+                new MediaUploadCompleteRequest.Item(MEDIA_PUBLIC_ID, "image/png", 1000L)
+        ));
+
+        assertThatThrownBy(() -> mediaService.completeUpload(MEMBER_ID, UPLOAD_PUBLIC_ID, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA015));
+    }
+
+    @Test
+    @DisplayName("R2 HEAD 결과 객체가 없으면 MEDIA012 예외가 발생한다")
+    void completeUploadThrowsWhenUploadExpired() {
+        MediaUpload upload = MediaUpload.builder()
+                .id(UPLOAD_ID)
+                .publicId(UPLOAD_PUBLIC_ID)
+                .purpose(MediaPurpose.FEED_IMAGE)
+                .status(MediaUploadStatus.PENDING)
+                .memberId(MEMBER_ID)
+                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .build();
+        when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
+
+        assertThatThrownBy(() -> mediaService.completeUpload(MEMBER_ID, UPLOAD_PUBLIC_ID, completeRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA014));
+        assertThat(upload.getStatus()).isEqualTo(MediaUploadStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("R2 HEAD 결과 객체가 없으면 MEDIA012 예외가 발생한다")
+    void completeUploadThrowsWhenObjectDoesNotExist() {
+        MediaUpload upload = upload(MediaUploadStatus.PENDING, MEMBER_ID);
+        Media media = media(MediaStatus.PENDING, MEMBER_ID, upload);
+        MediaUploadCompleteRequest request = completeRequest();
+
+        when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
+        when(mediaRepository.findByUploadIdForUpdate(UPLOAD_ID)).thenReturn(List.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
+
+        assertThatThrownBy(() -> mediaService.completeUpload(MEMBER_ID, UPLOAD_PUBLIC_ID, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA012));
+    }
+
+    @Test
+    @DisplayName("R2 HEAD 확인 중 서버 오류가 발생하면 MEDIA017 예외가 발생한다")
+    void completeUploadThrowsWhenObjectVerificationFails() {
+        MediaUpload upload = upload(MediaUploadStatus.PENDING, MEMBER_ID);
+        Media media = media(MediaStatus.PENDING, MEMBER_ID, upload);
+        MediaUploadCompleteRequest request = completeRequest();
+
+        when(mediaUploadRepository.findByPublicIdForUpdate(UPLOAD_PUBLIC_ID)).thenReturn(Optional.of(upload));
+        when(mediaRepository.findByUploadIdForUpdate(UPLOAD_ID)).thenReturn(List.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
+
+        assertThatThrownBy(() -> mediaService.completeUpload(MEMBER_ID, UPLOAD_PUBLIC_ID, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA017));
+    }
+
     private Media media(MediaStatus status, Long memberId) {
+        return media(status, memberId, null);
+    }
+
+    private Media media(MediaStatus status, Long memberId, MediaUpload upload) {
         return Media.builder()
                 .id(MEDIA_ID)
                 .publicId(MEDIA_PUBLIC_ID)
@@ -229,6 +394,23 @@ class MediaServiceTest extends UnitTest {
                 .contentType("image/png")
                 .size(1000L)
                 .key(OBJECT_KEY)
+                .memberId(memberId)
+                .upload(upload)
+                .build();
+    }
+
+    private MediaUploadCompleteRequest completeRequest() {
+        return new MediaUploadCompleteRequest(List.of(
+                new MediaUploadCompleteRequest.Item(MEDIA_PUBLIC_ID, "image/png", 1000L)
+        ));
+    }
+
+    private MediaUpload upload(MediaUploadStatus status, Long memberId) {
+        return MediaUpload.builder()
+                .id(UPLOAD_ID)
+                .publicId(UPLOAD_PUBLIC_ID)
+                .purpose(MediaPurpose.FEED_IMAGE)
+                .status(status)
                 .memberId(memberId)
                 .build();
     }

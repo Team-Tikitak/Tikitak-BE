@@ -40,7 +40,24 @@ public interface MediaRepository extends JpaRepository<Media, Long> {
             Pageable pageable
     );
 
+    @Query("""
+            select m.id
+            from Media m
+            where m.status = :status
+              and m.uploadedAt < :cutoff
+            order by m.uploadedAt asc, m.id asc
+            """)
+    List<Long> findExpiredUploadedMediaIds(
+            @Param("status") MediaStatus status,
+            @Param("cutoff") LocalDateTime cutoff,
+            Pageable pageable
+    );
+
     List<Media> findByMemberIdAndPurpose(Long memberId, MediaPurpose purpose);
 
     long countByTeamIdAndPurposeAndStatus(Long teamId, MediaPurpose purpose, MediaStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Media m where m.upload.id = :uploadId")
+    List<Media> findByUploadIdForUpdate(@Param("uploadId") Long uploadId);
 }
