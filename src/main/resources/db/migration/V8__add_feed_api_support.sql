@@ -18,11 +18,11 @@ CREATE INDEX idx_media_status_deleted_at ON media(status, deleted_at);
 ALTER TABLE feed_reaction
     ADD COLUMN reaction_type VARCHAR(50);
 
+-- Existing feed reactions were not active before fixed TAK_* reaction types were introduced,
+-- so legacy emoji values are not authoritative and can be initialized to the default TAK reaction.
 UPDATE feed_reaction
 SET reaction_type = 'TAK_LEADER'
 WHERE reaction_type IS NULL;
 
--- Existing feed reactions were not active before fixed TAK_* reaction types were introduced.
--- If legacy emoji data exists in an environment, map it explicitly before applying this migration.
 ALTER TABLE feed_reaction
     ALTER COLUMN reaction_type SET NOT NULL;

@@ -343,6 +343,7 @@ public class FeedService {
 				return existing.get();
 			}
 		}
+		// Provider-less places cannot be deduplicated safely without merging distinct venues with similar coordinates.
 		return placeRepository.save(Place.builder()
 				.externalPlaceId(externalPlaceId)
 				.name(request.getName())

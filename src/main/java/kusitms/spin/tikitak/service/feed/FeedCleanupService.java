@@ -4,8 +4,6 @@ import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.global.config.R2Properties;
-import kusitms.spin.tikitak.global.exception.BusinessException;
-import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
 import lombok.RequiredArgsConstructor;
@@ -78,9 +76,15 @@ public class FeedCleanupService {
 
 	private void deleteObject(MediaObject mediaObject) {
 		if (mediaObject.key() == null || mediaObject.key().isBlank()) {
-			throw new BusinessException(ErrorCode.FEED016);
+			log.warn("Skipping feed media object deletion because key is blank. mediaId={}", mediaObject.mediaId());
+			return;
 		}
-		S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.FEED016));
+		if (s3Client.isEmpty()) {
+			log.warn("Skipping feed media object deletion because S3 client is not configured. mediaId={}, key={}",
+					mediaObject.mediaId(), mediaObject.key());
+			return;
+		}
+		S3Client client = s3Client.get();
 		try {
 			DeleteObjectRequest request = DeleteObjectRequest.builder()
 					.bucket(r2Properties.getBucketName())

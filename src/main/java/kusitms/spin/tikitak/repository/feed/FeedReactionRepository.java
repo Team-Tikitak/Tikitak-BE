@@ -16,7 +16,7 @@ public interface FeedReactionRepository extends JpaRepository<FeedReaction, Long
 
 	void deleteByFeedIdAndTeamMemberId(Long feedId, Long teamMemberId);
 
-	@Modifying
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query(value = """
 			insert into feed_reaction (feed_id, team_member_id, reaction_type, created_at)
 			values (:feedId, :teamMemberId, :reactionType, current_timestamp)
