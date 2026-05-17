@@ -28,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
@@ -243,12 +242,6 @@ public class MediaService {
                     .key(media.getKey())
                     .build();
             client.deleteObject(request);
-        } catch (S3Exception e) {
-            log.error(
-                    "Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
-                    media.getId(), media.getPublicId(), media.getKey(), e
-            );
-            throw new BusinessException(ErrorCode.MEDIA010, e);
         } catch (Exception e) {
             log.error(
                     "Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
