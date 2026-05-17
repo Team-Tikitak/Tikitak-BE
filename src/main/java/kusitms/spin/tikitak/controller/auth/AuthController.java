@@ -143,7 +143,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/")
-				.sameSite("Lax")
+				.sameSite("None")
 				.maxAge(Duration.ofSeconds(authProperties.jwt().refreshTokenExpiresIn()))
 				.build();
 	}
@@ -163,7 +163,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/")
-				.sameSite("Lax")
+				.sameSite("None")
 				.maxAge(Duration.ZERO)
 				.build();
 	}
