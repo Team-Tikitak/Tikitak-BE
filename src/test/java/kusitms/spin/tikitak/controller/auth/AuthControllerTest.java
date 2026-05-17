@@ -10,12 +10,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.net.URI;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -88,6 +91,12 @@ class AuthControllerTest extends ApiTest {
 						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state")))
 				.andExpect(status().isFound())
 				.andExpect(cookie().value("refreshToken", "refresh-token"))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("refreshToken=refresh-token;"))))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("SameSite=None"))))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("Secure"))))
 				.andExpect(header().exists("Location"))
 				.andReturn()
 				.getResponse()
@@ -116,6 +125,10 @@ class AuthControllerTest extends ApiTest {
 						.cookie(new jakarta.servlet.http.Cookie("refreshToken", "cookie-refresh-token")))
 				.andExpect(status().isOk())
 				.andExpect(cookie().value("refreshToken", "new-refresh-token"))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("SameSite=None"))))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("Secure"))))
 				.andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
 				.andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
 
@@ -143,6 +156,8 @@ class AuthControllerTest extends ApiTest {
 						.cookie(new jakarta.servlet.http.Cookie("refreshToken", "refresh-token")))
 				.andExpect(status().isOk())
 				.andExpect(cookie().maxAge("refreshToken", 0))
+				.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=None")))
+				.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Secure")))
 				.andExpect(jsonPath("$.data.loggedOut").value(true));
 
 		verify(authService).logout(eq("refresh-token"));
