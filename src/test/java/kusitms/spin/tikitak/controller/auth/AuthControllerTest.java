@@ -95,6 +95,8 @@ class AuthControllerTest extends ApiTest {
 						hasItem(containsString("refreshToken=refresh-token;"))))
 				.andExpect(header().stringValues("Set-Cookie",
 						hasItem(containsString("SameSite=None"))))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("Secure"))))
 				.andExpect(header().exists("Location"))
 				.andReturn()
 				.getResponse()
@@ -125,6 +127,8 @@ class AuthControllerTest extends ApiTest {
 				.andExpect(cookie().value("refreshToken", "new-refresh-token"))
 				.andExpect(header().stringValues("Set-Cookie",
 						hasItem(containsString("SameSite=None"))))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("Secure"))))
 				.andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
 				.andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
 
@@ -153,6 +157,7 @@ class AuthControllerTest extends ApiTest {
 				.andExpect(status().isOk())
 				.andExpect(cookie().maxAge("refreshToken", 0))
 				.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=None")))
+				.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Secure")))
 				.andExpect(jsonPath("$.data.loggedOut").value(true));
 
 		verify(authService).logout(eq("refresh-token"));
