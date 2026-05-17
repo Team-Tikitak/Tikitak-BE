@@ -16,11 +16,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.data.domain.Pageable;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,7 +41,7 @@ class MediaServiceTest extends UnitTest {
     private static final Long MEDIA_ID = 10L;
     private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final String BUCKET_NAME = "test-bucket";
-    private static final String OBJECT_KEY = "uploads/test.png";
+    private static final String OBJECT_KEY = "media/feed-image/11111111-1111-1111-1111-111111111111.png";
 
     @Mock
     private R2Properties r2Properties;
@@ -170,6 +173,50 @@ class MediaServiceTest extends UnitTest {
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
 
         assertThat(media.getStatus()).isEqualTo(MediaStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("만료된 PENDING 미디어 id 목록을 최대 처리 개수만큼 조회한다")
+    void findExpiredPendingMediaIds() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 3, 4, 20, 30);
+        when(mediaRepository.findExpiredMediaIds(any(MediaStatus.class), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(1L, 2L));
+
+        List<Long> mediaIds = mediaService.findExpiredPendingMediaIds(cutoff, 100);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(mediaRepository).findExpiredMediaIds(
+                org.mockito.ArgumentMatchers.eq(MediaStatus.PENDING),
+                org.mockito.ArgumentMatchers.eq(cutoff),
+                pageableCaptor.capture()
+        );
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
+        assertThat(mediaIds).containsExactly(1L, 2L);
+    }
+
+    @Test
+    @DisplayName("만료된 PENDING 미디어를 R2에서 삭제하고 DB 상태를 DELETED로 변경한다")
+    void deleteExpiredPendingMedia() {
+        Media media = media(MediaStatus.PENDING, MEMBER_ID);
+        when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+
+        boolean deleted = mediaService.deleteExpiredPendingMedia(MEDIA_ID);
+
+        assertThat(deleted).isTrue();
+        assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+        verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    @DisplayName("만료 미디어가 없거나 PENDING 상태가 아니면 삭제하지 않는다")
+    void deleteExpiredPendingMediaSkipsWhenNotPending() {
+        when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.UPLOADED, MEMBER_ID)));
+
+        boolean deleted = mediaService.deleteExpiredPendingMedia(MEDIA_ID);
+
+        assertThat(deleted).isFalse();
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
     private Media media(MediaStatus status, Long memberId) {

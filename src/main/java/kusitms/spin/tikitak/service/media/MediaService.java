@@ -20,6 +20,7 @@ import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -65,16 +66,20 @@ public class MediaService {
 
         // Media 엔티티 생성 및 저장
         List<Media> medias = request.getFiles().stream()
-                .map(file -> Media.builder()
-                        .purpose(request.getPurpose())
-                        .status(MediaStatus.PENDING)
-                        .fileName(file.getFileName())
-                        .contentType(file.getContentType())
-                        .size(file.getSize())
-                        .key(buildObjectKey(file.getFileName()))
-                        .teamId(resolveTeamId(request))
-                        .memberId(memberId)
-                        .build())
+                .map(file -> {
+                    UUID publicId = UUID.randomUUID();
+                    return Media.builder()
+                            .publicId(publicId)
+                            .purpose(request.getPurpose())
+                            .status(MediaStatus.PENDING)
+                            .fileName(file.getFileName())
+                            .contentType(file.getContentType())
+                            .size(file.getSize())
+                            .key(buildObjectKey(request.getPurpose(), publicId, file.getContentType()))
+                            .teamId(resolveTeamId(request))
+                            .memberId(memberId)
+                            .build();
+                })
                 .toList();
 
         List<Media> savedMedias = mediaRepository.saveAll(medias);
@@ -108,6 +113,28 @@ public class MediaService {
 
         deleteObject(media);
         media.updateStatus(MediaStatus.DELETED);
+    }
+
+    public List<Long> findExpiredPendingMediaIds(LocalDateTime cutoff, int limit) {
+        return mediaRepository.findExpiredMediaIds(
+                MediaStatus.PENDING,
+                cutoff,
+                PageRequest.of(0, limit)
+        );
+    }
+
+    @Transactional
+    public boolean deleteExpiredPendingMedia(Long mediaId) {
+        Media media = mediaRepository.findByIdForUpdate(mediaId)
+                .orElse(null);
+
+        if (media == null || media.getStatus() != MediaStatus.PENDING) {
+            return false;
+        }
+
+        deleteObject(media);
+        media.updateStatus(MediaStatus.DELETED);
+        return true;
     }
 
     private void validateRequest(MediaUploadRequest request, Long memberId) {
@@ -217,16 +244,35 @@ public class MediaService {
                     .build();
             client.deleteObject(request);
         } catch (S3Exception e) {
-            log.error("Failed to delete media object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+            log.error(
+                    "Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
+                    media.getId(), media.getPublicId(), media.getKey(), e
+            );
             throw new BusinessException(ErrorCode.MEDIA010, e);
         } catch (Exception e) {
-            log.error("Failed to delete media object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+            log.error(
+                    "Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
+                    media.getId(), media.getPublicId(), media.getKey(), e
+            );
             throw new BusinessException(ErrorCode.MEDIA010, e);
         }
     }
 
-    private String buildObjectKey(String fileName) {
-        return "uploads/" + UUID.randomUUID() + "_" + fileName;
+    private String buildObjectKey(MediaPurpose purpose, UUID publicId, String contentType) {
+        return "media/" + toKeySegment(purpose) + "/" + publicId + "." + extensionOf(contentType);
+    }
+
+    private String toKeySegment(MediaPurpose purpose) {
+        return purpose.name().toLowerCase().replace("_", "-");
+    }
+
+    private String extensionOf(String contentType) {
+        return switch (contentType) {
+            case "image/jpeg", "image/jpg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/heic" -> "heic";
+            default -> throw new BusinessException(ErrorCode.MEDIA001);
+        };
     }
 
     private Long getCurrentMemberId() {
