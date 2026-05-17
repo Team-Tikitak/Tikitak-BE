@@ -342,6 +342,15 @@ public class FeedService {
 			if (existing.isPresent()) {
 				return existing.get();
 			}
+			placeRepository.insertIfAbsentByExternalPlaceId(
+					externalPlaceId,
+					request.getName(),
+					request.getLatitude(),
+					request.getLongitude(),
+					request.getAddress()
+			);
+			return placeRepository.findByExternalPlaceId(externalPlaceId)
+					.orElseThrow(() -> new BusinessException(ErrorCode.COMMON001));
 		}
 		// Provider-less places cannot be deduplicated safely without merging distinct venues with similar coordinates.
 		return placeRepository.save(Place.builder()

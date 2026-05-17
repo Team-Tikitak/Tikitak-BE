@@ -3,17 +3,18 @@ package kusitms.spin.tikitak.service.feed;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.entity.ObjectDeleteOutbox;
 import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
+import kusitms.spin.tikitak.service.media.ObjectDeleteOutboxProcessor;
+import kusitms.spin.tikitak.service.media.ObjectDeleteOutboxService;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.uploadedFeedImage;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,10 +42,13 @@ class FeedCleanupServiceTest extends UnitTest {
 	private MediaRepository mediaRepository;
 
 	@Mock
-	private R2Properties r2Properties;
+	private ObjectDeleteOutboxService objectDeleteOutboxService;
 
 	@Mock
-	private S3Client s3Client;
+	private ObjectDeleteOutboxProcessor objectDeleteOutboxProcessor;
+
+	@Mock
+	private R2Properties r2Properties;
 
 	private FeedCleanupService feedCleanupService;
 
@@ -52,8 +57,9 @@ class FeedCleanupServiceTest extends UnitTest {
 		feedCleanupService = new FeedCleanupService(
 				feedRepository,
 				mediaRepository,
-				r2Properties,
-				Optional.of(s3Client)
+				objectDeleteOutboxService,
+				objectDeleteOutboxProcessor,
+				r2Properties
 		);
 	}
 
@@ -73,16 +79,25 @@ class FeedCleanupServiceTest extends UnitTest {
 				.build());
 		when(feedRepository.findDeletedForHardDelete(FEED_ID)).thenReturn(Optional.of(feed));
 		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+		when(objectDeleteOutboxService.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
 		boolean deleted = feedCleanupService.hardDeleteExpiredFeed(FEED_ID, cutoff);
 
 		assertThat(deleted).isTrue();
-		ArgumentCaptor<DeleteObjectRequest> requestCaptor = ArgumentCaptor.forClass(DeleteObjectRequest.class);
-		verify(s3Client).deleteObject(requestCaptor.capture());
-		assertThat(requestCaptor.getValue().bucket()).isEqualTo(BUCKET_NAME);
-		assertThat(requestCaptor.getValue().key()).isEqualTo(media.getKey());
+		ObjectDeleteOutbox deleteRequest = captureSavedDeleteRequest();
+		assertThat(deleteRequest.getBucket()).isEqualTo(BUCKET_NAME);
+		assertThat(deleteRequest.getObjectKey()).isEqualTo(media.getKey());
+		assertThat(deleteRequest.getMediaId()).isEqualTo(media.getId());
+		verify(objectDeleteOutboxProcessor).process(deleteRequest.getId());
 		verify(feedRepository).delete(feed);
 		verify(feedRepository).flush();
 		verify(mediaRepository).deleteAll(List.of(media));
+	}
+
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private ObjectDeleteOutbox captureSavedDeleteRequest() {
+		ArgumentCaptor<List> outboxCaptor = ArgumentCaptor.forClass(List.class);
+		verify(objectDeleteOutboxService).saveAll(outboxCaptor.capture());
+		return (ObjectDeleteOutbox) outboxCaptor.getValue().get(0);
 	}
 }
