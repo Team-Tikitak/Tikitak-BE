@@ -8,8 +8,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import kusitms.spin.tikitak.domain.feed.enums.FeedReactionType;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -45,13 +47,25 @@ public class FeedReaction {
 	@JoinColumn(name = "team_member_id", nullable = false)
 	private TeamMember teamMember;
 
-	@Column(columnDefinition = "text")
-	private String emoji;
+	@jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+	@Column(name = "reaction_type", nullable = false, length = 50)
+	private FeedReactionType reactionType;
 
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
 
 	void setFeed(Feed feed) {
 		this.feed = feed;
+	}
+
+	public void updateReactionType(FeedReactionType reactionType) {
+		this.reactionType = reactionType;
+	}
+
+	@PrePersist
+	protected void onCreate() {
+		if (createdAt == null) {
+			createdAt = LocalDateTime.now();
+		}
 	}
 }
