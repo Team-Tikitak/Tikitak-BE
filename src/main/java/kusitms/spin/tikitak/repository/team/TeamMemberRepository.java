@@ -66,6 +66,40 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 			select tm
 			from TeamMember tm
 			join fetch tm.team t
+			join fetch tm.member m
+			where tm.member.id = :memberId
+				and t.id = :teamId
+				and tm.status = :memberStatus
+				and t.status = :teamStatus
+			""")
+	Optional<TeamMember> findActiveByMemberIdAndTeamId(
+			@Param("memberId") Long memberId,
+			@Param("teamId") Long teamId,
+			@Param("memberStatus") TeamMemberStatus memberStatus,
+			@Param("teamStatus") TeamStatus teamStatus
+	);
+
+	@Query("""
+			select tm
+			from TeamMember tm
+			join fetch tm.member m
+			join tm.team t
+			where t.id = :teamId
+				and tm.id in :teamMemberIds
+				and tm.status = :memberStatus
+				and t.status = :teamStatus
+			""")
+	List<TeamMember> findActiveByTeamIdAndIds(
+			@Param("teamId") Long teamId,
+			@Param("teamMemberIds") Collection<Long> teamMemberIds,
+			@Param("memberStatus") TeamMemberStatus memberStatus,
+			@Param("teamStatus") TeamStatus teamStatus
+	);
+
+	@Query("""
+			select tm
+			from TeamMember tm
+			join fetch tm.team t
 			where tm.member.id = :memberId
 				and tm.status = :memberStatus
 				and t.status = :teamStatus

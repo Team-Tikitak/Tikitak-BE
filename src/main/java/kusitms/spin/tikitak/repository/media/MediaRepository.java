@@ -60,4 +60,8 @@ public interface MediaRepository extends JpaRepository<Media, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from Media m where m.upload.id = :uploadId")
     List<Media> findByUploadIdForUpdate(@Param("uploadId") Long uploadId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Media m where m.publicId in :publicIds")
+    List<Media> findByPublicIdsForUpdate(@Param("publicIds") List<UUID> publicIds);
 }
