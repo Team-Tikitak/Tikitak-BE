@@ -62,4 +62,3 @@ r2:
 kakao:
   map:
     rest-api-key: ${KAKAO_MAP_REST_API_KEY}
-
