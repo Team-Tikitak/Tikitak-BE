@@ -8,7 +8,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.media.entity.Media;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,6 +38,10 @@ public class FeedImage {
 	@Column(columnDefinition = "text")
 	private String imgUrl;
 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "media_id")
+	private Media media;
+
 	@Column(name = "order_index", nullable = false)
 	private Integer orderIndex;
 
@@ -48,5 +54,12 @@ public class FeedImage {
 
 	void setFeed(Feed feed) {
 		this.feed = feed;
+	}
+
+	@PrePersist
+	protected void onCreate() {
+		if (createdAt == null) {
+			createdAt = LocalDateTime.now();
+		}
 	}
 }

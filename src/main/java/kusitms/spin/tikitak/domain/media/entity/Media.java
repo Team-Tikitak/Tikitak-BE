@@ -54,6 +54,9 @@ public class Media {
     @Column
     private LocalDateTime uploadedAt;
 
+    @Column
+    private LocalDateTime deletedAt;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -75,6 +78,9 @@ public class Media {
         if (status == MediaStatus.UPLOADED) {
             this.uploadedAt = LocalDateTime.now();
         }
+        if (status == MediaStatus.DELETED) {
+            this.deletedAt = LocalDateTime.now();
+        }
     }
 
     public void updateUrl(String url) {
@@ -85,6 +91,16 @@ public class Media {
         this.status = MediaStatus.UPLOADED;
         this.url = url;
         this.uploadedAt = LocalDateTime.now();
+    }
+
+    public void markUsed() {
+        this.status = MediaStatus.USED;
+        this.deletedAt = null;
+    }
+
+    public void markDeleted() {
+        this.status = MediaStatus.DELETED;
+        this.deletedAt = LocalDateTime.now();
     }
 
     @PrePersist
