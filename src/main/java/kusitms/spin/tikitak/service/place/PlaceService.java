@@ -18,6 +18,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 
 @Slf4j
@@ -30,7 +31,9 @@ public class PlaceService {
 
     private final KakaoMapProperties kakaoMapProperties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(3))
+            .build();
 
     public PlaceSearchResponseDTO.PlaceSearchResult searchPlaces(
             String query,
@@ -44,6 +47,7 @@ public class PlaceService {
 
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .header("Authorization", "KakaoAK " + kakaoMapProperties.restApiKey())
+                .timeout(Duration.ofSeconds(5))
                 .GET()
                 .build();
 
