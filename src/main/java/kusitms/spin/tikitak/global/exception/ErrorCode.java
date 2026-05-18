@@ -109,7 +109,21 @@ public enum ErrorCode {
     FEED013("FEED013", "유효하지 않은 반응 유형입니다.", 400),
     FEED014("FEED014", "피드 반응 처리에 실패했습니다.", 500),
     FEED015("FEED015", "해당 피드를 삭제할 수 없습니다.", 403),
-    FEED016("FEED016", "피드 삭제에 실패했습니다.", 500);
+    FEED016("FEED016", "피드 삭제에 실패했습니다.", 500),
+
+    // Comment
+    COMMENT001("COMMENT001", "댓글 목록 조회에 실패했습니다.", 500),
+    COMMENT002("COMMENT002", "댓글 내용은 필수입니다.", 400),
+    COMMENT003("COMMENT003", "댓글은 최대 200자까지 입력할 수 있습니다.", 400),
+    COMMENT004("COMMENT004", "댓글 작성에 실패했습니다.", 500),
+    COMMENT005("COMMENT005", "해당 댓글을 삭제할 수 없습니다.", 403),
+    COMMENT006("COMMENT006", "댓글을 찾을 수 없습니다.", 404),
+    COMMENT007("COMMENT007", "댓글 삭제에 실패했습니다.", 500),
+    COMMENT008("COMMENT008", "해당 댓글을 수정할 수 없습니다.", 403),
+    COMMENT009("COMMENT009", "댓글 수정에 실패했습니다.", 500),
+    COMMENT010("COMMENT010", "댓글 위치가 올바르지 않습니다.", 400),
+    COMMENT011("COMMENT011", "댓글을 작성할 피드 이미지를 찾을 수 없습니다.", 404),
+    COMMENT012("COMMENT012", "수정할 댓글 정보가 없습니다.", 400);
 
     private final String code;
     private final String message;
