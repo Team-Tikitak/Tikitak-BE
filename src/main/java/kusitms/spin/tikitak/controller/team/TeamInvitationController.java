@@ -38,7 +38,7 @@ public class TeamInvitationController {
 	}
 
 	@GetMapping("/teams/{teamId}/invitation-link")
-	@Operation(summary = "현재 활성 초대 링크 조회 API", description = "팀장만 사용할 수 있습니다.")
+	@Operation(summary = "현재 활성 초대 링크 조회 API", description = "팀장 및 팀원 모두 사용할 수 있습니다.")
 	public CommonResponse<TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO> getActiveInviteLink(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,
 			@PathVariable Long teamId
