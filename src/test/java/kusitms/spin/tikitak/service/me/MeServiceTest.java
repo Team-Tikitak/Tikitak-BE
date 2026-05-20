@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.me;
 
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -62,6 +63,8 @@ class MeServiceTest extends UnitTest {
 		assertThat(response.getMemberId()).isEqualTo(1L);
 		assertThat(response.getActiveTeamId()).isEqualTo(10L);
 		assertThat(response.isHasTeam()).isTrue();
+		assertThat(response.isOnboardingCompleted()).isFalse();
+		assertThat(response.getProfileCharacterType()).isNull();
 	}
 
 	@Test
@@ -142,5 +145,22 @@ class MeServiceTest extends UnitTest {
 				new MeRequestDTO.AgreementUpdateRequestDTO(true, false)
 		)).isInstanceOfSatisfying(BusinessException.class, exception ->
 				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AGREEMENT002));
+	}
+
+	@Test
+	@DisplayName("온보딩 프로필 캐릭터를 저장하고 완료 상태로 변경한다")
+	void updateOnboardingStoresProfileCharacter() {
+		Member member = activeMember(1L);
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+		MeResponseDTO.OnboardingUpdateResponseDTO response = meService.updateOnboarding(
+				1L,
+				new MeRequestDTO.OnboardingUpdateRequestDTO(ProfileCharacterType.TAK_SPARK)
+		);
+
+		assertThat(response.isOnboardingCompleted()).isTrue();
+		assertThat(response.getProfileCharacterType()).isEqualTo(ProfileCharacterType.TAK_SPARK);
+		assertThat(member.isOnboardingCompleted()).isTrue();
+		assertThat(member.getProfileCharacterType()).isEqualTo(ProfileCharacterType.TAK_SPARK);
 	}
 }
