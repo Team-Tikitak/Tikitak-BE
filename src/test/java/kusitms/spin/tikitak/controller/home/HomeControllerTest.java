@@ -1,7 +1,9 @@
 package kusitms.spin.tikitak.controller.home;
 
+import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import kusitms.spin.tikitak.service.home.HomeService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
 import kusitms.spin.tikitak.support.ApiTest;
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
@@ -83,6 +86,52 @@ class HomeControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.code").value("TEAM008"));
 	}
 
+	@Test
+	@DisplayName("GET /api/v1/teams/{teamId}/home/everyone-pick는 PICK 목록을 반환한다")
+	void getEveryonePick() throws Exception {
+		HomeResponseDTO.EveryonePickResponse response = HomeResponseDTO.EveryonePickResponse.builder()
+				.picks(List.of(
+						feedListItem(301L, "오늘 정말 즐거웠다", 5, 3),
+						feedListItem(302L, "다음에 또 가고 싶다", 3, 1)
+				))
+				.build();
+
+		when(homeService.getEveryonePick(TEST_MEMBER_ID, TEAM_ID)).thenReturn(response);
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/everyone-pick", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.picks").isArray())
+				.andExpect(jsonPath("$.data.picks.length()").value(2))
+				.andExpect(jsonPath("$.data.picks[0].feedId").value(301))
+				.andExpect(jsonPath("$.data.picks[0].content").value("오늘 정말 즐거웠다"))
+				.andExpect(jsonPath("$.data.picks[0].reactionSummary.totalCount").value(5))
+				.andExpect(jsonPath("$.data.picks[0].commentCount").value(3))
+				.andExpect(jsonPath("$.data.picks[1].feedId").value(302));
+	}
+
+	@Test
+	@DisplayName("당월 피드가 부족하면 빈 PICK 목록을 반환한다")
+	void getEveryonePickReturnsEmptyWhenNotEnoughFeeds() throws Exception {
+		when(homeService.getEveryonePick(TEST_MEMBER_ID, TEAM_ID))
+				.thenReturn(HomeResponseDTO.EveryonePickResponse.builder().picks(List.of()).build());
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/everyone-pick", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.picks").isEmpty());
+	}
+
+	@Test
+	@DisplayName("팀 접근 권한이 없으면 모두의 PICK도 403을 반환한다")
+	void getEveryonePickReturnsForbiddenWhenNotTeamMember() throws Exception {
+		when(homeService.getEveryonePick(TEST_MEMBER_ID, TEAM_ID))
+				.thenThrow(new BusinessException(ErrorCode.TEAM008));
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/everyone-pick", TEAM_ID))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("TEAM008"));
+	}
+
 	// --- helpers ---
 
 	private HomeResponseDTO.BestAttendanceMemberDTO member(
@@ -94,6 +143,28 @@ class HomeControllerTest extends ApiTest {
 				.nickname(nickname)
 				.profileImgUrl(profileImgUrl)
 				.tagCount(tagCount)
+				.build();
+	}
+
+	private FeedResponseDTO.FeedListItemDTO feedListItem(
+			Long feedId, String content, long reactionTotal, long commentCount
+	) {
+		return FeedResponseDTO.FeedListItemDTO.builder()
+				.feedId(feedId)
+				.type(FeedType.GENERAL)
+				.content(content)
+				.author(FeedResponseDTO.AuthorDTO.builder()
+						.teamMemberId(101L)
+						.nickname("테스터")
+						.profileImageUrl("https://example.com/profile.png")
+						.isAnonymous(false)
+						.build())
+				.reactionSummary(FeedResponseDTO.ReactionSummaryDTO.builder()
+						.totalCount(reactionTotal)
+						.items(List.of())
+						.build())
+				.commentCount(commentCount)
+				.createdAt(LocalDateTime.of(2026, 5, 15, 12, 0))
 				.build();
 	}
 }

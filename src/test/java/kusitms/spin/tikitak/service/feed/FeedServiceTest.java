@@ -25,6 +25,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -131,6 +133,49 @@ class FeedServiceTest extends UnitTest {
 		assertThatThrownBy(() -> feedService.createFeed(MEMBER_ID, TEAM_ID, request))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED007));
+	}
+
+	@Test
+	@DisplayName("당월 피드가 3개 미만이면 빈 목록을 반환한다")
+	void getEveryonePickItemsReturnsEmptyWhenFeedCountLessThan3() {
+		YearMonth now = YearMonth.now();
+		LocalDate start = now.atDay(1);
+		LocalDate end = now.plusMonths(1).atDay(1);
+
+		stubActiveAuthor();
+		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(2L);
+
+		assertThat(feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("피드가 3개 이상이면 랭킹 순서대로 FeedListItemDTO 목록을 반환한다")
+	void getEveryonePickItemsReturnsOrderedFeedListItemDTOs() {
+		YearMonth now = YearMonth.now();
+		LocalDate start = now.atDay(1);
+		LocalDate end = now.plusMonths(1).atDay(1);
+
+		Long feedId1 = 201L;
+		Long feedId2 = 202L;
+		List<Long> rankedIds = List.of(feedId1, feedId2);
+
+		Feed feed1 = Feed.builder().id(feedId1).team(team).teamMember(author).content("1번 피드").build();
+		Feed feed2 = Feed.builder().id(feedId2).team(team).teamMember(author).content("2번 피드").build();
+
+		stubActiveAuthor();
+		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(5L);
+		when(feedRepository.findEveryonePickFeedIds(eq(TEAM_ID), eq(start), eq(end))).thenReturn(rankedIds);
+		when(feedRepository.findActiveByIds(eq(TEAM_ID), eq(rankedIds))).thenReturn(List.of(feed1, feed2));
+		when(feedCommentRepository.countByFeedIds(rankedIds)).thenReturn(List.of());
+		when(feedReactionRepository.countByReactionTypeByFeedIds(rankedIds)).thenReturn(List.of());
+		when(feedReactionRepository.findMyReactions(eq(rankedIds), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+
+		List<FeedResponseDTO.FeedListItemDTO> result = feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID);
+
+		assertThat(result).hasSize(2);
+		assertThat(result.get(0).getFeedId()).isEqualTo(feedId1);
+		assertThat(result.get(0).getContent()).isEqualTo("1번 피드");
+		assertThat(result.get(1).getFeedId()).isEqualTo(feedId2);
 	}
 
 	private void stubActiveAuthor() {

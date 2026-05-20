@@ -8,6 +8,7 @@ import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,13 +40,16 @@ class HomeServiceTest extends UnitTest {
 	@Mock
 	private TeamMemberRepository teamMemberRepository;
 
+	@Mock
+	private FeedService feedService;
+
 	private HomeService homeService;
 	private Team team;
 	private TeamMember requester;
 
 	@BeforeEach
 	void setUp() {
-		homeService = new HomeService(feedTagRepository, teamMemberRepository);
+		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
 	}
