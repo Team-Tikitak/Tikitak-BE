@@ -131,6 +131,7 @@ public class MeService {
 		try {
 			Member member = getActiveMember(memberId);
 			member.completeOnboarding(request.getProfileCharacterType());
+			memberRepository.flush();
 			return MeResponseDTO.OnboardingUpdateResponseDTO.builder()
 					.onboardingCompleted(member.isOnboardingCompleted())
 					.profileCharacterType(member.getProfileCharacterType())
