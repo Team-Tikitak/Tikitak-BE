@@ -84,6 +84,10 @@ public enum ErrorCode {
     TEAM_MEMBER004("TEAM_MEMBER004", "강퇴할 권한이 없습니다", 403),
     TEAM_MEMBER005("TEAM_MEMBER005", "팀장은 강퇴할 수 없습니다", 400),
 
+    // Place
+    PLACE001("PLACE001", "장소 검색에 실패했습니다.", 500),
+    PLACE002("PLACE002", "검색어를 입력해주세요.", 400),
+
     // Invite
     INVITE001("INVITE001", "초대 링크를 생성할 권한이 없습니다.", 403),
     INVITE002("INVITE002", "활성화된 초대 링크가 없습니다.", 404),

@@ -18,4 +18,8 @@ r2:
   secret-access-key: test-secret-key
   bucket-name: test-bucket
   endpoint: https://example.com
+
+kakao:
+  map:
+    rest-api-key: test-kakao-map-key
       
