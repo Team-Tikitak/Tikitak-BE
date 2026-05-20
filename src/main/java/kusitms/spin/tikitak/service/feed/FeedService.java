@@ -62,13 +62,14 @@ public class FeedService {
 	private final TeamMemberRepository teamMemberRepository;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId, Long teamId, String cursor, Integer size, String placeId
+			Long memberId, Long teamId, String cursor, Integer size, String placeId, String type
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
+		FeedTypeFilter feedType = parseFeedType(type);
 
-		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), parsedCursor, pageSize);
+		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), feedType, parsedCursor, pageSize);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -512,19 +513,32 @@ public class FeedService {
 				.collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
 	}
 
-	private List<Feed> findFeedPage(Long teamId, String placeId, Cursor cursor, int pageSize) {
+	private List<Feed> findFeedPage(Long teamId, String placeId, FeedTypeFilter feedType, Cursor cursor, int pageSize) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
+		String feedTypeName = feedType.queryValue();
 		if (cursor.createdAt() == null) {
 			if (placeId == null) {
-				return feedRepository.findActiveFirstPage(teamId, pageRequest);
+				return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
 			}
-			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, pageRequest);
+			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
 		}
 		if (placeId == null) {
-			return feedRepository.findActiveCursorPage(teamId, cursor.createdAt(), cursor.feedId(), pageRequest);
+			return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
 		return feedRepository.findActiveCursorPageByPlaceId(
-				teamId, placeId, cursor.createdAt(), cursor.feedId(), pageRequest);
+				teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	}
+
+	private FeedTypeFilter parseFeedType(String type) {
+		String normalized = blankToNull(type);
+		if (normalized == null || "ALL".equalsIgnoreCase(normalized)) {
+			return FeedTypeFilter.ALL;
+		}
+		try {
+			return FeedTypeFilter.valueOf(normalized.toUpperCase());
+		} catch (RuntimeException e) {
+			throw new BusinessException(ErrorCode.FEED001, e);
+		}
 	}
 
 	private FeedResponseDTO.FeedReactionResponseDTO reactionResponse(Long feedId, FeedReactionType myReaction) {
@@ -631,5 +645,15 @@ public class FeedService {
 	}
 
 	private record Cursor(LocalDateTime createdAt, Long feedId) {
+	}
+
+	private enum FeedTypeFilter {
+		ALL,
+		GENERAL,
+		DAILY_QUESTION;
+
+		private String queryValue() {
+			return this == ALL ? null : name();
+		}
 	}
 }

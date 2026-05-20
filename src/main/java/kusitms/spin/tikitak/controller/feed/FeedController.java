@@ -47,9 +47,11 @@ public class FeedController {
 			@Parameter(description = "조회 개수. 기본값 20, 최대 50")
 			@RequestParam(required = false) Integer size,
 			@Parameter(description = "특정 장소의 피드만 조회할 외부 장소 ID")
-			@RequestParam(required = false) String placeId
+			@RequestParam(required = false) String placeId,
+			@Parameter(description = "피드 유형 필터. ALL, GENERAL, DAILY_QUESTION")
+			@RequestParam(required = false) String type
 	) {
-		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(memberId, teamId, cursor, size, placeId);
+		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(memberId, teamId, cursor, size, placeId, type);
 		return CommonResponse.success(response);
 	}
 
