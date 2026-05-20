@@ -134,6 +134,27 @@ class FeedCommentServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("댓글 작성 시 좌표 소수 자릿수가 6자리를 넘으면 예외가 발생한다")
+	void createCommentThrowsWhenPositionScaleOverLimit() {
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(feedImage));
+
+		assertThatThrownBy(() -> feedCommentService.createComment(
+				MEMBER_ID,
+				TEAM_ID,
+				FEED_ID,
+				new FeedCommentRequestDTO.CommentCreateRequestDTO(
+						FEED_IMAGE_ID,
+						"좋다!",
+						new BigDecimal("0.1234567"),
+						new BigDecimal("0.680000")
+				)
+		)).isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COMMENT010));
+	}
+
+	@Test
 	@DisplayName("댓글 목록은 생성일시 오름차순 커서 페이지로 조회한다")
 	void listComments() {
 		stubActiveViewer();
