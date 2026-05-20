@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.service.me.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import lombok.AllArgsConstructor;
@@ -24,6 +25,8 @@ public class MeResponseDTO {
 		private SocialProvider socialProvider;
 		private MemberStatus status;
 		private boolean hasAgreedRequiredTerms;
+		private boolean onboardingCompleted;
+		private ProfileCharacterType profileCharacterType;
 		private Long activeTeamId;
 		private boolean hasTeam;
 		private LocalDateTime createdAt;
@@ -48,7 +51,6 @@ public class MeResponseDTO {
 		private String description;
 		private TeamMemberRole role;
 		private String nickname;
-		private String profileImageUrl;
 		private long memberCount;
 		@JsonProperty("isActive")
 		private boolean isActive;
@@ -71,5 +73,14 @@ public class MeResponseDTO {
 		private boolean termsAgreed;
 		private boolean privacyAgreed;
 		private LocalDateTime termsAgreedAt;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class OnboardingUpdateResponseDTO {
+		private boolean onboardingCompleted;
+		private ProfileCharacterType profileCharacterType;
 	}
 }

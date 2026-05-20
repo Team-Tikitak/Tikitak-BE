@@ -89,6 +89,19 @@ public class MeController {
 	}
 
 	@Operation(
+			summary = "온보딩 프로필 등록",
+			description = "현재 사용자의 온보딩 완료 여부와 기본 프로필 캐릭터를 저장합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@PatchMapping("/api/v1/me/onboarding")
+	public CommonResponse<MeResponseDTO.OnboardingUpdateResponseDTO> updateOnboarding(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@Valid @RequestBody MeRequestDTO.OnboardingUpdateRequestDTO request
+	) {
+		return CommonResponse.success(meService.updateOnboarding(memberId, request));
+	}
+
+	@Operation(
 			summary = "회원탈퇴",
 			description = "현재 로그인한 사용자의 계정을 탈퇴 처리하고 발급된 refresh token을 모두 무효화합니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
