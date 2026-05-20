@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -17,6 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "member")
@@ -43,6 +45,13 @@ public class Member {
 	private String profileImgUrl;
 
 	@Enumerated(EnumType.STRING)
+	@Column(length = 50)
+	private ProfileCharacterType profileCharacterType;
+
+	@Column(nullable = false)
+	private boolean onboardingCompleted;
+
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 50)
 	private SocialProvider socialProvider;
 
@@ -60,6 +69,8 @@ public class Member {
 	private boolean privacyAgreed;
 
 	private LocalDateTime termsAgreedAt;
+
+	private Long activeTeamId;
 
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
@@ -88,6 +99,7 @@ public class Member {
 				.status(MemberStatus.ACTIVE)
 				.termsAgreed(false)
 				.privacyAgreed(false)
+				.onboardingCompleted(false)
 				.createdAt(now)
 				.updatedAt(now)
 				.build();
@@ -103,7 +115,33 @@ public class Member {
 	public void withdraw() {
 		LocalDateTime now = LocalDateTime.now();
 		this.status = MemberStatus.INACTIVE;
+		this.activeTeamId = null;
 		this.deletedAt = now;
 		this.updatedAt = now;
+	}
+
+	public void changeActiveTeam(Long teamId) {
+		this.activeTeamId = teamId;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void clearActiveTeam() {
+		this.activeTeamId = null;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void agreeRequiredTerms() {
+		this.termsAgreed = true;
+		this.privacyAgreed = true;
+		if (this.termsAgreedAt == null) {
+			this.termsAgreedAt = LocalDateTime.now();
+		}
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void completeOnboarding(ProfileCharacterType profileCharacterType) {
+		this.profileCharacterType = Objects.requireNonNull(profileCharacterType, "profileCharacterType must not be null");
+		this.onboardingCompleted = true;
+		this.updatedAt = LocalDateTime.now();
 	}
 }
