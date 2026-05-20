@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.repository.feed;
 
 import jakarta.persistence.LockModeType;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.service.map.dto.MapPinRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -124,4 +125,33 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 				and f.deletedAt is not null
 			""")
 	Optional<Feed> findDeletedForHardDelete(@Param("feedId") Long feedId);
+
+	@Query(value = """
+			WITH ranked AS (
+			    SELECT
+			        f.place_id,
+			        f.id AS feed_id,
+			        COUNT(*) OVER (PARTITION BY f.place_id) AS feed_count,
+			        ROW_NUMBER() OVER (PARTITION BY f.place_id
+			                          ORDER BY f.created_at DESC, f.id DESC) AS rn
+			    FROM feed f
+			    WHERE f.team_id = :teamId
+			      AND f.deleted_at IS NULL
+			      AND f.place_id IS NOT NULL
+			)
+			SELECT
+			    p.external_place_id AS externalPlaceId,
+			    p.name,
+			    p.latitude,
+			    p.longitude,
+			    p.address,
+			    r.feed_count AS feedCount,
+			    fi.img_url AS thumbnailUrl
+			FROM ranked r
+			JOIN place p ON p.id = r.place_id
+			LEFT JOIN feed_image fi ON fi.feed_id = r.feed_id
+			AND fi.order_index = 0
+			WHERE r.rn = 1
+			""", nativeQuery = true)
+	List<MapPinRow> findMapPinsByTeamId(@Param("teamId") Long teamId);
 }

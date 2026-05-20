@@ -58,3 +58,7 @@ r2:
   bucket-name: ${R2_BUCKET_NAME}
   endpoint: ${R2_ENDPOINT}
   public-base-url: ${R2_PUBLIC_BASE_URL:}
+
+kakao:
+  map:
+    rest-api-key: ${KAKAO_MAP_REST_API_KEY}
