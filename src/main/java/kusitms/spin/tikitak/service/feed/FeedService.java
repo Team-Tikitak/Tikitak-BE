@@ -52,6 +52,7 @@ public class FeedService {
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
 	private static final int MAX_TAG_COUNT = 11;
+	private static final int MAX_CONTENT_LENGTH = 1000;
 
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
@@ -265,6 +266,9 @@ public class FeedService {
 			return null;
 		}
 		if (content.isBlank()) {
+			throw new BusinessException(ErrorCode.FEED007);
+		}
+		if (content.length() > MAX_CONTENT_LENGTH) {
 			throw new BusinessException(ErrorCode.FEED007);
 		}
 		return content;
