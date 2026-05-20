@@ -7,6 +7,7 @@ import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class HomeService {
 
 	private final FeedTagRepository feedTagRepository;
 	private final TeamMemberRepository teamMemberRepository;
+	private final FeedService feedService;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
@@ -55,6 +57,12 @@ public class HomeService {
 
 		return HomeResponseDTO.BestAttendanceResponse.builder()
 				.members(members)
+				.build();
+	}
+
+	public HomeResponseDTO.EveryonePickResponse getEveryonePick(Long memberId, Long teamId) {
+		return HomeResponseDTO.EveryonePickResponse.builder()
+				.picks(feedService.getEveryonePickItems(memberId, teamId))
 				.build();
 	}
 }

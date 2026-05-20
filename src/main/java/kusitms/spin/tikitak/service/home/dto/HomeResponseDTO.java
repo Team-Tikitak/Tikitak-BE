@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.home.dto;
 
+import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -27,5 +28,13 @@ public class HomeResponseDTO {
 		private String nickname;
 		private String profileImgUrl;
 		private long tagCount;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class EveryonePickResponse {
+		private List<FeedResponseDTO.FeedListItemDTO> picks;
 	}
 }

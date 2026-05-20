@@ -29,4 +29,13 @@ public class HomeController {
 	) {
 		return CommonResponse.success(homeService.getBestAttendance(memberId, teamId));
 	}
+
+	@GetMapping("/everyone-pick")
+	@Operation(summary = "모두의 PICK 조회 API")
+	public CommonResponse<HomeResponseDTO.EveryonePickResponse> getEveryonePick(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		return CommonResponse.success(homeService.getEveryonePick(memberId, teamId));
+	}
 }

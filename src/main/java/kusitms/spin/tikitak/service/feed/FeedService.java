@@ -29,7 +29,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -52,6 +54,7 @@ public class FeedService {
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
 	private static final int MAX_TAG_COUNT = 11;
+	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
 
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
@@ -115,6 +118,42 @@ public class FeedService {
 				myReaction(feed.getId(), viewer.getId()),
 				feed.getTeamMember().getId().equals(viewer.getId())
 		);
+	}
+
+	public List<FeedResponseDTO.FeedListItemDTO> getEveryonePickItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		YearMonth currentMonth = YearMonth.now();
+		LocalDate startOfMonth = currentMonth.atDay(1);
+		LocalDate startOfNextMonth = currentMonth.plusMonths(1).atDay(1);
+
+		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
+		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
+			return List.of();
+		}
+
+		List<Long> rankedIds = feedRepository.findEveryonePickFeedIds(teamId, startOfMonth, startOfNextMonth);
+		if (rankedIds.isEmpty()) {
+			return List.of();
+		}
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, rankedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(rankedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(rankedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(rankedIds, viewer.getId());
+
+		return rankedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
 	}
 
 	@Transactional
