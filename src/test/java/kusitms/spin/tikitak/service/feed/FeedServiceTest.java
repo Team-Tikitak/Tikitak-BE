@@ -133,6 +133,17 @@ class FeedServiceTest extends UnitTest {
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED007));
 	}
 
+	@Test
+	@DisplayName("피드 본문은 1000자를 초과할 수 없다")
+	void createFeedThrowsWhenContentTooLong() {
+		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithContent(MEDIA_PUBLIC_ID, "a".repeat(1001));
+		stubActiveAuthor();
+
+		assertThatThrownBy(() -> feedService.createFeed(MEMBER_ID, TEAM_ID, request))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED007));
+	}
+
 	private void stubActiveAuthor() {
 		when(teamRepository.findById(TEAM_ID)).thenReturn(Optional.of(team));
 		when(teamMemberRepository.findActiveByMemberIdAndTeamId(
