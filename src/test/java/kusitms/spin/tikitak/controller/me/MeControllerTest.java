@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.controller.me;
 
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.service.me.MeService;
@@ -48,6 +49,8 @@ class MeControllerTest extends ApiTest {
 				.socialProvider(SocialProvider.KAKAO)
 				.status(MemberStatus.ACTIVE)
 				.hasAgreedRequiredTerms(true)
+				.onboardingCompleted(true)
+				.profileCharacterType(ProfileCharacterType.TAK_LEADER)
 				.activeTeamId(10L)
 				.hasTeam(true)
 				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30))
@@ -62,6 +65,8 @@ class MeControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.data.socialProvider").value("KAKAO"))
 				.andExpect(jsonPath("$.data.status").value("ACTIVE"))
 				.andExpect(jsonPath("$.data.hasAgreedRequiredTerms").value(true))
+				.andExpect(jsonPath("$.data.onboardingCompleted").value(true))
+				.andExpect(jsonPath("$.data.profileCharacterType").value("TAK_LEADER"))
 				.andExpect(jsonPath("$.data.activeTeamId").value(10L))
 				.andExpect(jsonPath("$.data.hasTeam").value(true));
 	}
@@ -77,7 +82,6 @@ class MeControllerTest extends ApiTest {
 						.description("우리 팀 공간")
 						.role(TeamMemberRole.OWNER)
 						.nickname("민경")
-						.profileImageUrl("https://example.com/profile.png")
 						.memberCount(5L)
 						.isActive(true)
 						.joinedAt(LocalDateTime.of(2026, 3, 4, 20, 30))
@@ -179,5 +183,52 @@ class MeControllerTest extends ApiTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.termsAgreed").value(true))
 				.andExpect(jsonPath("$.data.privacyAgreed").value(true));
+	}
+
+	@Test
+	@DisplayName("PATCH /api/v1/me/onboarding은 온보딩 프로필 저장 결과를 반환한다")
+	void updateOnboarding() throws Exception {
+		when(meService.updateOnboarding(any(Long.class), any(MeRequestDTO.OnboardingUpdateRequestDTO.class)))
+				.thenReturn(MeResponseDTO.OnboardingUpdateResponseDTO.builder()
+						.onboardingCompleted(true)
+						.profileCharacterType(ProfileCharacterType.TAK_SPARK)
+						.build());
+
+		mockMvc.perform(patch("/api/v1/me/onboarding")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "profileCharacterType": "TAK_SPARK"
+								}
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.onboardingCompleted").value(true))
+				.andExpect(jsonPath("$.data.profileCharacterType").value("TAK_SPARK"));
+	}
+
+	@Test
+	@DisplayName("PATCH /api/v1/me/onboarding은 프로필 캐릭터가 없으면 400을 반환한다")
+	void updateOnboardingReturnsBadRequestWhenProfileCharacterTypeMissing() throws Exception {
+		mockMvc.perform(patch("/api/v1/me/onboarding")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.status").value(400));
+	}
+
+	@Test
+	@DisplayName("PATCH /api/v1/me/onboarding은 지원하지 않는 프로필 캐릭터면 400을 반환한다")
+	void updateOnboardingReturnsBadRequestWhenProfileCharacterTypeInvalid() throws Exception {
+		mockMvc.perform(patch("/api/v1/me/onboarding")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "profileCharacterType": "INVALID"
+								}
+								"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.status").value(400));
 	}
 }
