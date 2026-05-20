@@ -10,6 +10,7 @@ final class FeedCommentValidator {
 	static final int DEFAULT_PAGE_SIZE = 20;
 	static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_CONTENT_LENGTH = 200;
+	private static final int MAX_POSITION_SCALE = 6;
 	private static final BigDecimal MIN_POSITION = BigDecimal.ZERO;
 	private static final BigDecimal MAX_POSITION = BigDecimal.ONE;
 
@@ -43,6 +44,7 @@ final class FeedCommentValidator {
 	private static boolean isValidPosition(BigDecimal position) {
 		return position != null
 				&& position.compareTo(MIN_POSITION) >= 0
-				&& position.compareTo(MAX_POSITION) <= 0;
+				&& position.compareTo(MAX_POSITION) <= 0
+				&& position.scale() <= MAX_POSITION_SCALE;
 	}
 }
