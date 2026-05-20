@@ -45,6 +45,8 @@ public class MeService {
 					.socialProvider(member.getSocialProvider())
 					.status(member.getStatus())
 					.hasAgreedRequiredTerms(member.isTermsAgreed() && member.isPrivacyAgreed())
+					.onboardingCompleted(member.isOnboardingCompleted())
+					.profileCharacterType(member.getProfileCharacterType())
 					.activeTeamId(activeTeamId)
 					.hasTeam(hasTeam)
 					.createdAt(member.getCreatedAt())
@@ -118,6 +120,25 @@ public class MeService {
 			throw e;
 		} catch (Exception e) {
 			throw new BusinessException(ErrorCode.AGREEMENT001, e);
+		}
+	}
+
+	@Transactional
+	public MeResponseDTO.OnboardingUpdateResponseDTO updateOnboarding(
+			Long memberId,
+			MeRequestDTO.OnboardingUpdateRequestDTO request
+	) {
+		try {
+			Member member = getActiveMember(memberId);
+			member.completeOnboarding(request.getProfileCharacterType());
+			return MeResponseDTO.OnboardingUpdateResponseDTO.builder()
+					.onboardingCompleted(member.isOnboardingCompleted())
+					.profileCharacterType(member.getProfileCharacterType())
+					.build();
+		} catch (BusinessException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new BusinessException(ErrorCode.ME011, e);
 		}
 	}
 
@@ -210,7 +231,6 @@ public class MeService {
 				.description(team.getDescription())
 				.role(teamMember.getRole())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(teamMember.getProfileImgUrl())
 				.memberCount(memberCountByTeamId.getOrDefault(team.getId(), 0L))
 				.isActive(isActive)
 				.joinedAt(teamMember.getCreatedAt())
