@@ -19,7 +19,7 @@ import java.util.Optional;
 
 public interface FeedRepository extends JpaRepository<Feed, Long> {
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "tags", "tags.teamMember" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question", "tags", "tags.teamMember" })
 	@Query("""
 			select f
 			from Feed f
@@ -30,7 +30,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 	Optional<Feed> findActiveDetail(@Param("teamId") Long teamId, @Param("feedId") Long feedId);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@EntityGraph(attributePaths = { "teamMember", "team", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "team", "place", "question" })
 	@Query("""
 			select f
 			from Feed f
@@ -40,7 +40,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			""")
 	Optional<Feed> findActiveForUpdate(@Param("teamId") Long teamId, @Param("feedId") Long feedId);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select distinct f
 			from Feed f
@@ -59,7 +59,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select distinct f
 			from Feed f
@@ -81,7 +81,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select distinct f
 			from Feed f
@@ -109,7 +109,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select distinct f
 			from Feed f
@@ -131,7 +131,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select distinct f
 			from Feed f
@@ -156,7 +156,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select distinct f
 			from Feed f
@@ -184,7 +184,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select f
 			from Feed f
@@ -217,7 +217,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question" })
 	@Query("""
 			select f
 			from Feed f
@@ -272,8 +272,43 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			from Feed f
 			where f.id = :feedId
 				and f.deletedAt is not null
-			""")
+	""")
 	Optional<Feed> findDeletedForHardDelete(@Param("feedId") Long feedId);
+
+	@EntityGraph(attributePaths = { "question", "images", "images.media" })
+	@Query("""
+			select f
+			from Feed f
+			where f.team.id = :teamId
+				and f.teamMember.id = :teamMemberId
+				and f.question.id = :questionId
+				and f.questionAnswerDate = :answerDate
+				and f.deletedAt is null
+			""")
+	Optional<Feed> findActiveDailyAnswer(
+			@Param("teamId") Long teamId,
+			@Param("teamMemberId") Long teamMemberId,
+			@Param("questionId") Long questionId,
+			@Param("answerDate") LocalDate answerDate
+	);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@EntityGraph(attributePaths = { "teamMember", "team", "question", "images", "images.media", "tags", "tags.teamMember" })
+	@Query("""
+			select f
+			from Feed f
+			where f.team.id = :teamId
+				and f.teamMember.id = :teamMemberId
+				and f.question.id = :questionId
+				and f.questionAnswerDate = :answerDate
+				and f.deletedAt is null
+			""")
+	Optional<Feed> findActiveDailyAnswerForUpdate(
+			@Param("teamId") Long teamId,
+			@Param("teamMemberId") Long teamMemberId,
+			@Param("questionId") Long questionId,
+			@Param("answerDate") LocalDate answerDate
+	);
 
 	@Query(value = """
 			WITH ranked AS (
@@ -346,7 +381,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			@Param("startOfNextMonth") LocalDate startOfNextMonth
 	);
 
-	@EntityGraph(attributePaths = {"teamMember", "teamMember.member", "place"})
+	@EntityGraph(attributePaths = {"teamMember", "teamMember.member", "place", "question"})
 	@Query("""
 			select distinct f
 			from Feed f

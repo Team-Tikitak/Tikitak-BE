@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -35,6 +36,7 @@ public class FeedResponseDTO {
 		private int imageCount;
 		private AuthorDTO author;
 		private PlaceDTO place;
+		private QuestionDTO question;
 		private long commentCount;
 		private ReactionSummaryDTO reactionSummary;
 		private FeedReactionType myReaction;
@@ -52,6 +54,7 @@ public class FeedResponseDTO {
 		private AuthorDTO author;
 		private List<ImageDTO> images;
 		private PlaceDTO place;
+		private QuestionDTO question;
 		private List<TaggedMemberDTO> taggedMembers;
 		private long commentCount;
 		private ReactionSummaryDTO reactionSummary;
@@ -73,6 +76,7 @@ public class FeedResponseDTO {
 		private String thumbnailImageUrl;
 		private int imageCount;
 		private PlaceDTO place;
+		private QuestionDTO question;
 		private List<TaggedMemberDTO> taggedMembers;
 		private LocalDateTime createdAt;
 		private LocalDateTime updatedAt;
@@ -120,6 +124,16 @@ public class FeedResponseDTO {
 		private BigDecimal latitude;
 		private BigDecimal longitude;
 		private String address;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class QuestionDTO {
+		private Long questionId;
+		private String content;
+		private LocalDate answerDate;
 	}
 
 	@Getter
