@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,8 +39,8 @@ public class HomeService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
 		YearMonth currentMonth = YearMonth.now();
-		LocalDate startOfMonth = currentMonth.atDay(1);
-		LocalDate startOfNextMonth = currentMonth.plusMonths(1).atDay(1);
+		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
+		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
 
 		List<Object[]> rows = feedTagRepository.findTopTaggedMembersByTeamAndMonth(
 				teamId, startOfMonth, startOfNextMonth, TeamMemberStatus.ACTIVE);

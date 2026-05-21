@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -309,13 +308,13 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			from Feed f
 			where f.team.id = :teamId
 			  and f.deletedAt is null
-			  and f.meetingDate >= :startOfMonth
-			  and f.meetingDate < :startOfNextMonth
+			  and f.createdAt >= :startOfMonth
+			  and f.createdAt < :startOfNextMonth
 			""")
 	long countActiveByTeamAndMonth(
 			@Param("teamId") Long teamId,
-			@Param("startOfMonth") LocalDate startOfMonth,
-			@Param("startOfNextMonth") LocalDate startOfNextMonth
+			@Param("startOfMonth") LocalDateTime startOfMonth,
+			@Param("startOfNextMonth") LocalDateTime startOfNextMonth
 	);
 
 	@Query(value = """
@@ -334,16 +333,16 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			) c ON c.feed_id = f.id
 			WHERE f.team_id = :teamId
 			  AND f.deleted_at IS NULL
-			  AND f.meeting_date >= :startOfMonth
-			  AND f.meeting_date < :startOfNextMonth
+			  AND f.created_at >= :startOfMonth
+			  AND f.created_at < :startOfNextMonth
 			ORDER BY (COALESCE(r.reaction_count, 0) + COALESCE(c.comment_count, 0)) DESC,
 			         f.created_at DESC, f.id DESC
 			LIMIT 10
 			""", nativeQuery = true)
 	List<Long> findEveryonePickFeedIds(
 			@Param("teamId") Long teamId,
-			@Param("startOfMonth") LocalDate startOfMonth,
-			@Param("startOfNextMonth") LocalDate startOfNextMonth
+			@Param("startOfMonth") LocalDateTime startOfMonth,
+			@Param("startOfNextMonth") LocalDateTime startOfNextMonth
 	);
 
 	@EntityGraph(attributePaths = {"teamMember", "teamMember.member", "place"})
