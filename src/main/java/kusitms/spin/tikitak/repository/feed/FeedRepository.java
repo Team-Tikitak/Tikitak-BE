@@ -344,13 +344,13 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			from Feed f
 			where f.team.id = :teamId
 			  and f.deletedAt is null
-			  and f.meetingDate >= :startOfMonth
-			  and f.meetingDate < :startOfNextMonth
+			  and f.createdAt >= :startOfMonth
+			  and f.createdAt < :startOfNextMonth
 			""")
 	long countActiveByTeamAndMonth(
 			@Param("teamId") Long teamId,
-			@Param("startOfMonth") LocalDate startOfMonth,
-			@Param("startOfNextMonth") LocalDate startOfNextMonth
+			@Param("startOfMonth") LocalDateTime startOfMonth,
+			@Param("startOfNextMonth") LocalDateTime startOfNextMonth
 	);
 
 	@Query(value = """
@@ -369,16 +369,16 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			) c ON c.feed_id = f.id
 			WHERE f.team_id = :teamId
 			  AND f.deleted_at IS NULL
-			  AND f.meeting_date >= :startOfMonth
-			  AND f.meeting_date < :startOfNextMonth
+			  AND f.created_at >= :startOfMonth
+			  AND f.created_at < :startOfNextMonth
 			ORDER BY (COALESCE(r.reaction_count, 0) + COALESCE(c.comment_count, 0)) DESC,
 			         f.created_at DESC, f.id DESC
 			LIMIT 10
 			""", nativeQuery = true)
 	List<Long> findEveryonePickFeedIds(
 			@Param("teamId") Long teamId,
-			@Param("startOfMonth") LocalDate startOfMonth,
-			@Param("startOfNextMonth") LocalDate startOfNextMonth
+			@Param("startOfMonth") LocalDateTime startOfMonth,
+			@Param("startOfNextMonth") LocalDateTime startOfNextMonth
 	);
 
 	@EntityGraph(attributePaths = {"teamMember", "teamMember.member", "place", "question"})
@@ -423,6 +423,8 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			JOIN feed_tag ft2
 			    ON ft1.feed_id = ft2.feed_id AND ft1.team_member_id < ft2.team_member_id
 			JOIN feed f ON f.id = ft1.feed_id
+			JOIN team_member tm1 ON tm1.id = ft1.team_member_id AND tm1.status = 'ACTIVE'
+			JOIN team_member tm2 ON tm2.id = ft2.team_member_id AND tm2.status = 'ACTIVE'
 			WHERE f.team_id = :teamId AND f.deleted_at IS NULL
 			GROUP BY ft1.team_member_id, ft2.team_member_id
 			ORDER BY COUNT(*) DESC, ft1.team_member_id ASC, ft2.team_member_id ASC

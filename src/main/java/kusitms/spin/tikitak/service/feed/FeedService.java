@@ -29,7 +29,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -149,8 +148,8 @@ public class FeedService {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 
 		YearMonth currentMonth = YearMonth.now();
-		LocalDate startOfMonth = currentMonth.atDay(1);
-		LocalDate startOfNextMonth = currentMonth.plusMonths(1).atDay(1);
+		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
+		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
 
 		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
 		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
@@ -486,7 +485,11 @@ public class FeedService {
 		if (externalPlaceId != null) {
 			Optional<Place> existing = placeRepository.findByExternalPlaceId(externalPlaceId);
 			if (existing.isPresent()) {
-				return existing.get();
+				Place place = existing.get();
+				if (place.getRegion() == null && region != null) {
+					place.updateRegion(region);
+				}
+				return place;
 			}
 			placeRepository.insertIfAbsentByExternalPlaceId(
 					externalPlaceId,

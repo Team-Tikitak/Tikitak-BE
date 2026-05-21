@@ -12,17 +12,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 
-	private static final LocalDate MAY_START = LocalDate.of(2026, 5, 1);
-	private static final LocalDate JUNE_START = LocalDate.of(2026, 6, 1);
-	private static final LocalDate IN_MAY = LocalDate.of(2026, 5, 15);
-	private static final LocalDate IN_APRIL = LocalDate.of(2026, 4, 30);
+	private static final LocalDateTime MAY_START = LocalDateTime.of(2026, 5, 1, 0, 0);
+	private static final LocalDateTime JUNE_START = LocalDateTime.of(2026, 6, 1, 0, 0);
+	private static final LocalDateTime MAY_TIME = LocalDateTime.of(2026, 5, 15, 12, 0);
+	private static final LocalDateTime APRIL_TIME = LocalDateTime.of(2026, 4, 30, 12, 0);
 
 	@Autowired
 	private FeedTagRepository feedTagRepository;
@@ -42,17 +42,17 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		// 다다: 3 tags, 나나 · 가가: 각 1 tag → 동점 시 가나다 순
-		Feed feed1 = feedWithMeetingDate(team, authorTm, IN_MAY);
+		Feed feed1 = feedWithCreatedAt(team, authorTm);
 		feed1.addTag(FeedTag.builder().teamMember(tmDaDa).build());
 		feed1.addTag(FeedTag.builder().teamMember(tmNaNa).build());
 		feed1.addTag(FeedTag.builder().teamMember(tmGaGa).build());
 		persist(feed1);
 
-		Feed feed2 = feedWithMeetingDate(team, authorTm, IN_MAY);
+		Feed feed2 = feedWithCreatedAt(team, authorTm);
 		feed2.addTag(FeedTag.builder().teamMember(tmDaDa).build());
 		persist(feed2);
 
-		Feed feed3 = feedWithMeetingDate(team, authorTm, IN_MAY);
+		Feed feed3 = feedWithCreatedAt(team, authorTm);
 		feed3.addTag(FeedTag.builder().teamMember(tmDaDa).build());
 		persist(feed3);
 
@@ -71,7 +71,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 	}
 
 	@Test
-	@DisplayName("meetingDate가 당월 범위 밖인 피드의 태그는 집계하지 않는다")
+	@DisplayName("createdAt이 당월 범위 밖인 피드의 태그는 집계하지 않는다")
 	void excludesTagsFromFeedsOutsideMonth() {
 		Member m = persist(member("outside-1"));
 		Member author = persist(member("outside-author"));
@@ -80,7 +80,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember tagged = persist(teamMember(m, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed feed = feedWithMeetingDate(team, authorTm, IN_APRIL);
+		Feed feed = feedWithCreatedAt(team, authorTm, APRIL_TIME);
 		feed.addTag(FeedTag.builder().teamMember(tagged).build());
 		persist(feed);
 
@@ -105,8 +105,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		Feed deletedFeed = Feed.builder()
 				.team(team).teamMember(authorTm)
 				.content("삭제된 피드")
-				.meetingDate(IN_MAY)
-				.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
+				.createdAt(MAY_TIME).updatedAt(MAY_TIME).deletedAt(MAY_TIME)
 				.build();
 		deletedFeed.addTag(FeedTag.builder().teamMember(tagged).build());
 		persist(deletedFeed);
@@ -129,7 +128,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember leftMember = persist(teamMember(m, team, TeamMemberRole.MEMBER, TeamMemberStatus.LEFT));
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed feed = feedWithMeetingDate(team, authorTm, IN_MAY);
+		Feed feed = feedWithCreatedAt(team, authorTm);
 		feed.addTag(FeedTag.builder().teamMember(leftMember).build());
 		persist(feed);
 
@@ -152,7 +151,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember otherTagged = persist(teamMember(m, otherTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 		TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed otherFeed = feedWithMeetingDate(otherTeam, otherAuthor, IN_MAY);
+		Feed otherFeed = feedWithCreatedAt(otherTeam, otherAuthor);
 		otherFeed.addTag(FeedTag.builder().teamMember(otherTagged).build());
 		persist(otherFeed);
 
@@ -177,12 +176,15 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 				.build();
 	}
 
-	private Feed feedWithMeetingDate(Team team, TeamMember author, LocalDate meetingDate) {
+	private Feed feedWithCreatedAt(Team team, TeamMember author) {
+		return feedWithCreatedAt(team, author, MAY_TIME);
+	}
+
+	private Feed feedWithCreatedAt(Team team, TeamMember author, LocalDateTime createdAt) {
 		return Feed.builder()
 				.team(team).teamMember(author)
 				.content("테스트 피드")
-				.meetingDate(meetingDate)
-				.createdAt(BASE_TIME).updatedAt(BASE_TIME)
+				.createdAt(createdAt).updatedAt(createdAt)
 				.build();
 	}
 }

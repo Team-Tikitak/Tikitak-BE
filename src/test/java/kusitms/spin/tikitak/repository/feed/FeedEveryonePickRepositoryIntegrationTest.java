@@ -16,17 +16,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 
-	private static final LocalDate MAY_START = LocalDate.of(2026, 5, 1);
-	private static final LocalDate JUNE_START = LocalDate.of(2026, 6, 1);
-	private static final LocalDate IN_MAY = LocalDate.of(2026, 5, 15);
-	private static final LocalDate IN_APRIL = LocalDate.of(2026, 4, 30);
+	private static final LocalDateTime MAY_START = LocalDateTime.of(2026, 5, 1, 0, 0);
+	private static final LocalDateTime JUNE_START = LocalDateTime.of(2026, 6, 1, 0, 0);
+	private static final LocalDateTime MAY_TIME = LocalDateTime.of(2026, 5, 15, 12, 0);
+	private static final LocalDateTime APRIL_TIME = LocalDateTime.of(2026, 4, 30, 12, 0);
 
 	@Autowired
 	private FeedRepository feedRepository;
@@ -44,13 +44,13 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		// feedA (older): 반응 2개 → score 2
-		Feed feedA = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME);
+		Feed feedA = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		persist(feedA);
 		addReaction(feedA, tm1, FeedReactionType.TAK_LEADER);
 		addReaction(feedA, tm2, FeedReactionType.TAK_SPARK);
 
 		// feedB (newer, 동점): 반응 1개 + 댓글 1개 → score 2, 최신이므로 feedA 앞
-		Feed feedB = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME.plusHours(1));
+		Feed feedB = feedWithCreatedAt(team, authorTm, MAY_TIME.plusHours(1));
 		FeedImage imgB = feedImage("https://b.jpg");
 		feedB.addImage(imgB);
 		persist(feedB);
@@ -58,7 +58,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		addComment(feedB, imgB, tm1);
 
 		// feedC: 댓글 1개 → score 1
-		Feed feedC = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME);
+		Feed feedC = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		FeedImage imgC = feedImage("https://c.jpg");
 		feedC.addImage(imgC);
 		persist(feedC);
@@ -75,7 +75,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 	}
 
 	@Test
-	@DisplayName("meetingDate가 당월 범위 밖인 피드는 포함하지 않는다")
+	@DisplayName("createdAt이 당월 범위 밖인 피드는 포함하지 않는다")
 	void excludesFeedsOutsideMonth() {
 		Member m = persist(member("ep-out-1"));
 		Member author = persist(member("ep-out-author"));
@@ -84,7 +84,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember tm = persist(teamMember(m, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed feed = feedWithMeetingDate(team, authorTm, IN_APRIL, BASE_TIME);
+		Feed feed = feedWithCreatedAt(team, authorTm, APRIL_TIME);
 		persist(feed);
 		addReaction(feed, tm, FeedReactionType.TAK_LEADER);
 
@@ -106,8 +106,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		Feed deletedFeed = Feed.builder()
 				.team(team).teamMember(authorTm)
 				.content("삭제된 피드")
-				.meetingDate(IN_MAY)
-				.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
+				.createdAt(MAY_TIME).updatedAt(MAY_TIME).deletedAt(MAY_TIME)
 				.build();
 		persist(deletedFeed);
 		addReaction(deletedFeed, tm, FeedReactionType.TAK_LEADER);
@@ -128,7 +127,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		// 활성 댓글 1개, 삭제된 댓글 1개 → score 1
-		Feed feed = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME);
+		Feed feed = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		FeedImage img = feedImage("https://img.jpg");
 		feed.addImage(img);
 		persist(feed);
@@ -153,7 +152,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember reactorTm = persist(teamMember(reactor, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 
 		for (int i = 0; i < 11; i++) {
-			Feed feed = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME.plusMinutes(i));
+			Feed feed = feedWithCreatedAt(team, authorTm, MAY_TIME.plusMinutes(i));
 			persist(feed);
 			addReaction(feed, reactorTm, FeedReactionType.TAK_LEADER);
 		}
@@ -174,7 +173,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember otherTm = persist(teamMember(m, otherTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 		TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed otherFeed = feedWithMeetingDate(otherTeam, otherAuthor, IN_MAY, BASE_TIME);
+		Feed otherFeed = feedWithCreatedAt(otherTeam, otherAuthor, MAY_TIME);
 		persist(otherFeed);
 		addReaction(otherFeed, otherTm, FeedReactionType.TAK_LEADER);
 
@@ -190,8 +189,8 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		Team team = persist(team("ep-ids"));
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed feed1 = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME);
-		Feed feed2 = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME.plusHours(1));
+		Feed feed1 = feedWithCreatedAt(team, authorTm, MAY_TIME);
+		Feed feed2 = feedWithCreatedAt(team, authorTm, MAY_TIME.plusHours(1));
 		persist(feed1);
 		persist(feed2);
 
@@ -210,11 +209,11 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		Team team = persist(team("ep-ids-del"));
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-		Feed active = feedWithMeetingDate(team, authorTm, IN_MAY, BASE_TIME);
+		Feed active = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		Feed deleted = Feed.builder()
 				.team(team).teamMember(authorTm)
-				.content("삭제됨").meetingDate(IN_MAY)
-				.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
+				.content("삭제됨")
+				.createdAt(MAY_TIME).updatedAt(MAY_TIME).deletedAt(MAY_TIME)
 				.build();
 		persist(active);
 		persist(deleted);
@@ -230,12 +229,10 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 
 	// --- helpers ---
 
-	private Feed feedWithMeetingDate(Team team, TeamMember author, LocalDate meetingDate,
-			java.time.LocalDateTime createdAt) {
+	private Feed feedWithCreatedAt(Team team, TeamMember author, LocalDateTime createdAt) {
 		return Feed.builder()
 				.team(team).teamMember(author)
 				.content("테스트 피드")
-				.meetingDate(meetingDate)
 				.createdAt(createdAt).updatedAt(createdAt)
 				.build();
 	}
