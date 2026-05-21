@@ -21,7 +21,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
@@ -276,8 +275,8 @@ class HomeServiceTest extends UnitTest {
 
 	private void stubTagRows(List<Object[]> rows) {
 		YearMonth currentMonth = YearMonth.now();
-		LocalDate start = currentMonth.atDay(1);
-		LocalDate end = currentMonth.plusMonths(1).atDay(1);
+		LocalDateTime start = currentMonth.atDay(1).atStartOfDay();
+		LocalDateTime end = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
 
 		when(feedTagRepository.findTopTaggedMembersByTeamAndMonth(
 				eq(TEAM_ID), eq(start), eq(end), eq(TeamMemberStatus.ACTIVE)

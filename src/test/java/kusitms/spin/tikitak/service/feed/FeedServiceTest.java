@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.springframework.data.domain.Pageable;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -140,8 +140,8 @@ class FeedServiceTest extends UnitTest {
 	@DisplayName("당월 피드가 3개 미만이면 빈 목록을 반환한다")
 	void getEveryonePickItemsReturnsEmptyWhenFeedCountLessThan3() {
 		YearMonth now = YearMonth.now();
-		LocalDate start = now.atDay(1);
-		LocalDate end = now.plusMonths(1).atDay(1);
+		LocalDateTime start = now.atDay(1).atStartOfDay();
+		LocalDateTime end = now.plusMonths(1).atDay(1).atStartOfDay();
 
 		stubActiveAuthor();
 		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(2L);
@@ -153,8 +153,8 @@ class FeedServiceTest extends UnitTest {
 	@DisplayName("피드가 3개 이상이면 랭킹 순서대로 FeedListItemDTO 목록을 반환한다")
 	void getEveryonePickItemsReturnsOrderedFeedListItemDTOs() {
 		YearMonth now = YearMonth.now();
-		LocalDate start = now.atDay(1);
-		LocalDate end = now.plusMonths(1).atDay(1);
+		LocalDateTime start = now.atDay(1).atStartOfDay();
+		LocalDateTime end = now.plusMonths(1).atDay(1).atStartOfDay();
 
 		Long feedId1 = 201L;
 		Long feedId2 = 202L;
