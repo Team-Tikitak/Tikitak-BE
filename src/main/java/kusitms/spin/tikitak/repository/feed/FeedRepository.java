@@ -211,4 +211,27 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			@Param("teamId") Long teamId,
 			@Param("feedIds") Collection<Long> feedIds
 	);
+
+	@Query(value = """
+			SELECT f.id
+			FROM feed f
+			WHERE f.team_id = :teamId
+			  AND f.deleted_at IS NULL
+			  AND (
+			      SELECT COUNT(DISTINCT ft.team_member_id)
+			      FROM feed_tag ft
+			      JOIN team_member tm ON tm.id = ft.team_member_id
+			      WHERE ft.feed_id = f.id
+			        AND tm.team_id = :teamId
+			        AND tm.status = 'ACTIVE'
+			  ) = (
+			      SELECT COUNT(*)
+			      FROM team_member tm
+			      WHERE tm.team_id = :teamId
+			        AND tm.status = 'ACTIVE'
+			  )
+			ORDER BY f.created_at DESC, f.id DESC
+			LIMIT 10
+			""", nativeQuery = true)
+	List<Long> findAllTaggedFeedIds(@Param("teamId") Long teamId);
 }

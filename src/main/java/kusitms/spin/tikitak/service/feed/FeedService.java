@@ -55,6 +55,7 @@ public class FeedService {
 	private static final int MAX_IMAGE_COUNT = 10;
 	private static final int MAX_TAG_COUNT = 11;
 	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
+	private static final int ALL_TAGGED_MIN_FEEDS = 3;
 
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
@@ -145,6 +146,33 @@ public class FeedService {
 		Map<Long, FeedReactionType> myReactionMap = myReactions(rankedIds, viewer.getId());
 
 		return rankedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+	}
+
+	public List<FeedResponseDTO.FeedListItemDTO> getAllTaggedItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		List<Long> feedIds = feedRepository.findAllTaggedFeedIds(teamId);
+		if (feedIds.size() < ALL_TAGGED_MIN_FEEDS) {
+			return List.of();
+		}
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(feedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+
+		return feedIds.stream()
 				.map(feedById::get)
 				.filter(Objects::nonNull)
 				.map(feed -> toListItem(

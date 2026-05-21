@@ -37,4 +37,12 @@ public class HomeResponseDTO {
 	public static class EveryonePickResponse {
 		private List<FeedResponseDTO.FeedListItemDTO> picks;
 	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class AllTaggedResponse {
+		private List<FeedResponseDTO.FeedListItemDTO> feeds;
+	}
 }

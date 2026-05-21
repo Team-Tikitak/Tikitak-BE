@@ -38,4 +38,17 @@ public class HomeController {
 	) {
 		return CommonResponse.success(homeService.getEveryonePick(memberId, teamId));
 	}
+
+	@GetMapping("/all-tagged")
+	@Operation(
+			summary = "다함께 쎄쎄쎄 API",
+			description = "팀원 전원 태그 피드 조회 API입니다. " +
+					"현재 활성 팀원이 태그된 횟수와 현재 활성 팀원 수가 같은 피드들만 반환합니다."
+	)
+	public CommonResponse<HomeResponseDTO.AllTaggedResponse> getAllTaggedFeeds(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		return CommonResponse.success(homeService.getAllTaggedFeeds(memberId, teamId));
+	}
 }

@@ -65,4 +65,10 @@ public class HomeService {
 				.picks(feedService.getEveryonePickItems(memberId, teamId))
 				.build();
 	}
+
+	public HomeResponseDTO.AllTaggedResponse getAllTaggedFeeds(Long memberId, Long teamId) {
+		return HomeResponseDTO.AllTaggedResponse.builder()
+				.feeds(feedService.getAllTaggedItems(memberId, teamId))
+				.build();
+	}
 }
