@@ -34,6 +34,11 @@ public class PatchFieldDeserializer extends JsonDeserializer<PatchField<?>> impl
 	}
 
 	@Override
+	public PatchField<?> getNullValue(DeserializationContext context) {
+		return PatchField.of(null);
+	}
+
+	@Override
 	public JsonDeserializer<?> createContextual(DeserializationContext context, BeanProperty property) {
 		JavaType contextualType = property.getType().containedType(0);
 		return new PatchFieldDeserializer(contextualType);
