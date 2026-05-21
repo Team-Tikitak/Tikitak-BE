@@ -54,4 +54,22 @@ public class HomeResponseDTO {
 		private List<FeedResponseDTO.TaggedMemberDTO> combination;
 		private List<FeedResponseDTO.FeedListItemDTO> feeds;
 	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class RegionResponse {
+		private List<RegionItemDTO> regions;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class RegionItemDTO {
+		private String region;
+		private long feedCount;
+		private String thumbnailImageUrl;
+	}
 }

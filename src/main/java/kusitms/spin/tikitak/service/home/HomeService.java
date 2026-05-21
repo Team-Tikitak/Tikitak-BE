@@ -5,10 +5,12 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
+import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,10 +26,12 @@ import java.util.List;
 public class HomeService {
 
 	private static final int BEST_ATTENDANCE_LIMIT = 3;
+	private static final int REGION_MIN_FEEDS = 3;
 
 	private final FeedTagRepository feedTagRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final FeedService feedService;
+	private final FeedRepository feedRepository;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
@@ -78,5 +82,26 @@ public class HomeService {
 				.combination(result.combination())
 				.feeds(result.feeds())
 				.build();
+	}
+
+	public HomeResponseDTO.RegionResponse getRegions(Long memberId, Long teamId) {
+		teamMemberRepository.findActiveByMemberIdAndTeamId(
+						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
+
+		if (feedRepository.countActiveFeedsWithRegion(teamId) < REGION_MIN_FEEDS) {
+			return HomeResponseDTO.RegionResponse.builder().regions(List.of()).build();
+		}
+
+		List<HomeResponseDTO.RegionItemDTO> regions = feedRepository.findRegionSummaries(teamId)
+				.stream()
+				.map(row -> HomeResponseDTO.RegionItemDTO.builder()
+						.region(row.getRegion())
+						.feedCount(row.getFeedCount())
+						.thumbnailImageUrl(row.getThumbnailUrl())
+						.build())
+				.toList();
+
+		return HomeResponseDTO.RegionResponse.builder().regions(regions).build();
 	}
 }

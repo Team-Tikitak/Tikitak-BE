@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.repository.feed;
 
 import jakarta.persistence.LockModeType;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import kusitms.spin.tikitak.service.map.dto.MapPinRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -282,4 +283,36 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			@Param("mA") Long mA,
 			@Param("mB") Long mB
 	);
+
+	@Query("""
+			select count(f)
+			from Feed f
+			join f.place p
+			where f.team.id = :teamId
+			  and f.deletedAt is null
+			  and p.region is not null
+			""")
+	long countActiveFeedsWithRegion(@Param("teamId") Long teamId);
+
+	@Query(value = """
+			WITH region_feeds AS (
+			    SELECT f.id,
+			           p.region,
+			           ROW_NUMBER() OVER (PARTITION BY p.region ORDER BY f.created_at DESC, f.id DESC) AS rn,
+			           COUNT(f.id) OVER (PARTITION BY p.region) AS feed_count
+			    FROM feed f
+			    JOIN place p ON p.id = f.place_id
+			    WHERE f.team_id = :teamId
+			      AND f.deleted_at IS NULL
+			      AND p.region IS NOT NULL
+			)
+			SELECT rf.region AS region,
+			       rf.feed_count AS feedCount,
+			       fi.img_url AS thumbnailUrl
+			FROM region_feeds rf
+			LEFT JOIN feed_image fi ON fi.feed_id = rf.id AND fi.order_index = 0
+			WHERE rf.rn = 1
+			ORDER BY rf.feed_count DESC, rf.region ASC
+			""", nativeQuery = true)
+	List<RegionRow> findRegionSummaries(@Param("teamId") Long teamId);
 }

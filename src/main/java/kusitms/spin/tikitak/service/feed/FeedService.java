@@ -462,6 +462,7 @@ public class FeedService {
 			return null;
 		}
 		String externalPlaceId = blankToNull(request.getPlaceId());
+		String region = extractRegion(request.getAddress());
 		if (externalPlaceId != null) {
 			Optional<Place> existing = placeRepository.findByExternalPlaceId(externalPlaceId);
 			if (existing.isPresent()) {
@@ -472,7 +473,8 @@ public class FeedService {
 					request.getName(),
 					request.getLatitude(),
 					request.getLongitude(),
-					request.getAddress()
+					request.getAddress(),
+					region
 			);
 			return placeRepository.findByExternalPlaceId(externalPlaceId)
 					.orElseThrow(() -> new BusinessException(ErrorCode.COMMON001));
@@ -484,7 +486,32 @@ public class FeedService {
 				.latitude(request.getLatitude())
 				.longitude(request.getLongitude())
 				.address(request.getAddress())
+				.region(region)
 				.build());
+	}
+
+	private String extractRegion(String address) {
+		if (address == null || address.isBlank()) {
+			return null;
+		}
+		String[] tokens = address.split(" ");
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < tokens.length; i++) {
+			String token = tokens[i];
+			sb.append(token);
+			if (token.endsWith("구") || token.endsWith("군")) {
+				break;
+			}
+			if (token.endsWith("시")
+					&& !token.endsWith("특별시")
+					&& !token.endsWith("광역시")
+					&& !token.endsWith("자치시")) {
+				boolean nextIsGu = i + 1 < tokens.length && tokens[i + 1].endsWith("구");
+				if (!nextIsGu) break;
+			}
+			sb.append(" ");
+		}
+		return sb.toString().trim();
 	}
 
 	private List<TeamMember> resolveTaggedMembers(Long teamId, List<Long> taggedTeamMemberIds) {
