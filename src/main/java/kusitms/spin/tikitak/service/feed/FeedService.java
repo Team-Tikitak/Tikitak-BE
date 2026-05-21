@@ -482,7 +482,11 @@ public class FeedService {
 		if (externalPlaceId != null) {
 			Optional<Place> existing = placeRepository.findByExternalPlaceId(externalPlaceId);
 			if (existing.isPresent()) {
-				return existing.get();
+				Place place = existing.get();
+				if (place.getRegion() == null && region != null) {
+					place.updateRegion(region);
+				}
+				return place;
 			}
 			placeRepository.insertIfAbsentByExternalPlaceId(
 					externalPlaceId,
