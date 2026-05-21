@@ -57,6 +57,44 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 	@Query("""
 			select distinct f
 			from Feed f
+			join f.place p
+			where f.team.id = :teamId
+				and f.deletedAt is null
+				and p.region = :region
+			order by f.createdAt desc, f.id desc
+			""")
+	List<Feed> findActiveFirstPageByRegion(
+			@Param("teamId") Long teamId,
+			@Param("region") String region,
+			Pageable pageable
+	);
+
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@Query("""
+			select distinct f
+			from Feed f
+			join f.place p
+			where f.team.id = :teamId
+				and f.deletedAt is null
+				and p.region = :region
+				and (
+					f.createdAt < :cursorCreatedAt
+					or (f.createdAt = :cursorCreatedAt and f.id < :cursorFeedId)
+				)
+			order by f.createdAt desc, f.id desc
+			""")
+	List<Feed> findActiveCursorPageByRegion(
+			@Param("teamId") Long teamId,
+			@Param("region") String region,
+			@Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+			@Param("cursorFeedId") Long cursorFeedId,
+			Pageable pageable
+	);
+
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@Query("""
+			select distinct f
+			from Feed f
 			left join f.place p
 			where f.team.id = :teamId
 				and f.deletedAt is null

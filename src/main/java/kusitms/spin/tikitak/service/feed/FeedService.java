@@ -76,13 +76,13 @@ public class FeedService {
 	private final TeamMemberRepository teamMemberRepository;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId, Long teamId, String cursor, Integer size, String placeId
+			Long memberId, Long teamId, String cursor, Integer size, String placeId, String region
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
 
-		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), parsedCursor, pageSize);
+		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), blankToNull(region), parsedCursor, pageSize);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -664,19 +664,26 @@ public class FeedService {
 				.collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
 	}
 
-	private List<Feed> findFeedPage(Long teamId, String placeId, Cursor cursor, int pageSize) {
+	private List<Feed> findFeedPage(Long teamId, String placeId, String region, Cursor cursor, int pageSize) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
-		if (cursor.createdAt() == null) {
-			if (placeId == null) {
-				return feedRepository.findActiveFirstPage(teamId, pageRequest);
+		if (placeId != null) {
+			if (cursor.createdAt() == null) {
+				return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, pageRequest);
 			}
-			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, pageRequest);
+			return feedRepository.findActiveCursorPageByPlaceId(
+					teamId, placeId, cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
-		if (placeId == null) {
-			return feedRepository.findActiveCursorPage(teamId, cursor.createdAt(), cursor.feedId(), pageRequest);
+		if (region != null) {
+			if (cursor.createdAt() == null) {
+				return feedRepository.findActiveFirstPageByRegion(teamId, region, pageRequest);
+			}
+			return feedRepository.findActiveCursorPageByRegion(
+					teamId, region, cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
-		return feedRepository.findActiveCursorPageByPlaceId(
-				teamId, placeId, cursor.createdAt(), cursor.feedId(), pageRequest);
+		if (cursor.createdAt() == null) {
+			return feedRepository.findActiveFirstPage(teamId, pageRequest);
+		}
+		return feedRepository.findActiveCursorPage(teamId, cursor.createdAt(), cursor.feedId(), pageRequest);
 	}
 
 	private FeedResponseDTO.FeedReactionResponseDTO reactionResponse(Long feedId, FeedReactionType myReaction) {
