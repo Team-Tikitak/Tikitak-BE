@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -135,6 +137,49 @@ class FeedServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("당월 피드가 3개 미만이면 빈 목록을 반환한다")
+	void getEveryonePickItemsReturnsEmptyWhenFeedCountLessThan3() {
+		YearMonth now = YearMonth.now();
+		LocalDate start = now.atDay(1);
+		LocalDate end = now.plusMonths(1).atDay(1);
+
+		stubActiveAuthor();
+		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(2L);
+
+		assertThat(feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("피드가 3개 이상이면 랭킹 순서대로 FeedListItemDTO 목록을 반환한다")
+	void getEveryonePickItemsReturnsOrderedFeedListItemDTOs() {
+		YearMonth now = YearMonth.now();
+		LocalDate start = now.atDay(1);
+		LocalDate end = now.plusMonths(1).atDay(1);
+
+		Long feedId1 = 201L;
+		Long feedId2 = 202L;
+		List<Long> rankedIds = List.of(feedId1, feedId2);
+
+		Feed feed1 = Feed.builder().id(feedId1).team(team).teamMember(author).content("1번 피드").build();
+		Feed feed2 = Feed.builder().id(feedId2).team(team).teamMember(author).content("2번 피드").build();
+
+		stubActiveAuthor();
+		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(5L);
+		when(feedRepository.findEveryonePickFeedIds(eq(TEAM_ID), eq(start), eq(end))).thenReturn(rankedIds);
+		when(feedRepository.findActiveByIds(eq(TEAM_ID), eq(rankedIds))).thenReturn(List.of(feed1, feed2));
+		when(feedCommentRepository.countByFeedIds(rankedIds)).thenReturn(List.of());
+		when(feedReactionRepository.countByReactionTypeByFeedIds(rankedIds)).thenReturn(List.of());
+		when(feedReactionRepository.findMyReactions(eq(rankedIds), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+
+		List<FeedResponseDTO.FeedListItemDTO> result = feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID);
+
+		assertThat(result).hasSize(2);
+		assertThat(result.get(0).getFeedId()).isEqualTo(feedId1);
+		assertThat(result.get(0).getContent()).isEqualTo("1번 피드");
+		assertThat(result.get(1).getFeedId()).isEqualTo(feedId2);
+	}
+
+	@Test
 	@DisplayName("피드 본문은 1000자를 초과할 수 없다")
 	void createFeedThrowsWhenContentTooLong() {
 		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithContent(MEDIA_PUBLIC_ID, "a".repeat(1001));
@@ -163,21 +208,91 @@ class FeedServiceTest extends UnitTest {
 				eq(TEAM_ID),
 				eq(null),
 				eq(null),
+				eq(null),
 				eq(taggedTeamMemberIds),
 				eq(2L),
 				any(Pageable.class)
 		)).thenReturn(List.of());
 
 		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
-				MEMBER_ID, TEAM_ID, null, null, null, null, taggedTeamMemberIds);
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds);
 
 		assertThat(response.getItems()).isEmpty();
 		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
 				eq(TEAM_ID),
 				eq(null),
 				eq(null),
+				eq(null),
 				eq(taggedTeamMemberIds),
 				eq(2L),
+				any(Pageable.class)
+		);
+	}
+
+	@Test
+	@DisplayName("태그 필터와 region 필터를 함께 적용한다")
+	void listFeedsWithTaggedTeamMemberAndRegionFilter() {
+		List<Long> taggedTeamMemberIds = List.of(101L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(taggedTeamMemberIds),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
+		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq(null),
+				eq("서울 강남구"),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
+				any(Pageable.class)
+		)).thenReturn(List.of());
+
+		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, null, "서울 강남구", null, taggedTeamMemberIds);
+
+		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq(null),
+				eq("서울 강남구"),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
+				any(Pageable.class)
+		);
+	}
+
+	@Test
+	@DisplayName("placeId와 region이 함께 있으면 태그 필터에서도 placeId를 우선 적용한다")
+	void listFeedsWithTaggedTeamMemberFilterPrefersPlaceIdOverRegion() {
+		List<Long> taggedTeamMemberIds = List.of(101L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(taggedTeamMemberIds),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
+		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq("kakao_12345"),
+				eq(null),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
+				any(Pageable.class)
+		)).thenReturn(List.of());
+
+		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, "kakao_12345", "서울 강남구", null, taggedTeamMemberIds);
+
+		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq("kakao_12345"),
+				eq(null),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
 				any(Pageable.class)
 		);
 	}
@@ -195,7 +310,7 @@ class FeedServiceTest extends UnitTest {
 		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
 
 		assertThatThrownBy(() -> feedService.listFeeds(
-				MEMBER_ID, TEAM_ID, null, null, null, null, taggedTeamMemberIds))
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED008));
 	}
@@ -207,7 +322,7 @@ class FeedServiceTest extends UnitTest {
 		stubActiveAuthor();
 
 		assertThatThrownBy(() -> feedService.listFeeds(
-				MEMBER_ID, TEAM_ID, null, null, null, null, taggedTeamMemberIds))
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED009));
 	}

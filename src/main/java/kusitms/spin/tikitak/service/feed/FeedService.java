@@ -29,7 +29,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -52,7 +54,19 @@ public class FeedService {
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
 	private static final int MAX_TAG_COUNT = 11;
-	private static final int MAX_CONTENT_LENGTH = 1000;
+  private static final int MAX_CONTENT_LENGTH = 1000;
+	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
+	private static final int ALL_TAGGED_MIN_FEEDS = 3;
+	private static final int COMBINATION_MIN_FEEDS = 3;
+
+	public record CombinationItemsResult(
+			List<FeedResponseDTO.TaggedMemberDTO> combination,
+			List<FeedResponseDTO.FeedListItemDTO> feeds
+	) {
+		public static CombinationItemsResult empty() {
+			return new CombinationItemsResult(List.of(), List.of());
+		}
+	}
 
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
@@ -68,6 +82,7 @@ public class FeedService {
 			String cursor,
 			Integer size,
 			String placeId,
+      String region,
 			String type,
 			List<Long> taggedTeamMemberIds
 	) {
@@ -77,9 +92,11 @@ public class FeedService {
 		FeedTypeFilter feedType = parseFeedType(type);
 		List<Long> normalizedTaggedTeamMemberIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
 		validateTaggedTeamMembers(teamId, normalizedTaggedTeamMemberIds);
+		String normalizedPlaceId = blankToNull(placeId);
+		String normalizedRegion = normalizedPlaceId == null ? blankToNull(region) : null;
 
 		List<Feed> feeds = findFeedPage(
-				teamId, blankToNull(placeId), feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
+				teamId, normalizedPlaceId, normalizedRegion, feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -126,6 +143,117 @@ public class FeedService {
 				myReaction(feed.getId(), viewer.getId()),
 				feed.getTeamMember().getId().equals(viewer.getId())
 		);
+	}
+
+	public List<FeedResponseDTO.FeedListItemDTO> getEveryonePickItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		YearMonth currentMonth = YearMonth.now();
+		LocalDate startOfMonth = currentMonth.atDay(1);
+		LocalDate startOfNextMonth = currentMonth.plusMonths(1).atDay(1);
+
+		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
+		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
+			return List.of();
+		}
+
+		List<Long> rankedIds = feedRepository.findEveryonePickFeedIds(teamId, startOfMonth, startOfNextMonth);
+		if (rankedIds.isEmpty()) {
+			return List.of();
+		}
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, rankedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(rankedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(rankedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(rankedIds, viewer.getId());
+
+		return rankedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+	}
+
+	public List<FeedResponseDTO.FeedListItemDTO> getAllTaggedItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		List<Long> feedIds = feedRepository.findAllTaggedFeedIds(teamId);
+		if (feedIds.size() < ALL_TAGGED_MIN_FEEDS) {
+			return List.of();
+		}
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(feedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+
+		return feedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+	}
+
+	public CombinationItemsResult getCombinationItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		List<Object[]> topPair = feedRepository.findTopCombinationPair(teamId);
+		if (topPair.isEmpty()) {
+			return CombinationItemsResult.empty();
+		}
+
+		Long mA = ((Number) topPair.get(0)[0]).longValue();
+		Long mB = ((Number) topPair.get(0)[1]).longValue();
+
+		List<Long> feedIds = feedRepository.findCombinationFeedIds(teamId, mA, mB);
+		if (feedIds.size() < COMBINATION_MIN_FEEDS) {
+			return CombinationItemsResult.empty();
+		}
+
+		List<Long> memberIds = feedRepository.findAlwaysCoTaggedMemberIds(teamId, mA, mB);
+		List<FeedResponseDTO.TaggedMemberDTO> combination = teamMemberRepository
+				.findActiveByTeamIdAndIds(teamId, memberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
+				.stream()
+				.map(tm -> FeedResponseDTO.TaggedMemberDTO.builder()
+						.teamMemberId(tm.getId())
+						.nickname(tm.getNickname())
+						.profileImageUrl(tm.getProfileImgUrl())
+						.build())
+				.toList();
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(feedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+
+		List<FeedResponseDTO.FeedListItemDTO> feeds = feedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+
+		return new CombinationItemsResult(combination, feeds);
 	}
 
 	@Transactional
@@ -354,6 +482,7 @@ public class FeedService {
 			return null;
 		}
 		String externalPlaceId = blankToNull(request.getPlaceId());
+		String region = extractRegion(request.getAddress());
 		if (externalPlaceId != null) {
 			Optional<Place> existing = placeRepository.findByExternalPlaceId(externalPlaceId);
 			if (existing.isPresent()) {
@@ -364,7 +493,8 @@ public class FeedService {
 					request.getName(),
 					request.getLatitude(),
 					request.getLongitude(),
-					request.getAddress()
+					request.getAddress(),
+					region
 			);
 			return placeRepository.findByExternalPlaceId(externalPlaceId)
 					.orElseThrow(() -> new BusinessException(ErrorCode.COMMON001));
@@ -376,7 +506,39 @@ public class FeedService {
 				.latitude(request.getLatitude())
 				.longitude(request.getLongitude())
 				.address(request.getAddress())
+				.region(region)
 				.build());
+	}
+
+	private String extractRegion(String address) {
+		if (address == null || address.isBlank()) {
+			return null;
+		}
+		String[] tokens = address.split(" ");
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < tokens.length; i++) {
+			String token = tokens[i];
+			sb.append(token);
+			if (token.endsWith("구") || token.endsWith("군")) {
+				break;
+			}
+			if (token.endsWith("특별자치시")) {
+				break;
+			}
+			if (token.endsWith("도")) {
+				sb.append(" ");
+				continue;
+			}
+			if (token.endsWith("시")
+					&& !token.endsWith("특별시")
+					&& !token.endsWith("광역시")
+					&& !token.endsWith("자치시")) {
+				boolean nextIsGu = i + 1 < tokens.length && tokens[i + 1].endsWith("구");
+				if (!nextIsGu) break;
+			}
+			sb.append(" ");
+		}
+		return sb.toString().trim();
 	}
 
 	private List<TeamMember> resolveTaggedMembers(Long teamId, List<Long> taggedTeamMemberIds) {
@@ -562,6 +724,7 @@ public class FeedService {
 	private List<Feed> findFeedPage(
 			Long teamId,
 			String placeId,
+			String region,
 			FeedTypeFilter feedType,
 			List<Long> taggedTeamMemberIds,
 			Cursor cursor,
@@ -569,11 +732,13 @@ public class FeedService {
 	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
 		String feedTypeName = feedType.queryValue();
+  
 		if (!taggedTeamMemberIds.isEmpty()) {
 			if (cursor.createdAt() == null) {
 				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
 						teamId,
 						placeId,
+						region,
 						feedTypeName,
 						taggedTeamMemberIds,
 						(long) taggedTeamMemberIds.size(),
@@ -581,20 +746,30 @@ public class FeedService {
 				);
 			}
 			return feedRepository.findActiveCursorPageByTaggedTeamMemberIds(
-					teamId, placeId, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
+					teamId, placeId, region, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
 					cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
-		if (cursor.createdAt() == null) {
-			if (placeId == null) {
-				return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
-			}
-			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
-		}
-		if (placeId == null) {
-			return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
-		}
-		return feedRepository.findActiveCursorPageByPlaceId(
-				teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+
+    if (placeId != null) {
+        if (cursor.createdAt() == null) {
+            return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
+        }
+        return feedRepository.findActiveCursorPageByPlaceId(
+                teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+    }
+
+    if (region != null) {
+        if (cursor.createdAt() == null) {
+            return feedRepository.findActiveFirstPageByRegion(teamId, region, feedTypeName, pageRequest);
+        }
+        return feedRepository.findActiveCursorPageByRegion(
+                teamId, region, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+    }
+
+    if (cursor.createdAt() == null) {
+        return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
+    }
+    return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
 	}
 
 	private FeedTypeFilter parseFeedType(String type) {

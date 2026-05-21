@@ -50,7 +50,7 @@ class FeedControllerTest extends ApiTest {
 	@Test
 	@DisplayName("GET /api/v1/teams/{teamId}/feeds는 피드 목록을 반환한다")
 	void listFeeds() throws Exception {
-		when(feedService.listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", "DAILY_QUESTION", null))
+		when(feedService.listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", null, "DAILY_QUESTION", null))
 				.thenReturn(FeedResponseDTO.FeedListResponseDTO.builder()
 						.items(List.of(listItem()))
 						.pageInfo(FeedResponseDTO.PageInfoDTO.builder()
@@ -72,7 +72,44 @@ class FeedControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.data.items[0].reactionSummary.totalCount").value(1))
 				.andExpect(jsonPath("$.data.pageInfo.nextCursor").value("2026-03-04T20:30:00_25"));
 
-		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", "DAILY_QUESTION", null);
+		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", null, "DAILY_QUESTION", null);
+	}
+
+	@Test
+	@DisplayName("region 파라미터를 전달하면 서비스에 region이 포함돼 호출된다")
+	void listFeedsByRegion() throws Exception {
+		String region = "서울 강남구";
+		when(feedService.listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, null, region, null, null))
+				.thenReturn(FeedResponseDTO.FeedListResponseDTO.builder()
+						.items(List.of(listItem()))
+						.pageInfo(FeedResponseDTO.PageInfoDTO.builder()
+								.nextCursor(null).hasNext(false).size(20).build())
+						.build());
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/feeds", TEAM_ID)
+						.param("region", region))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items[0].feedId").value(FEED_ID));
+
+		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, null, region, null, null);
+	}
+
+	@Test
+	@DisplayName("placeId와 region을 동시에 전달하면 둘 다 서비스로 전달된다")
+	void listFeedsWithBothFilters() throws Exception {
+		when(feedService.listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, "kakao_12345", "서울 강남구", null, null))
+				.thenReturn(FeedResponseDTO.FeedListResponseDTO.builder()
+						.items(List.of())
+						.pageInfo(FeedResponseDTO.PageInfoDTO.builder()
+								.nextCursor(null).hasNext(false).size(20).build())
+						.build());
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/feeds", TEAM_ID)
+						.param("placeId", "kakao_12345")
+						.param("region", "서울 강남구"))
+				.andExpect(status().isOk());
+
+		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, "kakao_12345", "서울 강남구", null, null);
 	}
 
 	@Test
@@ -85,6 +122,7 @@ class FeedControllerTest extends ApiTest {
 				isNull(),
 				isNull(),
 				isNull(),
+        isNull(),
 				eq(List.of(101L, 102L))
 		)).thenReturn(emptyListResponse());
 
@@ -92,7 +130,7 @@ class FeedControllerTest extends ApiTest {
 						.param("taggedTeamMemberIds", "101,102"))
 				.andExpect(status().isOk());
 
-		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, null, null, List.of(101L, 102L));
+		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, null, null, null, List.of(101L, 102L));
 	}
 
 	@Test
@@ -105,6 +143,7 @@ class FeedControllerTest extends ApiTest {
 				isNull(),
 				isNull(),
 				isNull(),
+        isNull(),
 				eq(List.of(101L, 102L))
 		)).thenReturn(emptyListResponse());
 
@@ -112,7 +151,7 @@ class FeedControllerTest extends ApiTest {
 						.param("taggedTeamMemberIds", "101", "102"))
 				.andExpect(status().isOk());
 
-		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, null, null, List.of(101L, 102L));
+		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, null, null, null, null, List.of(101L, 102L));
 	}
 
 	@Test

@@ -15,8 +15,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 
 	@Modifying(flushAutomatically = true)
 	@Query(value = """
-			insert into place (external_place_id, name, latitude, longitude, address, created_at)
-			values (:externalPlaceId, :name, :latitude, :longitude, :address, current_timestamp)
+			insert into place (external_place_id, name, latitude, longitude, address, region, created_at)
+			values (:externalPlaceId, :name, :latitude, :longitude, :address, :region, current_timestamp)
 			on conflict (external_place_id) do nothing
 			""", nativeQuery = true)
 	void insertIfAbsentByExternalPlaceId(
@@ -24,6 +24,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 			@Param("name") String name,
 			@Param("latitude") BigDecimal latitude,
 			@Param("longitude") BigDecimal longitude,
-			@Param("address") String address
+			@Param("address") String address,
+			@Param("region") String region
 	);
 }
