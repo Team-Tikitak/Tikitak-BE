@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.repository.feed;
 
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.domain.feed.entity.FeedTag;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.place.entity.Place;
 import kusitms.spin.tikitak.domain.team.entity.Team;
@@ -258,6 +259,40 @@ cursor.getCreatedAt(), cursor.getId(),
 
 			assertThat(result).isEmpty();
 		}
+	}
+
+	@Test
+	@DisplayName("태그 필터와 region 필터를 함께 적용한다")
+	void findActiveFirstPageByTaggedTeamMemberIdsFiltersRegion() {
+		Member author = persist(member("rf-tag-region-author"));
+		Member taggedMember = persist(member("rf-tag-region-tagged"));
+		Team team = persist(team("rf-tag-region"));
+		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+		TeamMember taggedTm = persist(teamMember(taggedMember, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		Place gangnam = persist(place(GANGNAM));
+		Place bundang = persist(place(BUNDANG));
+
+		Feed gangnamTagged = feed(team, authorTm, gangnam, BASE_TIME.plusHours(1));
+		gangnamTagged.addTag(FeedTag.builder().teamMember(taggedTm).build());
+		persist(gangnamTagged);
+
+		Feed bundangTagged = feed(team, authorTm, bundang, BASE_TIME.plusHours(2));
+		bundangTagged.addTag(FeedTag.builder().teamMember(taggedTm).build());
+		persist(bundangTagged);
+
+		flushAndClear();
+
+		List<Feed> result = feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				team.getId(),
+				null,
+				GANGNAM,
+				null,
+				List.of(taggedTm.getId()),
+				1L,
+				PageRequest.of(0, 10)
+		);
+
+		assertThat(result).extracting(Feed::getId).containsExactly(gangnamTagged.getId());
 	}
 
 	// --- helpers ---

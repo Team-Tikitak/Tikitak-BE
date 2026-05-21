@@ -161,6 +161,7 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 				team.getId(),
 				null,
 				null,
+				null,
 				List.of(tagA.getId(), tagB.getId()),
 				2L,
 				PageRequest.of(0, 10)

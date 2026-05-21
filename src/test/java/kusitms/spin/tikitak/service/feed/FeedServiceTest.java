@@ -208,6 +208,7 @@ class FeedServiceTest extends UnitTest {
 				eq(TEAM_ID),
 				eq(null),
 				eq(null),
+				eq(null),
 				eq(taggedTeamMemberIds),
 				eq(2L),
 				any(Pageable.class)
@@ -221,8 +222,77 @@ class FeedServiceTest extends UnitTest {
 				eq(TEAM_ID),
 				eq(null),
 				eq(null),
+				eq(null),
 				eq(taggedTeamMemberIds),
 				eq(2L),
+				any(Pageable.class)
+		);
+	}
+
+	@Test
+	@DisplayName("태그 필터와 region 필터를 함께 적용한다")
+	void listFeedsWithTaggedTeamMemberAndRegionFilter() {
+		List<Long> taggedTeamMemberIds = List.of(101L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(taggedTeamMemberIds),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
+		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq(null),
+				eq("서울 강남구"),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
+				any(Pageable.class)
+		)).thenReturn(List.of());
+
+		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, null, "서울 강남구", null, taggedTeamMemberIds);
+
+		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq(null),
+				eq("서울 강남구"),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
+				any(Pageable.class)
+		);
+	}
+
+	@Test
+	@DisplayName("placeId와 region이 함께 있으면 태그 필터에서도 placeId를 우선 적용한다")
+	void listFeedsWithTaggedTeamMemberFilterPrefersPlaceIdOverRegion() {
+		List<Long> taggedTeamMemberIds = List.of(101L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(taggedTeamMemberIds),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
+		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq("kakao_12345"),
+				eq(null),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
+				any(Pageable.class)
+		)).thenReturn(List.of());
+
+		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, "kakao_12345", "서울 강남구", null, taggedTeamMemberIds);
+
+		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq("kakao_12345"),
+				eq(null),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(1L),
 				any(Pageable.class)
 		);
 	}
