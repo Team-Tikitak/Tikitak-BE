@@ -19,7 +19,7 @@ import java.util.Optional;
 
 public interface FeedRepository extends JpaRepository<Feed, Long> {
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "tags", "tags.teamMember" })
 	@Query("""
 			select f
 			from Feed f
@@ -184,7 +184,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
-	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "tags", "tags.teamMember" })
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
 	@Query("""
 			select f
 			from Feed f
@@ -192,6 +192,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			where f.team.id = :teamId
 				and f.deletedAt is null
 				and (:placeId is null or p.externalPlaceId = :placeId)
+				and (:region is null or p.region = :region)
 				and (
 					:feedType is null
 					or (:feedType = 'GENERAL' and f.question is null)
@@ -209,6 +210,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 	List<Feed> findActiveFirstPageByTaggedTeamMemberIds(
 			@Param("teamId") Long teamId,
 			@Param("placeId") String placeId,
+			@Param("region") String region,
 			@Param("feedType") String feedType,
 			@Param("taggedTeamMemberIds") List<Long> taggedTeamMemberIds,
 			@Param("taggedTeamMemberCount") long taggedTeamMemberCount,
@@ -223,6 +225,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			where f.team.id = :teamId
 				and f.deletedAt is null
 				and (:placeId is null or p.externalPlaceId = :placeId)
+				and (:region is null or p.region = :region)
 				and (
 					:feedType is null
 					or (:feedType = 'GENERAL' and f.question is null)
@@ -244,6 +247,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 	List<Feed> findActiveCursorPageByTaggedTeamMemberIds(
 			@Param("teamId") Long teamId,
 			@Param("placeId") String placeId,
+			@Param("region") String region,
 			@Param("feedType") String feedType,
 			@Param("taggedTeamMemberIds") List<Long> taggedTeamMemberIds,
 			@Param("taggedTeamMemberCount") long taggedTeamMemberCount,

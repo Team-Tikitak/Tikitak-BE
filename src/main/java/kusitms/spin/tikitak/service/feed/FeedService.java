@@ -92,9 +92,11 @@ public class FeedService {
 		FeedTypeFilter feedType = parseFeedType(type);
 		List<Long> normalizedTaggedTeamMemberIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
 		validateTaggedTeamMembers(teamId, normalizedTaggedTeamMemberIds);
+		String normalizedPlaceId = blankToNull(placeId);
+		String normalizedRegion = normalizedPlaceId == null ? blankToNull(region) : null;
 
 		List<Feed> feeds = findFeedPage(
-				teamId, blankToNull(placeId), blankToNull(region), feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
+				teamId, normalizedPlaceId, normalizedRegion, feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -698,7 +700,7 @@ public class FeedService {
 	private List<Feed> findFeedPage(
 			Long teamId,
 			String placeId,
-      String region,
+			String region,
 			FeedTypeFilter feedType,
 			List<Long> taggedTeamMemberIds,
 			Cursor cursor,
@@ -712,6 +714,7 @@ public class FeedService {
 				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
 						teamId,
 						placeId,
+						region,
 						feedTypeName,
 						taggedTeamMemberIds,
 						(long) taggedTeamMemberIds.size(),
@@ -719,7 +722,7 @@ public class FeedService {
 				);
 			}
 			return feedRepository.findActiveCursorPageByTaggedTeamMemberIds(
-					teamId, placeId, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
+					teamId, placeId, region, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
 					cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
 
