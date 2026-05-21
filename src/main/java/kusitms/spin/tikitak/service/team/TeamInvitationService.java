@@ -87,15 +87,16 @@ public class TeamInvitationService {
 	public TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO getActiveInviteLink(
 			Long memberId, Long teamId
 	) {
-		Team currentTeam = teamRepository.findById(teamId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
-
 		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
 		if (caller.getStatus() != TeamMemberStatus.ACTIVE) {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
+
+		Team currentTeam = teamRepository.findById(teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
 
 		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.filter(TeamInvite::isActive)
