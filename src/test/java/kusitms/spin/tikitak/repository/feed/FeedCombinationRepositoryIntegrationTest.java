@@ -13,14 +13,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
-
-	private static final LocalDate IN_MAY = LocalDate.of(2026, 5, 15);
 
 	@Autowired
 	private FeedRepository feedRepository;
@@ -136,7 +133,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 
 			Feed deleted = Feed.builder()
 					.team(team).teamMember(authorTm)
-					.content("삭제됨").meetingDate(IN_MAY)
+					.content("삭제됨")
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
 			persist(deleted);
@@ -146,6 +143,44 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			assertThat(feedRepository.findTopCombinationPair(team.getId())).isEmpty();
+		}
+
+		@Test
+		@DisplayName("탈퇴한 멤버가 포함된 페어는 선정에서 제외한다")
+		void excludesPairsWithInactiveMembers() {
+			Member m1 = persist(member("cp-left-1"));
+			Member m2 = persist(member("cp-left-2"));
+			Member m3 = persist(member("cp-left-3"));
+			Member author = persist(member("cp-left-author"));
+			Team team = persist(team("cp-left"));
+
+			TeamMember tm1 = persist(teamMember(m1, team, TeamMemberRole.MEMBER, TeamMemberStatus.LEFT));
+			TeamMember tm2 = persist(teamMember(m2, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+			TeamMember tm3 = persist(teamMember(m3, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+
+			// tm1(탈퇴), tm2: 3번 — 점수 높지만 탈퇴 멤버 포함
+			for (int i = 0; i < 3; i++) {
+				Feed feed = feed(team, authorTm, BASE_TIME.plusMinutes(i));
+				persist(feed);
+				tag(feed, tm1);
+				tag(feed, tm2);
+			}
+			// tm2, tm3: 1번 — 활성 멤버끼리
+			Feed active = feed(team, authorTm, BASE_TIME.plusHours(1));
+			persist(active);
+			tag(active, tm2);
+			tag(active, tm3);
+
+			flushAndClear();
+
+			List<Object[]> result = feedRepository.findTopCombinationPair(team.getId());
+
+			assertThat(result).hasSize(1);
+			long mA = ((Number) result.get(0)[0]).longValue();
+			long mB = ((Number) result.get(0)[1]).longValue();
+			assertThat(mA).isEqualTo(tm2.getId());
+			assertThat(mB).isEqualTo(tm3.getId());
 		}
 
 		@Test
@@ -338,7 +373,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 
 			Feed deleted = Feed.builder()
 					.team(team).teamMember(authorTm)
-					.content("삭제됨").meetingDate(IN_MAY)
+					.content("삭제됨")
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
 			persist(deleted);
@@ -437,7 +472,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 	private Feed feed(Team team, TeamMember author, java.time.LocalDateTime createdAt) {
 		return Feed.builder()
 				.team(team).teamMember(author)
-				.content("테스트 피드").meetingDate(IN_MAY)
+				.content("테스트 피드")
 				.createdAt(createdAt).updatedAt(createdAt)
 				.build();
 	}
