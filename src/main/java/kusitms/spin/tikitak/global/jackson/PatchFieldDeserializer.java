@@ -29,6 +29,9 @@ public class PatchFieldDeserializer extends JsonDeserializer<PatchField<?>> impl
 		if (node == null || node.isNull()) {
 			return PatchField.of(null);
 		}
+		if (valueType == null) {
+			return PatchField.of(node);
+		}
 		Object value = context.readTreeAsValue(node, valueType);
 		return PatchField.of(value);
 	}
@@ -40,6 +43,9 @@ public class PatchFieldDeserializer extends JsonDeserializer<PatchField<?>> impl
 
 	@Override
 	public JsonDeserializer<?> createContextual(DeserializationContext context, BeanProperty property) {
+		if (property == null) {
+			return this;
+		}
 		JavaType contextualType = property.getType().containedType(0);
 		return new PatchFieldDeserializer(contextualType);
 	}
