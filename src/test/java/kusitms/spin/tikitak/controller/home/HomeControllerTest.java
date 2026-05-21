@@ -233,6 +233,52 @@ class HomeControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.code").value("TEAM008"));
 	}
 
+	@Test
+	@DisplayName("GET /api/v1/teams/{teamId}/home/regions는 지역 목록을 반환한다")
+	void getRegions() throws Exception {
+		HomeResponseDTO.RegionResponse response = HomeResponseDTO.RegionResponse.builder()
+				.regions(List.of(
+						regionItem("서울 강남구", 12L, "https://example.com/img1.jpg"),
+						regionItem("경기 성남시 분당구", 5L, null)
+				))
+				.build();
+
+		when(homeService.getRegions(TEST_MEMBER_ID, TEAM_ID)).thenReturn(response);
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/regions", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.regions").isArray())
+				.andExpect(jsonPath("$.data.regions.length()").value(2))
+				.andExpect(jsonPath("$.data.regions[0].region").value("서울 강남구"))
+				.andExpect(jsonPath("$.data.regions[0].feedCount").value(12))
+				.andExpect(jsonPath("$.data.regions[0].thumbnailImageUrl").value("https://example.com/img1.jpg"))
+				.andExpect(jsonPath("$.data.regions[1].region").value("경기 성남시 분당구"))
+				.andExpect(jsonPath("$.data.regions[1].thumbnailImageUrl").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("장소 있는 피드가 3개 미만이면 빈 지역 목록을 반환한다")
+	void getRegionsReturnsEmptyWhenNotEnoughFeeds() throws Exception {
+		when(homeService.getRegions(TEST_MEMBER_ID, TEAM_ID))
+				.thenReturn(HomeResponseDTO.RegionResponse.builder().regions(List.of()).build());
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/regions", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.regions").isEmpty());
+	}
+
+	@Test
+	@DisplayName("팀 접근 권한이 없으면 지역 조회도 403을 반환한다")
+	void getRegionsReturnsForbiddenWhenNotTeamMember() throws Exception {
+		when(homeService.getRegions(TEST_MEMBER_ID, TEAM_ID))
+				.thenThrow(new BusinessException(ErrorCode.TEAM008));
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/regions", TEAM_ID))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("TEAM008"));
+	}
+
 	// --- helpers ---
 
 	private HomeResponseDTO.BestAttendanceMemberDTO member(
@@ -244,6 +290,14 @@ class HomeControllerTest extends ApiTest {
 				.nickname(nickname)
 				.profileImgUrl(profileImgUrl)
 				.tagCount(tagCount)
+				.build();
+	}
+
+	private HomeResponseDTO.RegionItemDTO regionItem(String region, long feedCount, String thumbnailUrl) {
+		return HomeResponseDTO.RegionItemDTO.builder()
+				.region(region)
+				.feedCount(feedCount)
+				.thumbnailImageUrl(thumbnailUrl)
 				.build();
 	}
 

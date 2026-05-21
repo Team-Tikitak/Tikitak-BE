@@ -7,8 +7,10 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.feed.FeedService.CombinationItemsResult;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
@@ -31,6 +33,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMembe
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class HomeServiceTest extends UnitTest {
@@ -47,13 +50,16 @@ class HomeServiceTest extends UnitTest {
 	@Mock
 	private FeedService feedService;
 
+	@Mock
+	private FeedRepository feedRepository;
+
 	private HomeService homeService;
 	private Team team;
 	private TeamMember requester;
 
 	@BeforeEach
 	void setUp() {
-		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService);
+		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService, feedRepository);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
 	}
@@ -182,6 +188,51 @@ class HomeServiceTest extends UnitTest {
 		assertThat(result.getFeeds()).isEmpty();
 	}
 
+	@Test
+	@DisplayName("장소 있는 피드가 3개 이상이면 지역 목록을 반환한다")
+	void returnsRegionListWhenEnoughFeeds() {
+		List<RegionRow> rows = List.of(
+				regionRow("서울 강남구", 3L, "https://img1.jpg"),
+				regionRow("경기 성남시 분당구", 2L, null)
+		);
+		stubRequester();
+		when(feedRepository.countActiveFeedsWithRegion(TEAM_ID)).thenReturn(5L);
+		when(feedRepository.findRegionSummaries(TEAM_ID)).thenReturn(rows);
+
+		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getRegions()).hasSize(2);
+		assertThat(result.getRegions().get(0).getRegion()).isEqualTo("서울 강남구");
+		assertThat(result.getRegions().get(0).getFeedCount()).isEqualTo(3L);
+		assertThat(result.getRegions().get(0).getThumbnailImageUrl()).isEqualTo("https://img1.jpg");
+		assertThat(result.getRegions().get(1).getRegion()).isEqualTo("경기 성남시 분당구");
+		assertThat(result.getRegions().get(1).getThumbnailImageUrl()).isNull();
+	}
+
+	@Test
+	@DisplayName("장소 있는 피드가 3개 미만이면 빈 목록을 반환한다")
+	void returnsEmptyRegionListWhenNotEnoughFeeds() {
+		stubRequester();
+		when(feedRepository.countActiveFeedsWithRegion(TEAM_ID)).thenReturn(2L);
+
+		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getRegions()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("팀 멤버가 아니면 지역 조회도 TEAM008을 던진다")
+	void throwsTeam008WhenNotTeamMemberForRegions() {
+		when(teamMemberRepository.findActiveByMemberIdAndTeamId(
+				eq(MEMBER_ID), eq(TEAM_ID),
+				eq(TeamMemberStatus.ACTIVE), eq(TeamStatus.ACTIVE)
+		)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> homeService.getRegions(MEMBER_ID, TEAM_ID))
+				.isInstanceOfSatisfying(BusinessException.class, e ->
+						assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TEAM008));
+	}
+
 	// --- helpers ---
 
 	private void stubRequester() {
@@ -189,6 +240,14 @@ class HomeServiceTest extends UnitTest {
 				eq(MEMBER_ID), eq(TEAM_ID),
 				eq(TeamMemberStatus.ACTIVE), eq(TeamStatus.ACTIVE)
 		)).thenReturn(Optional.of(requester));
+	}
+
+	private RegionRow regionRow(String region, long feedCount, String thumbnailUrl) {
+		RegionRow row = mock(RegionRow.class);
+		when(row.getRegion()).thenReturn(region);
+		when(row.getFeedCount()).thenReturn(feedCount);
+		when(row.getThumbnailUrl()).thenReturn(thumbnailUrl);
+		return row;
 	}
 
 	private FeedResponseDTO.TaggedMemberDTO taggedMember(Long teamMemberId, String nickname) {
