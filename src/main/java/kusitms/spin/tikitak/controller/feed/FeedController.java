@@ -38,7 +38,8 @@ public class FeedController {
 	@GetMapping
 	@Operation(
 			summary = "피드 목록 조회",
-			description = "특정 팀의 피드 목록을 생성일시 내림차순으로 조회합니다. placeId를 전달하면 해당 장소의 피드만 조회합니다."
+			description = "특정 팀의 피드 목록을 생성일시 내림차순으로 조회합니다. placeId를 전달하면 해당 장소의 피드만 조회합니다." +
+					"region, type 파라미터로 각각 지역별 피드 필터링, 피드 유형 필터링이 가능합니다."
 	)
 	public CommonResponse<FeedResponseDTO.FeedListResponseDTO> listFeeds(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,
@@ -52,7 +53,7 @@ public class FeedController {
 			@RequestParam(required = false) String placeId,
 			@Parameter(description = "특정 지역의 피드만 조회할 행정구역명 (예: 서울 강남구). placeId와 동시에 사용 시 placeId 우선")
 			@RequestParam(required = false) String region,
-    	@Parameter(description = "피드 유형 필터. ALL, GENERAL, DAILY_QUESTION")
+    		@Parameter(description = "피드 유형 필터. ALL, GENERAL, DAILY_QUESTION")
 			@RequestParam(required = false) String type,
 			@Parameter(description = "태그된 팀 멤버 ID 목록. 모든 ID가 동시에 태그된 피드만 조회")
 			@RequestParam(required = false) List<Long> taggedTeamMemberIds
