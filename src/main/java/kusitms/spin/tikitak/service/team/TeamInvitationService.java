@@ -84,18 +84,19 @@ public class TeamInvitationService {
 				.build();
 	}
 
-	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO getActiveInviteLink(
+	public TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO getActiveInviteLink(
 			Long memberId, Long teamId
 	) {
-		teamRepository.findById(teamId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
-
 		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
 		if (caller.getStatus() != TeamMemberStatus.ACTIVE) {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
+
+		Team currentTeam = teamRepository.findById(teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
 
 		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.filter(TeamInvite::isActive)
@@ -105,8 +106,9 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
 
-		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
+		return TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO.builder()
 				.inviteToken(invite.getInviteToken())
+				.teamName(currentTeam.getName())
 				.expiresAt(invite.getExpiresAt())
 				.build();
 	}
