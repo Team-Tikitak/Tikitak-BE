@@ -174,6 +174,9 @@ public class FeedService {
 		if (!feed.getTeamMember().getId().equals(editor.getId())) {
 			throw new BusinessException(ErrorCode.FEED011);
 		}
+		if (feed.hasQuestion()) {
+			throw new BusinessException(ErrorCode.DAILY_QUESTION008);
+		}
 
 		String content = normalizeContent(request.getContent());
 		List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
@@ -434,6 +437,7 @@ public class FeedService {
 				.imageCount(feed.getImages().size())
 				.author(toAuthor(feed.getTeamMember()))
 				.place(toPlace(feed.getPlace(), false))
+				.question(toQuestion(feed))
 				.commentCount(commentCount)
 				.reactionSummary(reactionSummary)
 				.myReaction(myReaction)
@@ -461,6 +465,7 @@ public class FeedService {
 								.build())
 						.toList())
 				.place(toPlace(feed.getPlace(), true))
+				.question(toQuestion(feed))
 				.taggedMembers(feed.getTags().stream()
 						.map(FeedTag::getTeamMember)
 						.map(this::toTaggedMember)
@@ -482,6 +487,7 @@ public class FeedService {
 				.thumbnailImageUrl(thumbnailImageUrl(feed))
 				.imageCount(feed.getImages().size())
 				.place(toPlace(feed.getPlace(), true))
+				.question(toQuestion(feed))
 				.taggedMembers(feed.getTags().stream()
 						.map(FeedTag::getTeamMember)
 						.map(this::toTaggedMember)
@@ -518,6 +524,17 @@ public class FeedService {
 				.latitude(place.getLatitude())
 				.longitude(place.getLongitude())
 				.address(includeAddress ? place.getAddress() : null)
+				.build();
+	}
+
+	private FeedResponseDTO.QuestionDTO toQuestion(Feed feed) {
+		if (!feed.hasQuestion()) {
+			return null;
+		}
+		return FeedResponseDTO.QuestionDTO.builder()
+				.questionId(feed.getQuestion().getId())
+				.content(feed.getQuestion().getContent())
+				.answerDate(feed.getQuestionAnswerDate())
 				.build();
 	}
 
