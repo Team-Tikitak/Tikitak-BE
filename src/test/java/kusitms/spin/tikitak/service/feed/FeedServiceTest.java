@@ -177,6 +177,9 @@ class FeedServiceTest extends UnitTest {
 		assertThat(result.get(0).getFeedId()).isEqualTo(feedId1);
 		assertThat(result.get(0).getContent()).isEqualTo("1번 피드");
 		assertThat(result.get(1).getFeedId()).isEqualTo(feedId2);
+	}
+
+	@Test
 	@DisplayName("피드 본문은 1000자를 초과할 수 없다")
 	void createFeedThrowsWhenContentTooLong() {
 		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithContent(MEDIA_PUBLIC_ID, "a".repeat(1001));

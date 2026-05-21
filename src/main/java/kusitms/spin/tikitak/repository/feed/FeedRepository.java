@@ -67,11 +67,17 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			where f.team.id = :teamId
 				and f.deletedAt is null
 				and p.region = :region
+				and (
+					:feedType is null
+					or (:feedType = 'GENERAL' and f.question is null)
+					or (:feedType = 'DAILY_QUESTION' and f.question is not null)
+				)
 			order by f.createdAt desc, f.id desc
 			""")
 	List<Feed> findActiveFirstPageByRegion(
 			@Param("teamId") Long teamId,
 			@Param("region") String region,
+			@Param("feedType") String feedType,
 			Pageable pageable
 	);
 
@@ -84,6 +90,11 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 				and f.deletedAt is null
 				and p.region = :region
 				and (
+					:feedType is null
+					or (:feedType = 'GENERAL' and f.question is null)
+					or (:feedType = 'DAILY_QUESTION' and f.question is not null)
+				)
+				and (
 					f.createdAt < :cursorCreatedAt
 					or (f.createdAt = :cursorCreatedAt and f.id < :cursorFeedId)
 				)
@@ -92,6 +103,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 	List<Feed> findActiveCursorPageByRegion(
 			@Param("teamId") Long teamId,
 			@Param("region") String region,
+			@Param("feedType") String feedType,
 			@Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
 			@Param("cursorFeedId") Long cursorFeedId,
 			Pageable pageable

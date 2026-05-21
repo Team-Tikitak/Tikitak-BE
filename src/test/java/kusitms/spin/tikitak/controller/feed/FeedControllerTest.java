@@ -50,7 +50,7 @@ class FeedControllerTest extends ApiTest {
 	@Test
 	@DisplayName("GET /api/v1/teams/{teamId}/feeds는 피드 목록을 반환한다")
 	void listFeeds() throws Exception {
-		when(feedService.listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", "DAILY_QUESTION", null))
+		when(feedService.listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", null, "DAILY_QUESTION", null))
 				.thenReturn(FeedResponseDTO.FeedListResponseDTO.builder()
 						.items(List.of(listItem()))
 						.pageInfo(FeedResponseDTO.PageInfoDTO.builder()

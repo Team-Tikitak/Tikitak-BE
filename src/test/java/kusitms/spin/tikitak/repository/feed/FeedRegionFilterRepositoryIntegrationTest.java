@@ -51,7 +51,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			List<Feed> result = feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, PageRequest.of(0, 10));
+					team.getId(), GANGNAM, null, PageRequest.of(0, 10));
 
 			assertThat(result).hasSize(1);
 			assertThat(result.get(0).getId()).isEqualTo(gangnamFeed.getId());
@@ -69,7 +69,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			assertThat(feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, PageRequest.of(0, 10))).isEmpty();
+					team.getId(), GANGNAM, null, PageRequest.of(0, 10))).isEmpty();
 		}
 
 		@Test
@@ -90,7 +90,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			assertThat(feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, PageRequest.of(0, 10))).isEmpty();
+					team.getId(), GANGNAM, null, PageRequest.of(0, 10))).isEmpty();
 		}
 
 		@Test
@@ -107,7 +107,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			List<Feed> result = feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, PageRequest.of(0, 10));
+					team.getId(), GANGNAM, null, PageRequest.of(0, 10));
 
 			assertThat(result).hasSize(2);
 			assertThat(result.get(0).getId()).isEqualTo(newer.getId());
@@ -129,7 +129,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			List<Feed> result = feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, PageRequest.of(0, 3));
+					team.getId(), GANGNAM, null, PageRequest.of(0, 3));
 
 			assertThat(result).hasSize(3);
 		}
@@ -148,7 +148,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			assertThat(feedRepository.findActiveFirstPageByRegion(
-					myTeam.getId(), GANGNAM, PageRequest.of(0, 10))).isEmpty();
+					myTeam.getId(), GANGNAM, null, PageRequest.of(0, 10))).isEmpty();
 		}
 	}
 
@@ -174,8 +174,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			// feed3이 커서 → feed2, feed1만 반환
 			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM,
-					feed3.getCreatedAt(), feed3.getId(),
+					team.getId(), GANGNAM, null,
+feed3.getCreatedAt(), feed3.getId(),
 					PageRequest.of(0, 10));
 
 			assertThat(result).hasSize(2);
@@ -199,8 +199,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			// feed2를 커서로 → id < feed2.id 인 feed1만 반환
 			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM,
-					feed2.getCreatedAt(), feed2.getId(),
+					team.getId(), GANGNAM, null,
+feed2.getCreatedAt(), feed2.getId(),
 					PageRequest.of(0, 10));
 
 			assertThat(result).hasSize(1);
@@ -224,8 +224,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM,
-					cursor.getCreatedAt(), cursor.getId(),
+					team.getId(), GANGNAM, null,
+cursor.getCreatedAt(), cursor.getId(),
 					PageRequest.of(0, 10));
 
 			assertThat(result).hasSize(1);
@@ -252,8 +252,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM,
-					cursor.getCreatedAt(), cursor.getId(),
+					team.getId(), GANGNAM, null,
+cursor.getCreatedAt(), cursor.getId(),
 					PageRequest.of(0, 10));
 
 			assertThat(result).isEmpty();
