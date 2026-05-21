@@ -1,8 +1,5 @@
 package kusitms.spin.tikitak.service.auth;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
@@ -10,14 +7,16 @@ import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
 import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Base64;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -25,11 +24,10 @@ import java.util.Base64;
 public class AppleOAuthService {
 
 	private static final String AUTHORIZATION_URI = "https://appleid.apple.com/auth/authorize";
+	private static final String JWK_SET_URI = "https://appleid.apple.com/auth/keys";
 	private static final String ISSUER = "https://appleid.apple.com";
-	private static final String AUDIENCE = "com.tikitak";
 
 	private final AuthProperties authProperties;
-	private final ObjectMapper objectMapper;
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String state) {
 		AuthProperties.Apple apple = authProperties.oauth().apple();
@@ -50,10 +48,9 @@ public class AppleOAuthService {
 	}
 
 	public OAuthUserInfo getUserInfo(String code, String idToken) {
-		// id_token 검증
 		AppleIdTokenPayload idTokenPayload = validateIdToken(idToken);
 		
-		if (idTokenPayload.sub() == null || idTokenPayload.sub().isBlank()) {
+		if (isBlank(idTokenPayload.sub())) {
 			throw new OAuthAuthenticationException("Apple provider id is empty.");
 		}
 
@@ -61,53 +58,40 @@ public class AppleOAuthService {
 				SocialProvider.APPLE,
 				idTokenPayload.sub(),
 				idTokenPayload.email(),
-				idTokenPayload.getDisplayName(),
+				null,
 				null
 		);
 	}
 
 	private AppleIdTokenPayload validateIdToken(String idToken) {
 		try {
-			// JWT의 payload 부분 추출 및 디코딩
-			String[] parts = idToken.split("\\.");
-			if (parts.length != 3) {
-				throw new OAuthAuthenticationException("Invalid id_token format.");
-			}
+			AuthProperties.Apple apple = authProperties.oauth().apple();
+			validateAppleClientConfig(apple, false);
 
-			String payload = new String(
-					Base64.getDecoder().decode(parts[1]),
-					StandardCharsets.UTF_8
-			);
-			
-			AppleIdTokenPayload idTokenPayload = objectMapper.readValue(payload, AppleIdTokenPayload.class);
-			
-			// issuer 검증
-			if (!ISSUER.equals(idTokenPayload.iss())) {
+			JwtDecoder jwtDecoder = NimbusJwtDecoder.withJwkSetUri(JWK_SET_URI).build();
+			Jwt jwt = jwtDecoder.decode(idToken);
+
+			if (!ISSUER.equals(jwt.getIssuer() == null ? null : jwt.getIssuer().toString())) {
 				throw new OAuthAuthenticationException("Invalid id_token issuer.");
 			}
-			
-			// audience 검증
-			if (!AUDIENCE.equals(idTokenPayload.aud())) {
+			List<String> audiences = jwt.getAudience();
+			if (audiences == null || !audiences.contains(apple.clientId())) {
 				throw new OAuthAuthenticationException("Invalid id_token audience.");
 			}
-			
-			// 만료 시간 검증
-			long currentTime = Instant.now().getEpochSecond();
-			if (currentTime > idTokenPayload.exp()) {
+			Instant expiresAt = jwt.getExpiresAt();
+			if (expiresAt == null || expiresAt.isBefore(Instant.now())) {
 				throw new OAuthAuthenticationException("id_token is expired.");
 			}
-			
-			// exp - iat 차이가 너무 크면 거부 (일반적으로 10분 이내)
-			if (idTokenPayload.exp() - idTokenPayload.iat() > 600) {
-				throw new OAuthAuthenticationException("id_token has invalid expiration time.");
-			}
-			
-			return idTokenPayload;
+
+			return new AppleIdTokenPayload(
+					jwt.getSubject(),
+					jwt.getClaimAsString("email")
+			);
 		} catch (OAuthAuthenticationException e) {
 			throw e;
-		} catch (IOException e) {
-			log.warn("Apple id_token parsing failed. reason={}", e.getMessage());
-			throw new OAuthAuthenticationException("Apple id_token parsing failed.", e);
+		} catch (JwtException e) {
+			log.warn("Apple id_token validation failed. reason={}", e.getMessage());
+			throw new OAuthAuthenticationException("Apple id_token validation failed.", e);
 		} catch (Exception e) {
 			log.warn("Apple id_token validation failed. reason={}", e.getMessage());
 			throw new OAuthAuthenticationException("Apple id_token validation failed.", e);
@@ -118,7 +102,7 @@ public class AppleOAuthService {
 		if (apple == null || isBlank(apple.clientId()) || isBlank(apple.redirectUri())) {
 			throw new OAuthAuthenticationException("Apple OAuth client-id and redirect-uri must be configured.");
 		}
-		if (isBlank(apple.teamId()) || isBlank(apple.keyId())) {
+		if (requirePrivateKey && (isBlank(apple.teamId()) || isBlank(apple.keyId()))) {
 			throw new OAuthAuthenticationException("Apple OAuth team-id and key-id must be configured.");
 		}
 		if (requirePrivateKey && isBlank(apple.privateKey())) {
@@ -130,36 +114,8 @@ public class AppleOAuthService {
 		return value == null || value.isBlank();
 	}
 
-	@JsonIgnoreProperties(ignoreUnknown = true)
 	private record AppleIdTokenPayload(
-			@JsonProperty("iss")
-			String iss,
-			@JsonProperty("aud")
-			String aud,
-			@JsonProperty("iat")
-			long iat,
-			@JsonProperty("exp")
-			long exp,
-			@JsonProperty("sub")
 			String sub,
-			@JsonProperty("email")
-			String email,
-			@JsonProperty("email_verified")
-			boolean emailVerified,
-			@JsonProperty("nonce")
-			String nonce,
-			@JsonProperty("nonce_supported")
-			boolean nonceSupported,
-			@JsonProperty("is_private_email")
-			boolean isPrivateEmail
-	) {
-		public String getDisplayName() {
-			// Apple에서는 email 또는 처리된 email 주소 반환
-			if (isPrivateEmail() && email != null) {
-				// 프라이빗 이메일인 경우 uuid 형태의 이메일
-				return email.split("@")[0];
-			}
-			return email;
-		}
-	}
+			String email
+	) {}
 }

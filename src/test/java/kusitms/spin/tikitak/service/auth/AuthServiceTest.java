@@ -37,6 +37,12 @@ class AuthServiceTest extends UnitTest {
 	private KakaoOAuthService kakaoOAuthService;
 
 	@Mock
+	private AppleOAuthService appleOAuthService;
+
+	@Mock
+	private OAuthStateStore oauthStateStore;
+
+	@Mock
 	private TokenService tokenService;
 
 	@Mock
@@ -101,6 +107,9 @@ class AuthServiceTest extends UnitTest {
 		assertThat(response.refreshToken()).isEqualTo("refresh-token");
 		assertThat(response.isNewMember()).isFalse();
 		assertThat(response.activeTeamId()).isEqualTo(10L);
+		assertThat(member.getEmail()).isEqualTo("user1@example.com");
+		assertThat(member.getName()).isEqualTo("User 1");
+		assertThat(member.getProfileImgUrl()).isEqualTo("https://example.com/profile1.png");
 	}
 
 	@Test

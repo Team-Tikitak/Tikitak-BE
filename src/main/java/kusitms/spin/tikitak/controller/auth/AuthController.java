@@ -125,7 +125,7 @@ public class AuthController {
 			@Parameter(description = "OAuth 요청 검증용 state")
 			@RequestParam(required = false) String state,
 			@Parameter(description = "Apple 사용자 식별 정보를 포함한 JWT")
-			@RequestParam(required = false) String idToken,
+			@RequestParam(name = "id_token", required = false) String idToken,
 			@CookieValue(name = "oauthState", required = false) String savedState
 	) {
 		LoginResponse loginResponse = authService.loginWithOAuth("apple", code, state, savedState, idToken);
@@ -164,7 +164,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ofMinutes(5))
 				.build();
 	}
@@ -184,9 +184,13 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ZERO)
 				.build();
+	}
+
+	private String oauthStateCookieSameSite() {
+		return authProperties.jwt().cookieSecure() ? "None" : "Lax";
 	}
 
 	private ResponseCookie expireRefreshTokenCookie() {

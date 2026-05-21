@@ -76,7 +76,7 @@ class AuthControllerTest extends ApiTest {
 	@Test
 	@DisplayName("OAuth callback은 로그인 결과를 프론트 redirect URI query parameter로 전달한다")
 	void handleOAuthCallbackRedirectsWithLoginResult() throws Exception {
-		when(authService.loginWithOAuth("kakao", "code", "state", "state"))
+		when(authService.loginWithOAuth("kakao", "code", "state", "state", null))
 				.thenReturn(new LoginResponse(
 						"access-token",
 						"refresh-token",
@@ -107,6 +107,35 @@ class AuthControllerTest extends ApiTest {
 		assertThat(location).contains("isNewMember=false");
 		assertThat(location).contains("hasAgreedRequiredTerms=true");
 		assertThat(location).contains("activeTeamId=10");
+	}
+
+	@Test
+	@DisplayName("Apple OAuth callback은 id_token 파라미터를 로그인 서비스에 전달한다")
+	void handleAppleOAuthCallbackUsesIdTokenParameter() throws Exception {
+		when(authService.loginWithOAuth("apple", "code", "state", "state", "id-token"))
+				.thenReturn(new LoginResponse(
+						"access-token",
+						"refresh-token",
+						true,
+						false,
+						null
+				));
+
+		String location = mockMvc.perform(post("/api/v1/auth/oauth/apple/callback")
+						.param("code", "code")
+						.param("state", "state")
+						.param("id_token", "id-token")
+						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state")))
+				.andExpect(status().isFound())
+				.andExpect(cookie().value("refreshToken", "refresh-token"))
+				.andExpect(header().exists("Location"))
+				.andReturn()
+				.getResponse()
+				.getHeader("Location");
+
+		assertThat(location).contains("accessToken=access-token");
+		assertThat(location).contains("isNewMember=true");
+		verify(authService).loginWithOAuth("apple", "code", "state", "state", "id-token");
 	}
 
 	@Test
@@ -176,6 +205,13 @@ class AuthControllerTest extends ApiTest {
 								"kakao-client-id",
 								"kakao-client-secret",
 								"http://localhost:8080/api/v1/auth/oauth/kakao/callback"
+						),
+						new AuthProperties.Apple(
+								"apple-client-id",
+								"apple-team-id",
+								"apple-key-id",
+								"apple-private-key",
+								"http://localhost:8080/api/v1/auth/oauth/apple/callback"
 						)
 				),
 				new AuthProperties.Jwt(

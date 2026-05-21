@@ -28,6 +28,7 @@ public class AuthService {
 	private final GoogleOAuthService googleOAuthService;
 	private final KakaoOAuthService kakaoOAuthService;
 	private final AppleOAuthService appleOAuthService;
+	private final OAuthStateStore oauthStateStore;
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
 	private final ActiveTeamService activeTeamService;
@@ -37,6 +38,7 @@ public class AuthService {
 		SocialProvider socialProvider = parseProvider(provider);
 		try {
 			String state = createState();
+			oauthStateStore.save(state, socialProvider.name());
 			return switch (socialProvider) {
 				case GOOGLE -> googleOAuthService.getAuthorizeUrl(state);
 				case KAKAO -> kakaoOAuthService.getAuthorizeUrl(state);
@@ -65,11 +67,17 @@ public class AuthService {
 	}
 
 	@Transactional
+	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState) {
+		return loginWithOAuth(provider, code, state, savedState, null);
+	}
+
+	@Transactional
 	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState, String idToken) {
 		SocialProvider socialProvider = parseProvider(provider);
-		validateCallbackRequest(code, state, savedState);
+		validateCallbackRequest(code, state);
 
 		try {
+			validateOAuthState(socialProvider, state, savedState);
 			OAuthUserInfo userInfo = switch (socialProvider) {
 				case GOOGLE -> googleOAuthService.getUserInfo(code);
 				case KAKAO -> kakaoOAuthService.getUserInfo(code);
@@ -83,21 +91,19 @@ public class AuthService {
 			boolean[] created = {false};
 			Member member = memberRepository
 					.findBySocialProviderAndProviderId(userInfo.provider(), userInfo.providerId())
-					.map(existingMember -> {
-						existingMember.updateSocialProfile(userInfo.email(), userInfo.name(), userInfo.profileImageUrl());
-						return existingMember;
-					})
-					.orElseGet(() -> {
-						created[0] = true;
-						return memberRepository.save(Member.createSocialMember(
-								userInfo.email(),
-								userInfo.name(),
-								defaultNickname(userInfo),
-								userInfo.profileImageUrl(),
-								userInfo.provider(),
-								userInfo.providerId()
-						));
-					});
+					.orElse(null);
+
+			if (member == null) {
+				created[0] = true;
+				member = memberRepository.save(Member.createSocialMember(
+						userInfo.email(),
+						userInfo.name(),
+						defaultNickname(userInfo),
+						userInfo.profileImageUrl(),
+						userInfo.provider(),
+						userInfo.providerId()
+				));
+			}
 
 			TokenResponse token = tokenService.issueToken(member.getId());
 			return new LoginResponse(
@@ -128,13 +134,24 @@ public class AuthService {
 		}
 	}
 
-	private void validateCallbackRequest(String code, String state, String savedState) {
+	private void validateCallbackRequest(String code, String state) {
 		if (code == null || code.isBlank()) {
 			throw new BusinessException(ErrorCode.AUTH103);
 		}
-		if (state == null || state.isBlank() || savedState == null || savedState.isBlank() || !state.equals(savedState)) {
+		if (state == null || state.isBlank()) {
 			throw new BusinessException(ErrorCode.AUTH103);
 		}
+	}
+
+	private void validateOAuthState(SocialProvider provider, String state, String savedState) {
+		if (oauthStateStore.consume(state, provider.name())) {
+			return;
+		}
+		if (savedState != null && !savedState.isBlank() && state.equals(savedState)) {
+			log.info("OAuth callback accepted by cookie fallback. provider={}", provider);
+			return;
+		}
+		throw new BusinessException(ErrorCode.AUTH103);
 	}
 
 	private String defaultNickname(OAuthUserInfo userInfo) {
@@ -145,7 +162,7 @@ public class AuthService {
 		if (email != null && email.contains("@")) {
 			return truncate(email.substring(0, email.indexOf('@')));
 		}
-		return "Google User";
+		return "Tikitak User";
 	}
 
 	private String truncate(String value) {

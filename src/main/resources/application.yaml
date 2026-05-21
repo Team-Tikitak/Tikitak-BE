@@ -3,6 +3,12 @@ spring:
   application:
     name: tikitak
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
@@ -36,6 +42,9 @@ management:
 auth:
   oauth:
     frontend-redirect-uri: ${FRONTEND_REDIRECT_URI}
+    state:
+      redis-key-prefix: "${OAUTH_STATE_REDIS_KEY_PREFIX:tikitak:${spring.profiles.active:local}:oauth:state:}"
+      ttl: ${OAUTH_STATE_TTL:PT5M}
     google:
       client-id: ${GOOGLE_CLIENT_ID}
       client-secret: ${GOOGLE_CLIENT_SECRET}
