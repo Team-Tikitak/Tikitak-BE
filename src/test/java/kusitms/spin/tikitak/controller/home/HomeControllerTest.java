@@ -178,6 +178,61 @@ class HomeControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.code").value("TEAM008"));
 	}
 
+	@Test
+	@DisplayName("GET /api/v1/teams/{teamId}/home/combinations는 콤비네이션 조합과 피드를 반환한다")
+	void getCombination() throws Exception {
+		HomeResponseDTO.CombinationResponse response = HomeResponseDTO.CombinationResponse.builder()
+				.combination(List.of(
+						taggedMember(101L, "홍길동"),
+						taggedMember(102L, "김철수")
+				))
+				.feeds(List.of(
+						feedListItem(501L, "콤비네이션 피드1", 3, 2),
+						feedListItem(502L, "콤비네이션 피드2", 1, 0),
+						feedListItem(503L, "콤비네이션 피드3", 2, 1)
+				))
+				.build();
+
+		when(homeService.getCombination(TEST_MEMBER_ID, TEAM_ID)).thenReturn(response);
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/combinations", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.combination").isArray())
+				.andExpect(jsonPath("$.data.combination.length()").value(2))
+				.andExpect(jsonPath("$.data.combination[0].teamMemberId").value(101))
+				.andExpect(jsonPath("$.data.combination[0].nickname").value("홍길동"))
+				.andExpect(jsonPath("$.data.combination[1].teamMemberId").value(102))
+				.andExpect(jsonPath("$.data.feeds").isArray())
+				.andExpect(jsonPath("$.data.feeds.length()").value(3))
+				.andExpect(jsonPath("$.data.feeds[0].feedId").value(501))
+				.andExpect(jsonPath("$.data.feeds[0].content").value("콤비네이션 피드1"));
+	}
+
+	@Test
+	@DisplayName("콤비네이션 피드가 3개 미만이면 빈 조합과 빈 피드를 반환한다")
+	void getCombinationReturnsEmptyWhenNotEnoughFeeds() throws Exception {
+		when(homeService.getCombination(TEST_MEMBER_ID, TEAM_ID))
+				.thenReturn(HomeResponseDTO.CombinationResponse.builder()
+						.combination(List.of()).feeds(List.of()).build());
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/combinations", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.combination").isEmpty())
+				.andExpect(jsonPath("$.data.feeds").isEmpty());
+	}
+
+	@Test
+	@DisplayName("팀 접근 권한이 없으면 콤비네이션도 403을 반환한다")
+	void getCombinationReturnsForbiddenWhenNotTeamMember() throws Exception {
+		when(homeService.getCombination(TEST_MEMBER_ID, TEAM_ID))
+				.thenThrow(new BusinessException(ErrorCode.TEAM008));
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/combinations", TEAM_ID))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("TEAM008"));
+	}
+
 	// --- helpers ---
 
 	private HomeResponseDTO.BestAttendanceMemberDTO member(
@@ -189,6 +244,14 @@ class HomeControllerTest extends ApiTest {
 				.nickname(nickname)
 				.profileImgUrl(profileImgUrl)
 				.tagCount(tagCount)
+				.build();
+	}
+
+	private FeedResponseDTO.TaggedMemberDTO taggedMember(Long teamMemberId, String nickname) {
+		return FeedResponseDTO.TaggedMemberDTO.builder()
+				.teamMemberId(teamMemberId)
+				.nickname(nickname)
+				.profileImageUrl("https://example.com/profile.png")
 				.build();
 	}
 

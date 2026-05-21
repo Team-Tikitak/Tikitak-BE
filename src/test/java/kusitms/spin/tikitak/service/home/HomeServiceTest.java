@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.feed.FeedService;
+import kusitms.spin.tikitak.service.feed.FeedService.CombinationItemsResult;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
@@ -149,6 +150,38 @@ class HomeServiceTest extends UnitTest {
 		assertThat(result.getFeeds()).isEmpty();
 	}
 
+	@Test
+	@DisplayName("콤비네이션이 있으면 조합 멤버와 피드를 함께 반환한다")
+	void returnsCombinationWithMembersAndFeeds() {
+		List<FeedResponseDTO.TaggedMemberDTO> combo = List.of(
+				taggedMember(101L, "홍길동"),
+				taggedMember(102L, "김철수")
+		);
+		List<FeedResponseDTO.FeedListItemDTO> feeds = List.of(
+				dummyFeedItem(501L), dummyFeedItem(502L), dummyFeedItem(503L)
+		);
+		when(feedService.getCombinationItems(MEMBER_ID, TEAM_ID))
+				.thenReturn(new FeedService.CombinationItemsResult(combo, feeds));
+
+		HomeResponseDTO.CombinationResponse result = homeService.getCombination(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getCombination()).hasSize(2);
+		assertThat(result.getCombination().get(0).getTeamMemberId()).isEqualTo(101L);
+		assertThat(result.getFeeds()).hasSize(3);
+	}
+
+	@Test
+	@DisplayName("콤비네이션 피드가 3개 미만이면 빈 조합과 빈 피드를 반환한다")
+	void returnsEmptyWhenNotEnoughCombinationFeeds() {
+		when(feedService.getCombinationItems(MEMBER_ID, TEAM_ID))
+				.thenReturn(FeedService.CombinationItemsResult.empty());
+
+		HomeResponseDTO.CombinationResponse result = homeService.getCombination(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getCombination()).isEmpty();
+		assertThat(result.getFeeds()).isEmpty();
+	}
+
 	// --- helpers ---
 
 	private void stubRequester() {
@@ -156,6 +189,14 @@ class HomeServiceTest extends UnitTest {
 				eq(MEMBER_ID), eq(TEAM_ID),
 				eq(TeamMemberStatus.ACTIVE), eq(TeamStatus.ACTIVE)
 		)).thenReturn(Optional.of(requester));
+	}
+
+	private FeedResponseDTO.TaggedMemberDTO taggedMember(Long teamMemberId, String nickname) {
+		return FeedResponseDTO.TaggedMemberDTO.builder()
+				.teamMemberId(teamMemberId)
+				.nickname(nickname)
+				.profileImageUrl("https://example.com/p.png")
+				.build();
 	}
 
 	private FeedResponseDTO.FeedListItemDTO dummyFeedItem(Long feedId) {
