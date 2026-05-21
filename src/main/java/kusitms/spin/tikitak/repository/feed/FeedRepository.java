@@ -387,6 +387,8 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			JOIN feed_tag ft2
 			    ON ft1.feed_id = ft2.feed_id AND ft1.team_member_id < ft2.team_member_id
 			JOIN feed f ON f.id = ft1.feed_id
+			JOIN team_member tm1 ON tm1.id = ft1.team_member_id AND tm1.status = 'ACTIVE'
+			JOIN team_member tm2 ON tm2.id = ft2.team_member_id AND tm2.status = 'ACTIVE'
 			WHERE f.team_id = :teamId AND f.deleted_at IS NULL
 			GROUP BY ft1.team_member_id, ft2.team_member_id
 			ORDER BY COUNT(*) DESC, ft1.team_member_id ASC, ft2.team_member_id ASC
