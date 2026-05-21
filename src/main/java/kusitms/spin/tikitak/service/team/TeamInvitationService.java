@@ -97,10 +97,6 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
 
-		if (caller.getRole() != TeamMemberRole.OWNER) {
-			throw new BusinessException(ErrorCode.INVITE003);
-		}
-
 		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.filter(TeamInvite::isActive)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE002));
