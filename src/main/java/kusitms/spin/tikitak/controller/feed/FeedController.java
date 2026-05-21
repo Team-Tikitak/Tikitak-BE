@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/teams/{teamId}/feeds")
@@ -47,9 +49,14 @@ public class FeedController {
 			@Parameter(description = "조회 개수. 기본값 20, 최대 50")
 			@RequestParam(required = false) Integer size,
 			@Parameter(description = "특정 장소의 피드만 조회할 외부 장소 ID")
-			@RequestParam(required = false) String placeId
+			@RequestParam(required = false) String placeId,
+			@Parameter(description = "피드 유형 필터. ALL, GENERAL, DAILY_QUESTION")
+			@RequestParam(required = false) String type,
+			@Parameter(description = "태그된 팀 멤버 ID 목록. 모든 ID가 동시에 태그된 피드만 조회")
+			@RequestParam(required = false) List<Long> taggedTeamMemberIds
 	) {
-		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(memberId, teamId, cursor, size, placeId);
+		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
+				memberId, teamId, cursor, size, placeId, type, taggedTeamMemberIds);
 		return CommonResponse.success(response);
 	}
 
