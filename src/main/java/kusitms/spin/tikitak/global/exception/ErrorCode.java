@@ -116,6 +116,17 @@ public enum ErrorCode {
     FEED015("FEED015", "해당 피드를 삭제할 수 없습니다.", 403),
     FEED016("FEED016", "피드 삭제에 실패했습니다.", 500),
 
+    // Daily Question
+    DAILY_QUESTION001("DAILY_QUESTION001", "오늘의 질문을 찾을 수 없습니다.", 404),
+    DAILY_QUESTION002("DAILY_QUESTION002", "오늘의 질문이 아닙니다.", 400),
+    DAILY_QUESTION003("DAILY_QUESTION003", "이미 오늘의 질문에 답변했습니다.", 409),
+    DAILY_QUESTION004("DAILY_QUESTION004", "오늘의 질문 답변을 찾을 수 없습니다.", 404),
+    DAILY_QUESTION005("DAILY_QUESTION005", "수정할 답변 정보가 없습니다.", 400),
+    DAILY_QUESTION006("DAILY_QUESTION006", "오늘의 질문 답변 이미지는 필수입니다.", 400),
+    DAILY_QUESTION007("DAILY_QUESTION007", "사용할 수 없는 오늘의 질문 답변 이미지입니다.", 400),
+    DAILY_QUESTION008("DAILY_QUESTION008", "오늘의 질문 답변은 전용 API로만 수정할 수 있습니다.", 400),
+    DAILY_QUESTION009("DAILY_QUESTION009", "오늘의 질문 답변 본문 형식이 올바르지 않습니다.", 400),
+
     // Comment
     COMMENT001("COMMENT001", "댓글 목록 조회에 실패했습니다.", 500),
     COMMENT002("COMMENT002", "댓글 내용은 필수입니다.", 400),
