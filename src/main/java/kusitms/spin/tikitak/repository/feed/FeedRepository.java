@@ -234,4 +234,52 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			LIMIT 10
 			""", nativeQuery = true)
 	List<Long> findAllTaggedFeedIds(@Param("teamId") Long teamId);
+
+	@Query(value = """
+			SELECT ft1.team_member_id, ft2.team_member_id
+			FROM feed_tag ft1
+			JOIN feed_tag ft2
+			    ON ft1.feed_id = ft2.feed_id AND ft1.team_member_id < ft2.team_member_id
+			JOIN feed f ON f.id = ft1.feed_id
+			WHERE f.team_id = :teamId AND f.deleted_at IS NULL
+			GROUP BY ft1.team_member_id, ft2.team_member_id
+			ORDER BY COUNT(*) DESC, ft1.team_member_id ASC, ft2.team_member_id ASC
+			LIMIT 1
+			""", nativeQuery = true)
+	List<Object[]> findTopCombinationPair(@Param("teamId") Long teamId);
+
+	@Query(value = """
+			WITH pair_feeds AS (
+			    SELECT f.id
+			    FROM feed f
+			    WHERE f.team_id = :teamId AND f.deleted_at IS NULL
+			      AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mA)
+			      AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mB)
+			)
+			SELECT ft.team_member_id
+			FROM feed_tag ft
+			WHERE ft.feed_id IN (SELECT id FROM pair_feeds)
+			GROUP BY ft.team_member_id
+			HAVING COUNT(DISTINCT ft.feed_id) = (SELECT COUNT(*) FROM pair_feeds)
+			""", nativeQuery = true)
+	List<Long> findAlwaysCoTaggedMemberIds(
+			@Param("teamId") Long teamId,
+			@Param("mA") Long mA,
+			@Param("mB") Long mB
+	);
+
+	@Query(value = """
+			SELECT f.id
+			FROM feed f
+			WHERE f.team_id = :teamId AND f.deleted_at IS NULL
+			  AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mA)
+			  AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mB)
+			ORDER BY f.created_at DESC, f.id DESC
+			LIMIT 10
+			""", nativeQuery = true)
+	List<Long> findCombinationFeedIds(
+			@Param("teamId") Long teamId,
+			@Param("mA") Long mA,
+			@Param("mB") Long mB
+	);
 }

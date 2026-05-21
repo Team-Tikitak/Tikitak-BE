@@ -56,6 +56,16 @@ public class FeedService {
 	private static final int MAX_TAG_COUNT = 11;
 	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
 	private static final int ALL_TAGGED_MIN_FEEDS = 3;
+	private static final int COMBINATION_MIN_FEEDS = 3;
+
+	public record CombinationItemsResult(
+			List<FeedResponseDTO.TaggedMemberDTO> combination,
+			List<FeedResponseDTO.FeedListItemDTO> feeds
+	) {
+		public static CombinationItemsResult empty() {
+			return new CombinationItemsResult(List.of(), List.of());
+		}
+	}
 
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
@@ -182,6 +192,54 @@ public class FeedService {
 						myReactionMap.get(feed.getId())
 				))
 				.toList();
+	}
+
+	public CombinationItemsResult getCombinationItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		List<Object[]> topPair = feedRepository.findTopCombinationPair(teamId);
+		if (topPair.isEmpty()) {
+			return CombinationItemsResult.empty();
+		}
+
+		Long mA = ((Number) topPair.get(0)[0]).longValue();
+		Long mB = ((Number) topPair.get(0)[1]).longValue();
+
+		List<Long> feedIds = feedRepository.findCombinationFeedIds(teamId, mA, mB);
+		if (feedIds.size() < COMBINATION_MIN_FEEDS) {
+			return CombinationItemsResult.empty();
+		}
+
+		List<Long> memberIds = feedRepository.findAlwaysCoTaggedMemberIds(teamId, mA, mB);
+		List<FeedResponseDTO.TaggedMemberDTO> combination = teamMemberRepository
+				.findActiveByTeamIdAndIds(teamId, memberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
+				.stream()
+				.map(tm -> FeedResponseDTO.TaggedMemberDTO.builder()
+						.teamMemberId(tm.getId())
+						.nickname(tm.getNickname())
+						.profileImageUrl(tm.getProfileImgUrl())
+						.build())
+				.toList();
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(feedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+
+		List<FeedResponseDTO.FeedListItemDTO> feeds = feedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+
+		return new CombinationItemsResult(combination, feeds);
 	}
 
 	@Transactional

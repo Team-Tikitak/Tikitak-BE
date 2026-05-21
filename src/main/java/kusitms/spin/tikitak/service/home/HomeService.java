@@ -71,4 +71,12 @@ public class HomeService {
 				.feeds(feedService.getAllTaggedItems(memberId, teamId))
 				.build();
 	}
+
+	public HomeResponseDTO.CombinationResponse getCombination(Long memberId, Long teamId) {
+		FeedService.CombinationItemsResult result = feedService.getCombinationItems(memberId, teamId);
+		return HomeResponseDTO.CombinationResponse.builder()
+				.combination(result.combination())
+				.feeds(result.feeds())
+				.build();
+	}
 }

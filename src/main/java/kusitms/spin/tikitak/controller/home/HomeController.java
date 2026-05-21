@@ -51,4 +51,13 @@ public class HomeController {
 	) {
 		return CommonResponse.success(homeService.getAllTaggedFeeds(memberId, teamId));
 	}
+
+	@GetMapping("/combinations")
+	@Operation(summary = "콤비네이션 조회 API")
+	public CommonResponse<HomeResponseDTO.CombinationResponse> getCombination(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		return CommonResponse.success(homeService.getCombination(memberId, teamId));
+	}
 }

@@ -45,4 +45,13 @@ public class HomeResponseDTO {
 	public static class AllTaggedResponse {
 		private List<FeedResponseDTO.FeedListItemDTO> feeds;
 	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class CombinationResponse {
+		private List<FeedResponseDTO.TaggedMemberDTO> combination;
+		private List<FeedResponseDTO.FeedListItemDTO> feeds;
+	}
 }
