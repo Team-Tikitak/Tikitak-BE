@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.home;
 
+import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -9,6 +10,7 @@ import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.feed.FeedService;
+import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -122,6 +125,30 @@ class HomeServiceTest extends UnitTest {
 						assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TEAM008));
 	}
 
+	@Test
+	@DisplayName("전원 태그 피드가 3개 이상이면 목록을 반환한다")
+	void returnsAllTaggedFeedsWhenEnough() {
+		List<FeedResponseDTO.FeedListItemDTO> items = List.of(
+				dummyFeedItem(301L), dummyFeedItem(302L), dummyFeedItem(303L)
+		);
+		when(feedService.getAllTaggedItems(MEMBER_ID, TEAM_ID)).thenReturn(items);
+
+		HomeResponseDTO.AllTaggedResponse result = homeService.getAllTaggedFeeds(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getFeeds()).hasSize(3);
+		assertThat(result.getFeeds().get(0).getFeedId()).isEqualTo(301L);
+	}
+
+	@Test
+	@DisplayName("전원 태그 피드가 3개 미만이면 빈 목록을 반환한다")
+	void returnsEmptyWhenNotEnoughAllTaggedFeeds() {
+		when(feedService.getAllTaggedItems(MEMBER_ID, TEAM_ID)).thenReturn(List.of());
+
+		HomeResponseDTO.AllTaggedResponse result = homeService.getAllTaggedFeeds(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getFeeds()).isEmpty();
+	}
+
 	// --- helpers ---
 
 	private void stubRequester() {
@@ -129,6 +156,22 @@ class HomeServiceTest extends UnitTest {
 				eq(MEMBER_ID), eq(TEAM_ID),
 				eq(TeamMemberStatus.ACTIVE), eq(TeamStatus.ACTIVE)
 		)).thenReturn(Optional.of(requester));
+	}
+
+	private FeedResponseDTO.FeedListItemDTO dummyFeedItem(Long feedId) {
+		return FeedResponseDTO.FeedListItemDTO.builder()
+				.feedId(feedId)
+				.type(FeedType.GENERAL)
+				.content("피드 " + feedId)
+				.author(FeedResponseDTO.AuthorDTO.builder()
+						.teamMemberId(100L).nickname("테스터")
+						.profileImageUrl("https://example.com/p.png")
+						.isAnonymous(false).build())
+				.reactionSummary(FeedResponseDTO.ReactionSummaryDTO.builder()
+						.totalCount(0).items(List.of()).build())
+				.commentCount(0)
+				.createdAt(LocalDateTime.of(2026, 5, 15, 12, 0))
+				.build();
 	}
 
 	private void stubTagRows(List<Object[]> rows) {

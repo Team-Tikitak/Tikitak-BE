@@ -132,6 +132,52 @@ class HomeControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.code").value("TEAM008"));
 	}
 
+	@Test
+	@DisplayName("GET /api/v1/teams/{teamId}/home/all-tagged는 전원 태그 피드 목록을 반환한다")
+	void getAllTaggedFeeds() throws Exception {
+		HomeResponseDTO.AllTaggedResponse response = HomeResponseDTO.AllTaggedResponse.builder()
+				.feeds(List.of(
+						feedListItem(401L, "전원 태그 피드1", 2, 1),
+						feedListItem(402L, "전원 태그 피드2", 1, 0),
+						feedListItem(403L, "전원 태그 피드3", 0, 3)
+				))
+				.build();
+
+		when(homeService.getAllTaggedFeeds(TEST_MEMBER_ID, TEAM_ID)).thenReturn(response);
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/all-tagged", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.feeds").isArray())
+				.andExpect(jsonPath("$.data.feeds.length()").value(3))
+				.andExpect(jsonPath("$.data.feeds[0].feedId").value(401))
+				.andExpect(jsonPath("$.data.feeds[0].content").value("전원 태그 피드1"))
+				.andExpect(jsonPath("$.data.feeds[1].feedId").value(402))
+				.andExpect(jsonPath("$.data.feeds[2].feedId").value(403));
+	}
+
+	@Test
+	@DisplayName("전원 태그 피드가 3개 미만이면 빈 목록을 반환한다")
+	void getAllTaggedFeedsReturnsEmptyWhenNotEnough() throws Exception {
+		when(homeService.getAllTaggedFeeds(TEST_MEMBER_ID, TEAM_ID))
+				.thenReturn(HomeResponseDTO.AllTaggedResponse.builder().feeds(List.of()).build());
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/all-tagged", TEAM_ID))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.feeds").isEmpty());
+	}
+
+	@Test
+	@DisplayName("팀 접근 권한이 없으면 전원 태그 피드도 403을 반환한다")
+	void getAllTaggedFeedsReturnsForbiddenWhenNotTeamMember() throws Exception {
+		when(homeService.getAllTaggedFeeds(TEST_MEMBER_ID, TEAM_ID))
+				.thenThrow(new BusinessException(ErrorCode.TEAM008));
+
+		mockMvc.perform(get("/api/v1/teams/{teamId}/home/all-tagged", TEAM_ID))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("TEAM008"));
+	}
+
 	// --- helpers ---
 
 	private HomeResponseDTO.BestAttendanceMemberDTO member(
