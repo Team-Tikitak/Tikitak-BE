@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -148,6 +149,51 @@ class DailyQuestionServiceTest extends UnitTest {
 				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DAILY_QUESTION003));
 
 		verify(mediaRepository, never()).findByPublicIdForUpdate(any());
+	}
+
+	@Test
+	@DisplayName("Maps daily answer unique constraint violation to duplicated answer error")
+	void createMyAnswerThrowsWhenDailyAnswerConstraintViolated() {
+		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
+				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
+		stubActiveAuthor();
+		stubTodayQuestion();
+		when(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
+				.thenReturn(Optional.empty());
+		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+		when(feedRepository.save(any(Feed.class))).thenThrow(
+				new DataIntegrityViolationException("constraint [uk_feed_daily_answer_active_key]")
+		);
+
+		assertThatThrownBy(() -> dailyQuestionService.createMyAnswer(
+				MEMBER_ID,
+				TEAM_ID,
+				QUESTION_ID,
+				new DailyQuestionRequestDTO.AnswerCreateRequestDTO("answer", MEDIA_PUBLIC_ID)
+		)).isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DAILY_QUESTION003));
+	}
+
+	@Test
+	@DisplayName("Does not hide unrelated data integrity violations")
+	void createMyAnswerRethrowsUnrelatedDataIntegrityViolation() {
+		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
+				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
+		DataIntegrityViolationException exception =
+				new DataIntegrityViolationException("constraint [fk_feed_question]");
+		stubActiveAuthor();
+		stubTodayQuestion();
+		when(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
+				.thenReturn(Optional.empty());
+		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+		when(feedRepository.save(any(Feed.class))).thenThrow(exception);
+
+		assertThatThrownBy(() -> dailyQuestionService.createMyAnswer(
+				MEMBER_ID,
+				TEAM_ID,
+				QUESTION_ID,
+				new DailyQuestionRequestDTO.AnswerCreateRequestDTO("answer", MEDIA_PUBLIC_ID)
+		)).isSameAs(exception);
 	}
 
 	@Test

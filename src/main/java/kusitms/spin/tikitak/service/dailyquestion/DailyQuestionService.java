@@ -42,6 +42,7 @@ import java.util.stream.Collectors;
 public class DailyQuestionService {
 
 	private static final int MAX_CONTENT_LENGTH = 1000;
+	private static final String DAILY_ANSWER_ACTIVE_KEY_CONSTRAINT = "uk_feed_daily_answer_active_key";
 
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
@@ -106,6 +107,9 @@ public class DailyQuestionService {
 		try {
 			return toMutation(feedRepository.save(feed));
 		} catch (DataIntegrityViolationException e) {
+			if (!isDailyAnswerDuplicate(e)) {
+				throw e;
+			}
 			throw new BusinessException(ErrorCode.DAILY_QUESTION003, e);
 		}
 	}
@@ -237,6 +241,18 @@ public class DailyQuestionService {
 
 	private String dailyAnswerActiveKey(Long teamId, Long teamMemberId, Long questionId, LocalDate answerDate) {
 		return teamId + ":" + teamMemberId + ":" + questionId + ":" + answerDate;
+	}
+
+	private boolean isDailyAnswerDuplicate(Throwable exception) {
+		Throwable current = exception;
+		while (current != null) {
+			String message = current.getMessage();
+			if (message != null && message.contains(DAILY_ANSWER_ACTIVE_KEY_CONSTRAINT)) {
+				return true;
+			}
+			current = current.getCause();
+		}
+		return false;
 	}
 
 	private DailyQuestionResponseDTO.AnswerMutationResponseDTO toMutation(Feed feed) {
