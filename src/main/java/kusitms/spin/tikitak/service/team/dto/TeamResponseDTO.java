@@ -23,6 +23,16 @@ public class TeamResponseDTO {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    public static class MyProfileDTO {
+        private String nickname;
+        private TeamMemberRole teamMemberRole;
+        private String profileImgUrl;
+    }
+
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class TeamMemberDTO {
         private String nickname;
         private TeamMemberRole teamMemberRole;
@@ -36,7 +46,8 @@ public class TeamResponseDTO {
     @AllArgsConstructor
     public static class TeamDetailResponseDTO {
         private String teamName;
-        private List<TeamMemberDTO> teamMemberDTOList;
+        private MyProfileDTO myProfile;
+        private List<TeamMemberDTO> teamMembers;
     }
 
     @Getter

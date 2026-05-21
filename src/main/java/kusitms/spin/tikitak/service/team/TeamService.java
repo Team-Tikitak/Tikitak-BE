@@ -99,29 +99,34 @@ public class TeamService {
     }
 
     public TeamResponseDTO.TeamDetailResponseDTO viewTeamDetail(Long memberId, Long teamId) {
-        // Team과 함께 TeamMember 들도 같이 가져옴
         Team team = teamRepository.findTeamWithTeamMembersById(teamId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
 
-        // 사용자가 해당 팀에 속해 있는지 확인
         TeamMember currentMember = team.getTeamMembers().stream()
                 .filter(tm -> tm.getMember().getId().equals(memberId)
                         && tm.getStatus() == TeamMemberStatus.ACTIVE)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
-        List<TeamResponseDTO.TeamMemberDTO> teamMemberDTOList = team.getTeamMembers().stream()
+        List<TeamResponseDTO.TeamMemberDTO> members = team.getTeamMembers().stream()
+                .filter(tm -> tm.getStatus() == TeamMemberStatus.ACTIVE
+                        && !tm.getId().equals(currentMember.getId()))
                 .map(tm -> TeamResponseDTO.TeamMemberDTO.builder()
                         .nickname(tm.getNickname())
                         .teamMemberRole(tm.getRole())
                         .email(tm.getMember().getEmail())
                         .profileImgUrl(tm.getProfileImgUrl())
-                        .build()
-                ).toList();
+                        .build())
+                .toList();
 
         return TeamResponseDTO.TeamDetailResponseDTO.builder()
                 .teamName(team.getName())
-                .teamMemberDTOList(teamMemberDTOList)
+                .myProfile(TeamResponseDTO.MyProfileDTO.builder()
+                        .nickname(currentMember.getNickname())
+                        .teamMemberRole(currentMember.getRole())
+                        .profileImgUrl(currentMember.getProfileImgUrl())
+                        .build())
+                .teamMembers(members)
                 .build();
     }
 
