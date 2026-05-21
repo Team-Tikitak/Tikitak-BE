@@ -519,6 +519,13 @@ public class FeedService {
 			if (token.endsWith("구") || token.endsWith("군")) {
 				break;
 			}
+			if (token.endsWith("특별자치시")) {
+				break;
+			}
+			if (token.endsWith("도")) {
+				sb.append(" ");
+				continue;
+			}
 			if (token.endsWith("시")
 					&& !token.endsWith("특별시")
 					&& !token.endsWith("광역시")
