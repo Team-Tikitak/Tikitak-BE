@@ -131,6 +131,74 @@ public interface FeedRepository extends JpaRepository<Feed, Long> {
 			Pageable pageable
 	);
 
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "tags", "tags.teamMember" })
+	@Query("""
+			select f
+			from Feed f
+			left join f.place p
+			where f.team.id = :teamId
+				and f.deletedAt is null
+				and (:placeId is null or p.externalPlaceId = :placeId)
+				and (
+					:feedType is null
+					or (:feedType = 'GENERAL' and f.question is null)
+					or (:feedType = 'DAILY_QUESTION' and f.question is not null)
+				)
+				and f.id in (
+					select tag.feed.id
+					from FeedTag tag
+					where tag.teamMember.id in :taggedTeamMemberIds
+					group by tag.feed.id
+					having count(distinct tag.teamMember.id) = :taggedTeamMemberCount
+				)
+			order by f.createdAt desc, f.id desc
+			""")
+	List<Feed> findActiveFirstPageByTaggedTeamMemberIds(
+			@Param("teamId") Long teamId,
+			@Param("placeId") String placeId,
+			@Param("feedType") String feedType,
+			@Param("taggedTeamMemberIds") List<Long> taggedTeamMemberIds,
+			@Param("taggedTeamMemberCount") long taggedTeamMemberCount,
+			Pageable pageable
+	);
+
+	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place" })
+	@Query("""
+			select f
+			from Feed f
+			left join f.place p
+			where f.team.id = :teamId
+				and f.deletedAt is null
+				and (:placeId is null or p.externalPlaceId = :placeId)
+				and (
+					:feedType is null
+					or (:feedType = 'GENERAL' and f.question is null)
+					or (:feedType = 'DAILY_QUESTION' and f.question is not null)
+				)
+				and f.id in (
+					select tag.feed.id
+					from FeedTag tag
+					where tag.teamMember.id in :taggedTeamMemberIds
+					group by tag.feed.id
+					having count(distinct tag.teamMember.id) = :taggedTeamMemberCount
+				)
+				and (
+					f.createdAt < :cursorCreatedAt
+					or (f.createdAt = :cursorCreatedAt and f.id < :cursorFeedId)
+				)
+			order by f.createdAt desc, f.id desc
+			""")
+	List<Feed> findActiveCursorPageByTaggedTeamMemberIds(
+			@Param("teamId") Long teamId,
+			@Param("placeId") String placeId,
+			@Param("feedType") String feedType,
+			@Param("taggedTeamMemberIds") List<Long> taggedTeamMemberIds,
+			@Param("taggedTeamMemberCount") long taggedTeamMemberCount,
+			@Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+			@Param("cursorFeedId") Long cursorFeedId,
+			Pageable pageable
+	);
+
 	@Query("""
 			select f.id
 			from Feed f

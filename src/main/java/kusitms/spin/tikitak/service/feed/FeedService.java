@@ -63,14 +63,23 @@ public class FeedService {
 	private final TeamMemberRepository teamMemberRepository;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId, Long teamId, String cursor, Integer size, String placeId, String type
+			Long memberId,
+			Long teamId,
+			String cursor,
+			Integer size,
+			String placeId,
+			String type,
+			List<Long> taggedTeamMemberIds
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
 		FeedTypeFilter feedType = parseFeedType(type);
+		List<Long> normalizedTaggedTeamMemberIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
+		validateTaggedTeamMembers(teamId, normalizedTaggedTeamMemberIds);
 
-		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), feedType, parsedCursor, pageSize);
+		List<Feed> feeds = findFeedPage(
+				teamId, blankToNull(placeId), feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -368,17 +377,7 @@ public class FeedService {
 	}
 
 	private List<TeamMember> resolveTaggedMembers(Long teamId, List<Long> taggedTeamMemberIds) {
-		if (taggedTeamMemberIds == null || taggedTeamMemberIds.isEmpty()) {
-			return List.of();
-		}
-		List<Long> distinctIds = taggedTeamMemberIds.stream()
-				.filter(Objects::nonNull)
-				.collect(Collectors.toCollection(LinkedHashSet::new))
-				.stream()
-				.toList();
-		if (distinctIds.size() > MAX_TAG_COUNT) {
-			throw new BusinessException(ErrorCode.FEED009);
-		}
+		List<Long> distinctIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
 		if (distinctIds.isEmpty()) {
 			return List.of();
 		}
@@ -393,6 +392,32 @@ public class FeedService {
 		return distinctIds.stream()
 				.map(memberById::get)
 				.toList();
+	}
+
+	private List<Long> normalizeTaggedTeamMemberIds(List<Long> taggedTeamMemberIds) {
+		if (taggedTeamMemberIds == null || taggedTeamMemberIds.isEmpty()) {
+			return List.of();
+		}
+		List<Long> distinctIds = taggedTeamMemberIds.stream()
+				.filter(Objects::nonNull)
+				.collect(Collectors.toCollection(LinkedHashSet::new))
+				.stream()
+				.toList();
+		if (distinctIds.size() > MAX_TAG_COUNT) {
+			throw new BusinessException(ErrorCode.FEED009);
+		}
+		return distinctIds;
+	}
+
+	private void validateTaggedTeamMembers(Long teamId, List<Long> taggedTeamMemberIds) {
+		if (taggedTeamMemberIds.isEmpty()) {
+			return;
+		}
+		List<TeamMember> members = teamMemberRepository.findActiveByTeamIdAndIds(
+				teamId, taggedTeamMemberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		if (members.size() != taggedTeamMemberIds.size()) {
+			throw new BusinessException(ErrorCode.FEED008);
+		}
 	}
 
 	private FeedResponseDTO.FeedListItemDTO toListItem(
@@ -517,9 +542,31 @@ public class FeedService {
 				.collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
 	}
 
-	private List<Feed> findFeedPage(Long teamId, String placeId, FeedTypeFilter feedType, Cursor cursor, int pageSize) {
+	private List<Feed> findFeedPage(
+			Long teamId,
+			String placeId,
+			FeedTypeFilter feedType,
+			List<Long> taggedTeamMemberIds,
+			Cursor cursor,
+			int pageSize
+	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
 		String feedTypeName = feedType.queryValue();
+		if (!taggedTeamMemberIds.isEmpty()) {
+			if (cursor.createdAt() == null) {
+				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+						teamId,
+						placeId,
+						feedTypeName,
+						taggedTeamMemberIds,
+						(long) taggedTeamMemberIds.size(),
+						pageRequest
+				);
+			}
+			return feedRepository.findActiveCursorPageByTaggedTeamMemberIds(
+					teamId, placeId, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
+					cursor.createdAt(), cursor.feedId(), pageRequest);
+		}
 		if (cursor.createdAt() == null) {
 			if (placeId == null) {
 				return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
