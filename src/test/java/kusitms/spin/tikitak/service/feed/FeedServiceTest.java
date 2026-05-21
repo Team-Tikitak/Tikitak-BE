@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -176,6 +177,81 @@ class FeedServiceTest extends UnitTest {
 		assertThat(result.get(0).getFeedId()).isEqualTo(feedId1);
 		assertThat(result.get(0).getContent()).isEqualTo("1번 피드");
 		assertThat(result.get(1).getFeedId()).isEqualTo(feedId2);
+	@DisplayName("피드 본문은 1000자를 초과할 수 없다")
+	void createFeedThrowsWhenContentTooLong() {
+		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithContent(MEDIA_PUBLIC_ID, "a".repeat(1001));
+		stubActiveAuthor();
+
+		assertThatThrownBy(() -> feedService.createFeed(MEMBER_ID, TEAM_ID, request))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED007));
+	}
+
+	@Test
+	@DisplayName("태그 필터 ID가 모두 포함된 피드 목록을 조회한다")
+	void listFeedsWithTaggedTeamMemberFilter() {
+		List<Long> taggedTeamMemberIds = List.of(101L, 102L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(taggedTeamMemberIds),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(
+				activeMember(101L, activeMember(2L), team),
+				activeMember(102L, activeMember(3L), team)
+		));
+		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq(null),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(2L),
+				any(Pageable.class)
+		)).thenReturn(List.of());
+
+		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds);
+
+		assertThat(response.getItems()).isEmpty();
+		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
+				eq(TEAM_ID),
+				eq(null),
+				eq(null),
+				eq(taggedTeamMemberIds),
+				eq(2L),
+				any(Pageable.class)
+		);
+	}
+
+	@Test
+	@DisplayName("태그 필터 ID에 해당 팀 활성 멤버가 아니면 예외가 발생한다")
+	void listFeedsThrowsWhenTaggedTeamMemberIsInvalid() {
+		List<Long> taggedTeamMemberIds = List.of(101L, 102L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(taggedTeamMemberIds),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
+
+		assertThatThrownBy(() -> feedService.listFeeds(
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED008));
+	}
+
+	@Test
+	@DisplayName("태그 필터 ID는 중복 제거 후 최대 11개까지 허용한다")
+	void listFeedsThrowsWhenTaggedTeamMemberFilterCountExceeded() {
+		List<Long> taggedTeamMemberIds = List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L);
+		stubActiveAuthor();
+
+		assertThatThrownBy(() -> feedService.listFeeds(
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED009));
 	}
 
 	private void stubActiveAuthor() {

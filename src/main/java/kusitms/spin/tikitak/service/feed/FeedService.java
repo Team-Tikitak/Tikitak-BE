@@ -54,6 +54,7 @@ public class FeedService {
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
 	private static final int MAX_TAG_COUNT = 11;
+  private static final int MAX_CONTENT_LENGTH = 1000;
 	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
 	private static final int ALL_TAGGED_MIN_FEEDS = 3;
 	private static final int COMBINATION_MIN_FEEDS = 3;
@@ -76,13 +77,24 @@ public class FeedService {
 	private final TeamMemberRepository teamMemberRepository;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId, Long teamId, String cursor, Integer size, String placeId, String region
+			Long memberId,
+			Long teamId,
+			String cursor,
+			Integer size,
+			String placeId,
+      String region,
+			String type,
+			List<Long> taggedTeamMemberIds
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
+		FeedTypeFilter feedType = parseFeedType(type);
+		List<Long> normalizedTaggedTeamMemberIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
+		validateTaggedTeamMembers(teamId, normalizedTaggedTeamMemberIds);
 
-		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), blankToNull(region), parsedCursor, pageSize);
+		List<Feed> feeds = findFeedPage(
+				teamId, blankToNull(placeId), blankToNull(region), feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -391,6 +403,9 @@ public class FeedService {
 		if (content.isBlank()) {
 			throw new BusinessException(ErrorCode.FEED007);
 		}
+		if (content.length() > MAX_CONTENT_LENGTH) {
+			throw new BusinessException(ErrorCode.FEED007);
+		}
 		return content;
 	}
 
@@ -515,17 +530,7 @@ public class FeedService {
 	}
 
 	private List<TeamMember> resolveTaggedMembers(Long teamId, List<Long> taggedTeamMemberIds) {
-		if (taggedTeamMemberIds == null || taggedTeamMemberIds.isEmpty()) {
-			return List.of();
-		}
-		List<Long> distinctIds = taggedTeamMemberIds.stream()
-				.filter(Objects::nonNull)
-				.collect(Collectors.toCollection(LinkedHashSet::new))
-				.stream()
-				.toList();
-		if (distinctIds.size() > MAX_TAG_COUNT) {
-			throw new BusinessException(ErrorCode.FEED009);
-		}
+		List<Long> distinctIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
 		if (distinctIds.isEmpty()) {
 			return List.of();
 		}
@@ -540,6 +545,32 @@ public class FeedService {
 		return distinctIds.stream()
 				.map(memberById::get)
 				.toList();
+	}
+
+	private List<Long> normalizeTaggedTeamMemberIds(List<Long> taggedTeamMemberIds) {
+		if (taggedTeamMemberIds == null || taggedTeamMemberIds.isEmpty()) {
+			return List.of();
+		}
+		List<Long> distinctIds = taggedTeamMemberIds.stream()
+				.filter(Objects::nonNull)
+				.collect(Collectors.toCollection(LinkedHashSet::new))
+				.stream()
+				.toList();
+		if (distinctIds.size() > MAX_TAG_COUNT) {
+			throw new BusinessException(ErrorCode.FEED009);
+		}
+		return distinctIds;
+	}
+
+	private void validateTaggedTeamMembers(Long teamId, List<Long> taggedTeamMemberIds) {
+		if (taggedTeamMemberIds.isEmpty()) {
+			return;
+		}
+		List<TeamMember> members = teamMemberRepository.findActiveByTeamIdAndIds(
+				teamId, taggedTeamMemberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		if (members.size() != taggedTeamMemberIds.size()) {
+			throw new BusinessException(ErrorCode.FEED008);
+		}
 	}
 
 	private FeedResponseDTO.FeedListItemDTO toListItem(
@@ -664,26 +695,66 @@ public class FeedService {
 				.collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
 	}
 
-	private List<Feed> findFeedPage(Long teamId, String placeId, String region, Cursor cursor, int pageSize) {
+	private List<Feed> findFeedPage(
+			Long teamId,
+			String placeId,
+      String region,
+			FeedTypeFilter feedType,
+			List<Long> taggedTeamMemberIds,
+			Cursor cursor,
+			int pageSize
+	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
-		if (placeId != null) {
+		String feedTypeName = feedType.queryValue();
+  
+		if (!taggedTeamMemberIds.isEmpty()) {
 			if (cursor.createdAt() == null) {
-				return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, pageRequest);
+				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+						teamId,
+						placeId,
+						feedTypeName,
+						taggedTeamMemberIds,
+						(long) taggedTeamMemberIds.size(),
+						pageRequest
+				);
 			}
-			return feedRepository.findActiveCursorPageByPlaceId(
-					teamId, placeId, cursor.createdAt(), cursor.feedId(), pageRequest);
+			return feedRepository.findActiveCursorPageByTaggedTeamMemberIds(
+					teamId, placeId, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
+					cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
-		if (region != null) {
-			if (cursor.createdAt() == null) {
-				return feedRepository.findActiveFirstPageByRegion(teamId, region, pageRequest);
-			}
-			return feedRepository.findActiveCursorPageByRegion(
-					teamId, region, cursor.createdAt(), cursor.feedId(), pageRequest);
+
+    if (placeId != null) {
+        if (cursor.createdAt() == null) {
+            return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
+        }
+        return feedRepository.findActiveCursorPageByPlaceId(
+                teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+    }
+
+    if (region != null) {
+        if (cursor.createdAt() == null) {
+            return feedRepository.findActiveFirstPageByRegion(teamId, region, feedTypeName, pageRequest);
+        }
+        return feedRepository.findActiveCursorPageByRegion(
+                teamId, region, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+    }
+
+    if (cursor.createdAt() == null) {
+        return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
+    }
+    return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	}
+
+	private FeedTypeFilter parseFeedType(String type) {
+		String normalized = blankToNull(type);
+		if (normalized == null || "ALL".equalsIgnoreCase(normalized)) {
+			return FeedTypeFilter.ALL;
 		}
-		if (cursor.createdAt() == null) {
-			return feedRepository.findActiveFirstPage(teamId, pageRequest);
+		try {
+			return FeedTypeFilter.valueOf(normalized.toUpperCase());
+		} catch (RuntimeException e) {
+			throw new BusinessException(ErrorCode.FEED001, e);
 		}
-		return feedRepository.findActiveCursorPage(teamId, cursor.createdAt(), cursor.feedId(), pageRequest);
 	}
 
 	private FeedResponseDTO.FeedReactionResponseDTO reactionResponse(Long feedId, FeedReactionType myReaction) {
@@ -790,5 +861,15 @@ public class FeedService {
 	}
 
 	private record Cursor(LocalDateTime createdAt, Long feedId) {
+	}
+
+	private enum FeedTypeFilter {
+		ALL,
+		GENERAL,
+		DAILY_QUESTION;
+
+		private String queryValue() {
+			return this == ALL ? null : name();
+		}
 	}
 }
