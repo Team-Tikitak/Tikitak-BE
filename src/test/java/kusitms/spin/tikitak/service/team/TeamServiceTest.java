@@ -4,7 +4,6 @@ import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
-import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
@@ -68,10 +67,9 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 profileImageUrl이 없으면 Member의 기본 캐릭터 이미지를 TeamMember에 저장한다")
-	void createTeamUsesDefaultProfileImageWhenProfileImageUrlIsNull() {
+	@DisplayName("팀 생성 시 profileImageUrl이 없으면 TeamMember에 null을 저장한다")
+	void createTeamStoresNullWhenProfileImageUrlIsAbsent() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
-		String defaultImgUrl = "https://cdn.example.com/default-profiles/tak-leader.png";
 		TeamRequestDTO.TeamCreateRequestDTO request =
 				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", null, "닉네임");
 
@@ -79,13 +77,32 @@ class TeamServiceTest extends UnitTest {
 		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_LEADER)).thenReturn(defaultImgUrl);
 
 		teamService.createTeam(MEMBER_ID, request);
 
 		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
 		verify(teamMemberRepository).save(captor.capture());
-		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(defaultImgUrl);
+		assertThat(captor.getValue().getProfileImgUrl()).isNull();
+	}
+
+	@Test
+	@DisplayName("팀 생성 시 profileImageUrl이 있으면 해당 URL을 TeamMember에 저장한다")
+	void createTeamStoresProvidedProfileImageUrl() {
+		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		String customImgUrl = "https://example.com/my-photo.png";
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", customImgUrl, "닉네임");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		teamService.createTeam(MEMBER_ID, request);
+
+		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
+		verify(teamMemberRepository).save(captor.capture());
+		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(customImgUrl);
 	}
 
 	@Test
