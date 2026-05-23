@@ -16,6 +16,7 @@ import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.feed.dto.FeedCommentRequestDTO;
 import kusitms.spin.tikitak.service.feed.dto.FeedCommentResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class FeedCommentService {
 	private final FeedCommentRepository feedCommentRepository;
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
 
 	public FeedCommentResponseDTO.CommentListResponseDTO listComments(
 			Long memberId, Long teamId, Long feedId, Long feedImageId, String cursor, Integer size
@@ -219,13 +221,20 @@ public class FeedCommentService {
 				.author(FeedCommentResponseDTO.AuthorDTO.builder()
 						.teamMemberId(author.getId())
 						.nickname(author.getNickname())
-						.profileImageUrl(author.getProfileImgUrl())
+						.profileImageUrl(resolveProfileImgUrl(author))
 						.isAnonymous(false)
 						.build())
 				.isMine(author.getId().equals(viewerTeamMemberId))
 				.createdAt(comment.getCreatedAt())
 				.updatedAt(comment.getUpdatedAt())
 				.build();
+	}
+
+	private String resolveProfileImgUrl(TeamMember teamMember) {
+		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+			return teamMember.getProfileImgUrl();
+		}
+		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 
 	private record Cursor(LocalDateTime createdAt, Long commentId) {

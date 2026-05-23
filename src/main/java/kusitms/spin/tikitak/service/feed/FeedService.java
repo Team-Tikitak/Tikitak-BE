@@ -24,6 +24,7 @@ import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.feed.dto.FeedRequestDTO;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -74,6 +75,7 @@ public class FeedService {
 	private final MediaRepository mediaRepository;
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
 			Long memberId,
@@ -666,7 +668,7 @@ public class FeedService {
 		return FeedResponseDTO.AuthorDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(teamMember.getProfileImgUrl())
+				.profileImageUrl(resolveProfileImgUrl(teamMember))
 				.isAnonymous(false)
 				.build();
 	}
@@ -675,8 +677,15 @@ public class FeedService {
 		return FeedResponseDTO.TaggedMemberDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(teamMember.getProfileImgUrl())
+				.profileImageUrl(resolveProfileImgUrl(teamMember))
 				.build();
+	}
+
+	private String resolveProfileImgUrl(TeamMember teamMember) {
+		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+			return teamMember.getProfileImgUrl();
+		}
+		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 
 	private FeedResponseDTO.PlaceDTO toPlace(Place place, boolean includeAddress) {
