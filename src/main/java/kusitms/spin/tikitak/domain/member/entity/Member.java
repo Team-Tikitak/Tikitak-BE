@@ -19,6 +19,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.UUID;
 
 @Entity
 @Table(name = "member")
@@ -116,6 +117,7 @@ public class Member {
 		LocalDateTime now = LocalDateTime.now();
 		this.status = MemberStatus.INACTIVE;
 		this.activeTeamId = null;
+		this.providerId = "WITHDRAWN:" + this.id + ":" + UUID.randomUUID();
 		this.deletedAt = now;
 		this.updatedAt = now;
 	}
