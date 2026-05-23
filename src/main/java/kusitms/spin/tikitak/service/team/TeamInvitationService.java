@@ -161,7 +161,7 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
 
-		Team team = teamRepository.findById(invite.getTeam().getId())
+		Team team = teamRepository.findByIdForUpdate(invite.getTeam().getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
 
 		if (team.getStatus() != TeamStatus.ACTIVE) {
