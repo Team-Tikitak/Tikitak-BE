@@ -82,7 +82,7 @@ public class FeedController {
 	@PostMapping
 	@Operation(
 			summary = "일반 피드 작성",
-			description = "이미지 1장 이상 10장 이하를 첨부해 일반 피드를 작성합니다. 장소는 최대 1개, 팀원 태그는 최대 11명까지 등록할 수 있습니다."
+			description = "이미지 1장 이상 10장 이하를 첨부해 일반 피드를 작성합니다. 장소는 최대 1개, 팀원 태그는 최대 12명까지 등록할 수 있습니다."
 	)
 	public ResponseEntity<CommonResponse<FeedResponseDTO.FeedMutationResponseDTO>> createFeed(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,

@@ -52,8 +52,8 @@ public class FeedService {
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
-	private static final int MAX_TAG_COUNT = 11;
-  private static final int MAX_CONTENT_LENGTH = 1000;
+	private static final int MAX_TAG_COUNT = 12;
+    private static final int MAX_CONTENT_LENGTH = 1000;
 	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
 	private static final int ALL_TAGGED_MIN_FEEDS = 3;
 	private static final int COMBINATION_MIN_FEEDS = 3;
