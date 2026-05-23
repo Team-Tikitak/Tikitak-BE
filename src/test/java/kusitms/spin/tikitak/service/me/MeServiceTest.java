@@ -163,4 +163,25 @@ class MeServiceTest extends UnitTest {
 		assertThat(member.isOnboardingCompleted()).isTrue();
 		assertThat(member.getProfileCharacterType()).isEqualTo(ProfileCharacterType.TAK_SPARK);
 	}
+
+	@Test
+	@DisplayName("탈퇴 시 비활성화하고 providerId를 탈퇴 마커로 치환한 뒤 refresh token을 폐기한다")
+	void withdrawMarksMemberInactiveAndReplacesProviderId() {
+		Member member = activeMember(1L);
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+		when(teamMemberRepository.existsActiveOwnerTeam(
+				1L,
+				kusitms.spin.tikitak.domain.team.enums.TeamMemberRole.OWNER,
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		)).thenReturn(false);
+
+		meService.withdraw(1L);
+
+		assertThat(member.getStatus()).isEqualTo(kusitms.spin.tikitak.domain.member.enums.MemberStatus.INACTIVE);
+		assertThat(member.getDeletedAt()).isNotNull();
+		assertThat(member.getProviderId()).startsWith("WITHDRAWN:1:");
+		assertThat(member.getProviderId()).isNotEqualTo("provider-1");
+		verify(tokenService).revokeAllRefreshTokens(1L);
+	}
 }

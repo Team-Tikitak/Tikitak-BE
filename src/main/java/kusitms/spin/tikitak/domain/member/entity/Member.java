@@ -120,6 +120,11 @@ public class Member {
 		this.updatedAt = now;
 	}
 
+	public void clearProfileImage() {
+		this.profileImgUrl = null;
+		this.updatedAt = LocalDateTime.now();
+	}
+
 	public void changeActiveTeam(Long teamId) {
 		this.activeTeamId = teamId;
 		this.updatedAt = LocalDateTime.now();
