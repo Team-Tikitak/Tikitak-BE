@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.repository.feed;
 
 import jakarta.persistence.LockModeType;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionFeedRepository;
 import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import kusitms.spin.tikitak.service.map.dto.MapPinRow;
 import org.springframework.data.domain.Pageable;
@@ -17,7 +18,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface FeedRepository extends JpaRepository<Feed, Long> {
+public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestionFeedRepository {
+
+	@Override
+	default Feed saveDailyQuestionFeed(Feed feed) {
+		return save(feed);
+	}
 
 	@EntityGraph(attributePaths = { "teamMember", "teamMember.member", "place", "question", "tags", "tags.teamMember" })
 	@Query("""

@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionMediaRepository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface MediaRepository extends JpaRepository<Media, Long> {
+public interface MediaRepository extends JpaRepository<Media, Long>, DailyQuestionMediaRepository {
 
     Optional<Media> findByPublicId(UUID publicId);
 

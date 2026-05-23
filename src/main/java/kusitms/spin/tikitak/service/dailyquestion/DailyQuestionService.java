@@ -15,11 +15,11 @@ import kusitms.spin.tikitak.global.dto.PatchField;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.global.time.KstDateProvider;
-import kusitms.spin.tikitak.repository.feed.FeedRepository;
-import kusitms.spin.tikitak.repository.media.MediaRepository;
-import kusitms.spin.tikitak.repository.question.QuestionRepository;
-import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
-import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionFeedRepository;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionMediaRepository;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionQuestionRepository;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamMemberRepository;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamRepository;
 import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionRequestDTO;
 import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionResponseDTO;
 import lombok.RequiredArgsConstructor;
@@ -44,11 +44,11 @@ public class DailyQuestionService {
 	private static final int MAX_CONTENT_LENGTH = 1000;
 	private static final String DAILY_ANSWER_ACTIVE_KEY_CONSTRAINT = "uk_feed_daily_answer_active_key";
 
-	private final TeamRepository teamRepository;
-	private final TeamMemberRepository teamMemberRepository;
-	private final QuestionRepository questionRepository;
-	private final FeedRepository feedRepository;
-	private final MediaRepository mediaRepository;
+	private final DailyQuestionTeamRepository teamRepository;
+	private final DailyQuestionTeamMemberRepository teamMemberRepository;
+	private final DailyQuestionQuestionRepository questionRepository;
+	private final DailyQuestionFeedRepository feedRepository;
+	private final DailyQuestionMediaRepository mediaRepository;
 	private final KstDateProvider dateProvider;
 
 	public DailyQuestionResponseDTO.TodayQuestionResponseDTO getTodayQuestion(Long memberId, Long teamId) {
@@ -105,7 +105,7 @@ public class DailyQuestionService {
 				.build());
 
 		try {
-			return toMutation(feedRepository.save(feed));
+			return toMutation(feedRepository.saveDailyQuestionFeed(feed));
 		} catch (DataIntegrityViolationException e) {
 			if (!isDailyAnswerDuplicate(e)) {
 				throw e;
@@ -149,7 +149,7 @@ public class DailyQuestionService {
 	}
 
 	private TeamMember getActiveTeamMember(Long memberId, Long teamId) {
-		Team team = teamRepository.findById(teamId)
+		Team team = teamRepository.findDailyQuestionTeamById(teamId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM009));
 		if (team.getStatus() != TeamStatus.ACTIVE) {
 			throw new BusinessException(ErrorCode.TEAM009);

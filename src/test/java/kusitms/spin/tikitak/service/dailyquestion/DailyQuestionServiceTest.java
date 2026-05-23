@@ -9,24 +9,21 @@ import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.question.entity.Question;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
-import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
-import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.dto.PatchField;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.global.time.KstDateProvider;
-import kusitms.spin.tikitak.repository.feed.FeedRepository;
-import kusitms.spin.tikitak.repository.media.MediaRepository;
-import kusitms.spin.tikitak.repository.question.QuestionRepository;
-import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
-import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionRequestDTO;
 import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
+import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionFeedRepository;
+import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionMediaRepository;
+import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionQuestionRepository;
+import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionTeamMemberRepository;
+import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionTeamRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
@@ -34,8 +31,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
@@ -44,11 +39,6 @@ import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class DailyQuestionServiceTest extends UnitTest {
 
@@ -60,16 +50,11 @@ class DailyQuestionServiceTest extends UnitTest {
 	private static final UUID NEXT_MEDIA_PUBLIC_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 	private static final LocalDate TODAY = LocalDate.of(2026, 3, 4);
 
-	@Mock
-	private TeamRepository teamRepository;
-	@Mock
-	private TeamMemberRepository teamMemberRepository;
-	@Mock
-	private QuestionRepository questionRepository;
-	@Mock
-	private FeedRepository feedRepository;
-	@Mock
-	private MediaRepository mediaRepository;
+	private FakeDailyQuestionTeamRepository teamRepository;
+	private FakeDailyQuestionTeamMemberRepository teamMemberRepository;
+	private FakeDailyQuestionQuestionRepository questionRepository;
+	private FakeDailyQuestionFeedRepository feedRepository;
+	private FakeDailyQuestionMediaRepository mediaRepository;
 
 	private DailyQuestionService dailyQuestionService;
 	private Team team;
@@ -78,6 +63,11 @@ class DailyQuestionServiceTest extends UnitTest {
 
 	@BeforeEach
 	void setUp() {
+		teamRepository = new FakeDailyQuestionTeamRepository();
+		teamMemberRepository = new FakeDailyQuestionTeamMemberRepository();
+		questionRepository = new FakeDailyQuestionQuestionRepository();
+		feedRepository = new FakeDailyQuestionFeedRepository();
+		mediaRepository = new FakeDailyQuestionMediaRepository();
 		dailyQuestionService = new DailyQuestionService(
 				teamRepository,
 				teamMemberRepository,
@@ -89,15 +79,13 @@ class DailyQuestionServiceTest extends UnitTest {
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
 		author = activeMember(TEAM_MEMBER_ID, member, team);
-		question = question(QUESTION_ID, 1, "오늘 가장 기억에 남는 순간은?");
+		question = question(QUESTION_ID, 1, "Today question");
+		seedDailyQuestionBaseData();
 	}
 
 	@Test
-	@DisplayName("오늘의 질문과 내 답변 여부를 조회한다")
+	@DisplayName("Gets today's question and unanswered status")
 	void getTodayQuestion() {
-		stubActiveAuthor();
-		stubTodayQuestion();
-
 		DailyQuestionResponseDTO.TodayQuestionResponseDTO response =
 				dailyQuestionService.getTodayQuestion(MEMBER_ID, TEAM_ID);
 
@@ -107,48 +95,85 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("DAILY_QUESTION_IMAGE로 오늘의 질문 답변을 작성한다")
+	@DisplayName("Creates today's answer with a daily question image")
 	void createMyAnswer() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
-		stubActiveAuthor();
-		stubTodayQuestion();
-		when(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
-				.thenReturn(Optional.empty());
-		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
-		when(feedRepository.save(any(Feed.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		mediaRepository.save(media);
 
 		DailyQuestionResponseDTO.AnswerMutationResponseDTO response =
 				dailyQuestionService.createMyAnswer(
 						MEMBER_ID,
 						TEAM_ID,
 						QUESTION_ID,
-						new DailyQuestionRequestDTO.AnswerCreateRequestDTO(" 답변 ", MEDIA_PUBLIC_ID)
+						new DailyQuestionRequestDTO.AnswerCreateRequestDTO(" answer ", MEDIA_PUBLIC_ID)
 				);
 
 		assertThat(response.getType().name()).isEqualTo("DAILY_QUESTION");
-		assertThat(response.getAnswer().getContent()).isEqualTo("답변");
+		assertThat(response.getAnswer().getContent()).isEqualTo("answer");
 		assertThat(media.getStatus()).isEqualTo(MediaStatus.USED);
-		verify(feedRepository).save(any(Feed.class));
+		assertThat(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY)).isPresent();
 	}
 
 	@Test
-	@DisplayName("이미 오늘 답변했다면 중복 작성할 수 없다")
+	@DisplayName("Shares fake repository state across create, get, and update")
+	void createThenGetThenUpdateAnswerWithFakeRepositories() {
+		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
+				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
+		Media nextMedia = media(2L, MEMBER_ID, NEXT_MEDIA_PUBLIC_ID,
+				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
+		mediaRepository.save(media);
+		mediaRepository.save(nextMedia);
+
+		dailyQuestionService.createMyAnswer(
+				MEMBER_ID,
+				TEAM_ID,
+				QUESTION_ID,
+				new DailyQuestionRequestDTO.AnswerCreateRequestDTO(" first answer ", MEDIA_PUBLIC_ID)
+		);
+
+		DailyQuestionResponseDTO.TodayQuestionResponseDTO todayResponse =
+				dailyQuestionService.getTodayQuestion(MEMBER_ID, TEAM_ID);
+
+		assertThat(todayResponse.isAnswered()).isTrue();
+		assertThat(todayResponse.getAnswer().getContent()).isEqualTo("first answer");
+
+		dailyQuestionService.updateMyAnswer(
+				MEMBER_ID,
+				TEAM_ID,
+				QUESTION_ID,
+				new DailyQuestionRequestDTO.AnswerUpdateRequestDTO(
+						PatchField.of("updated answer"),
+						PatchField.of(NEXT_MEDIA_PUBLIC_ID)
+				)
+		);
+
+		DailyQuestionResponseDTO.TodayQuestionResponseDTO updatedResponse =
+				dailyQuestionService.getTodayQuestion(MEMBER_ID, TEAM_ID);
+
+		assertThat(updatedResponse.getAnswer().getContent()).isEqualTo("updated answer");
+		assertThat(updatedResponse.getAnswer().getImageUrl()).isEqualTo(nextMedia.getUrl());
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+		assertThat(nextMedia.getStatus()).isEqualTo(MediaStatus.USED);
+	}
+
+	@Test
+	@DisplayName("Throws when today's answer already exists")
 	void createMyAnswerThrowsWhenDuplicated() {
-		stubActiveAuthor();
-		stubTodayQuestion();
-		when(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
-				.thenReturn(Optional.of(answerFeed()));
+		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
+				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
+		mediaRepository.save(media);
+		feedRepository.saveDailyQuestionFeed(answerFeed());
 
 		assertThatThrownBy(() -> dailyQuestionService.createMyAnswer(
 				MEMBER_ID,
 				TEAM_ID,
 				QUESTION_ID,
-				new DailyQuestionRequestDTO.AnswerCreateRequestDTO("답변", MEDIA_PUBLIC_ID)
+				new DailyQuestionRequestDTO.AnswerCreateRequestDTO("answer", MEDIA_PUBLIC_ID)
 		)).isInstanceOfSatisfying(BusinessException.class, exception ->
 				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DAILY_QUESTION003));
 
-		verify(mediaRepository, never()).findByPublicIdForUpdate(any());
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
 	}
 
 	@Test
@@ -156,14 +181,8 @@ class DailyQuestionServiceTest extends UnitTest {
 	void createMyAnswerThrowsWhenDailyAnswerConstraintViolated() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
-		stubActiveAuthor();
-		stubTodayQuestion();
-		when(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
-				.thenReturn(Optional.empty());
-		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
-		when(feedRepository.save(any(Feed.class))).thenThrow(
-				new DataIntegrityViolationException("constraint [uk_feed_daily_answer_active_key]")
-		);
+		mediaRepository.save(media);
+		feedRepository.throwOnSave(new DataIntegrityViolationException("constraint [uk_feed_daily_answer_active_key]"));
 
 		assertThatThrownBy(() -> dailyQuestionService.createMyAnswer(
 				MEMBER_ID,
@@ -181,12 +200,8 @@ class DailyQuestionServiceTest extends UnitTest {
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
 		DataIntegrityViolationException exception =
 				new DataIntegrityViolationException("constraint [fk_feed_question]");
-		stubActiveAuthor();
-		stubTodayQuestion();
-		when(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
-				.thenReturn(Optional.empty());
-		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
-		when(feedRepository.save(any(Feed.class))).thenThrow(exception);
+		mediaRepository.save(media);
+		feedRepository.throwOnSave(exception);
 
 		assertThatThrownBy(() -> dailyQuestionService.createMyAnswer(
 				MEMBER_ID,
@@ -197,33 +212,26 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("수정 요청에서 이미지가 생략되면 기존 이미지를 유지한다")
+	@DisplayName("Keeps existing image when media public id is omitted")
 	void updateMyAnswerKeepsImageWhenMediaPublicIdOmitted() {
 		Feed feed = answerFeed();
-		stubActiveAuthor();
-		stubTodayQuestion();
-		when(feedRepository.findActiveDailyAnswerForUpdate(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
-				.thenReturn(Optional.of(feed));
+		feedRepository.saveDailyQuestionFeed(feed);
 
 		DailyQuestionResponseDTO.AnswerMutationResponseDTO response =
 				dailyQuestionService.updateMyAnswer(
 						MEMBER_ID,
 						TEAM_ID,
 						QUESTION_ID,
-						new DailyQuestionRequestDTO.AnswerUpdateRequestDTO(PatchField.of("수정"), PatchField.undefined())
+						new DailyQuestionRequestDTO.AnswerUpdateRequestDTO(PatchField.of("updated"), PatchField.undefined())
 				);
 
-		assertThat(response.getAnswer().getContent()).isEqualTo("수정");
+		assertThat(response.getAnswer().getContent()).isEqualTo("updated");
 		assertThat(response.getAnswer().getImageUrl()).isEqualTo("https://example.com/feed.png");
-		verify(mediaRepository, never()).findByPublicIdForUpdate(any());
 	}
 
 	@Test
-	@DisplayName("수정 요청이 비어 있으면 실패한다")
+	@DisplayName("Throws when update request is empty")
 	void updateMyAnswerThrowsWhenEmpty() {
-		stubActiveAuthor();
-		stubTodayQuestion();
-
 		assertThatThrownBy(() -> dailyQuestionService.updateMyAnswer(
 				MEMBER_ID,
 				TEAM_ID,
@@ -234,16 +242,13 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("새 이미지로 오늘의 질문 답변 이미지를 교체한다")
+	@DisplayName("Replaces today's answer image with an uploaded image")
 	void updateMyAnswerReplacesImage() {
 		Feed feed = answerFeed();
 		Media newMedia = media(2L, MEMBER_ID, NEXT_MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
-		stubActiveAuthor();
-		stubTodayQuestion();
-		when(feedRepository.findActiveDailyAnswerForUpdate(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY))
-				.thenReturn(Optional.of(feed));
-		when(mediaRepository.findByPublicIdForUpdate(NEXT_MEDIA_PUBLIC_ID)).thenReturn(Optional.of(newMedia));
+		feedRepository.saveDailyQuestionFeed(feed);
+		mediaRepository.save(newMedia);
 
 		DailyQuestionResponseDTO.AnswerMutationResponseDTO response =
 				dailyQuestionService.updateMyAnswer(
@@ -257,18 +262,10 @@ class DailyQuestionServiceTest extends UnitTest {
 		assertThat(newMedia.getStatus()).isEqualTo(MediaStatus.USED);
 	}
 
-	private void stubActiveAuthor() {
-		when(teamRepository.findById(TEAM_ID)).thenReturn(Optional.of(team));
-		when(teamMemberRepository.findActiveByMemberIdAndTeamId(
-				eq(MEMBER_ID),
-				eq(TEAM_ID),
-				eq(TeamMemberStatus.ACTIVE),
-				eq(TeamStatus.ACTIVE)
-		)).thenReturn(Optional.of(author));
-	}
-
-	private void stubTodayQuestion() {
-		when(questionRepository.findAvailableQuestions(TODAY)).thenReturn(List.of(question));
+	private void seedDailyQuestionBaseData() {
+		teamRepository.save(team);
+		teamMemberRepository.save(author);
+		questionRepository.save(question);
 	}
 
 	private Feed answerFeed() {
@@ -281,7 +278,7 @@ class DailyQuestionServiceTest extends UnitTest {
 				.question(question)
 				.questionAnswerDate(TODAY)
 				.dailyAnswerActiveKey("10:100:1:2026-03-04")
-				.content("기존 답변")
+				.content("old answer")
 				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30))
 				.updatedAt(LocalDateTime.of(2026, 3, 4, 20, 30))
 				.build();
