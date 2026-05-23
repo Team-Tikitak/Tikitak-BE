@@ -75,6 +75,10 @@ public class TeamMember {
 		if (profileImgUrl != null) this.profileImgUrl = profileImgUrl;
 	}
 
+	public void clearProfileImage() {
+		this.profileImgUrl = null;
+	}
+
 	public void leaveTeam() {
 		this.status = TeamMemberStatus.LEFT;
 		this.deletedAt = LocalDateTime.now();

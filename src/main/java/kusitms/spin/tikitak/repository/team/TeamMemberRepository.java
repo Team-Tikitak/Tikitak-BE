@@ -66,6 +66,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long>, D
 	@Query("""
 			select tm
 			from TeamMember tm
+			where tm.member.id = :memberId
+				and tm.profileImgUrl is not null
+			""")
+	List<TeamMember> findProfileImageTargetsByMemberId(@Param("memberId") Long memberId);
+
+	@Query("""
+			select tm
+			from TeamMember tm
 			join fetch tm.team t
 			join fetch tm.member m
 			where tm.member.id = :memberId

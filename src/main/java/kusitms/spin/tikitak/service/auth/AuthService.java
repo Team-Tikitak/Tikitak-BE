@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.auth;
 
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
@@ -74,7 +75,11 @@ public class AuthService {
 			};
 			boolean[] created = {false};
 			Member member = memberRepository
-					.findBySocialProviderAndProviderId(userInfo.provider(), userInfo.providerId())
+					.findBySocialProviderAndProviderIdAndStatus(
+							userInfo.provider(),
+							userInfo.providerId(),
+							MemberStatus.ACTIVE
+					)
 					.map(existingMember -> {
 						existingMember.updateSocialProfile(userInfo.email(), userInfo.name(), userInfo.profileImageUrl());
 						return existingMember;

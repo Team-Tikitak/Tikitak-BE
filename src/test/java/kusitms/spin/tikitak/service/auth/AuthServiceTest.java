@@ -90,7 +90,11 @@ class AuthServiceTest extends UnitTest {
 		Member member = activeMemberWithActiveTeam(1L, 10L);
 		TokenResponse token = tokenResponse();
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
-		when(memberRepository.findBySocialProviderAndProviderId(SocialProvider.KAKAO, "kakao-provider-id"))
+		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
+				SocialProvider.KAKAO,
+				"kakao-provider-id",
+				kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE
+		))
 				.thenReturn(Optional.of(member));
 		when(tokenService.issueToken(1L)).thenReturn(token);
 		when(activeTeamService.resolveActiveTeamId(member)).thenReturn(10L);
@@ -109,7 +113,11 @@ class AuthServiceTest extends UnitTest {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		TokenResponse token = tokenResponse();
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
-		when(memberRepository.findBySocialProviderAndProviderId(SocialProvider.KAKAO, "kakao-provider-id"))
+		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
+				SocialProvider.KAKAO,
+				"kakao-provider-id",
+				kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE
+		))
 				.thenReturn(Optional.empty());
 		when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> {
 			Member saved = invocation.getArgument(0);

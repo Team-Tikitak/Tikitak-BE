@@ -42,6 +42,7 @@ public class MeService {
 			return MeResponseDTO.MeProfileResponseDTO.builder()
 					.memberId(member.getId())
 					.email(member.getEmail())
+					.name(member.getName())
 					.socialProvider(member.getSocialProvider())
 					.status(member.getStatus())
 					.hasAgreedRequiredTerms(member.isTermsAgreed() && member.isPrivacyAgreed())
