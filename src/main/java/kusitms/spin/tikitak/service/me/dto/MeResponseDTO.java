@@ -22,6 +22,7 @@ public class MeResponseDTO {
 	public static class MeProfileResponseDTO {
 		private Long memberId;
 		private String email;
+		private String name;
 		private SocialProvider socialProvider;
 		private MemberStatus status;
 		private boolean hasAgreedRequiredTerms;

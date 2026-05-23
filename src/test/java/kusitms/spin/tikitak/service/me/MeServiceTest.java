@@ -61,6 +61,7 @@ class MeServiceTest extends UnitTest {
 		MeResponseDTO.MeProfileResponseDTO response = meService.getMyProfile(1L);
 
 		assertThat(response.getMemberId()).isEqualTo(1L);
+		assertThat(response.getName()).isEqualTo("User 1");
 		assertThat(response.getActiveTeamId()).isEqualTo(10L);
 		assertThat(response.isHasTeam()).isTrue();
 		assertThat(response.isOnboardingCompleted()).isFalse();
