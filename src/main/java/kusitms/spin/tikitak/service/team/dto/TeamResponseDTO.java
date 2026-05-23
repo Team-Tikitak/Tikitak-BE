@@ -34,6 +34,7 @@ public class TeamResponseDTO {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TeamMemberDTO {
+        private Long teamMemberId;
         private String nickname;
         private TeamMemberRole teamMemberRole;
         private String email;
