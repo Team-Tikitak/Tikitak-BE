@@ -112,6 +112,7 @@ public class TeamService {
                 .filter(tm -> tm.getStatus() == TeamMemberStatus.ACTIVE
                         && !tm.getId().equals(currentMember.getId()))
                 .map(tm -> TeamResponseDTO.TeamMemberDTO.builder()
+                        .teamMemberId(tm.getId())
                         .nickname(tm.getNickname())
                         .teamMemberRole(tm.getRole())
                         .email(tm.getMember().getEmail())
