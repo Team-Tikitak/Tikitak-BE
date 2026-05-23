@@ -4,6 +4,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
+import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamMemberRepository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,7 +13,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
+public interface TeamMemberRepository extends JpaRepository<TeamMember, Long>, DailyQuestionTeamMemberRepository {
 
 	@Query("""
 			select count(tm) > 0
