@@ -6,10 +6,12 @@ import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -30,7 +32,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,6 +67,9 @@ class FeedCommentServiceTest extends UnitTest {
 	@Mock
 	private TeamMemberRepository teamMemberRepository;
 
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
 	private FeedCommentService feedCommentService;
 	private Team team;
 	private TeamMember viewer;
@@ -77,7 +84,8 @@ class FeedCommentServiceTest extends UnitTest {
 				feedImageRepository,
 				feedCommentRepository,
 				teamRepository,
-				teamMemberRepository
+				teamMemberRepository,
+				defaultProfileImageResolver
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember(MEMBER_ID);
@@ -265,6 +273,27 @@ class FeedCommentServiceTest extends UnitTest {
 		feedCommentService.deleteComment(MEMBER_ID, TEAM_ID, FEED_ID, 10L);
 
 		verify(feedCommentRepository).delete(comment);
+	}
+
+	@Test
+	@DisplayName("댓글 목록 조회 시 작성자의 profileImgUrl이 없으면 캐릭터 기본 이미지로 fallback된다")
+	void listCommentsUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
+		Member memberWithCharacter = activeMemberWithCharacterType(OTHER_MEMBER_ID, ProfileCharacterType.TAK_SPARK);
+		TeamMember authorWithoutImg = activeMemberWithoutProfileImg(OTHER_TEAM_MEMBER_ID, memberWithCharacter, team);
+		String defaultImgUrl = "https://cdn.example.com/default-profiles/tak-spark.png";
+
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		FeedComment commentByAuthorWithoutImg = comment(10L, authorWithoutImg, LocalDateTime.of(2026, 3, 4, 20, 30));
+		when(feedCommentRepository.findActiveFirstPageByFeedId(eq(FEED_ID), any(Pageable.class)))
+				.thenReturn(List.of(commentByAuthorWithoutImg));
+		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_SPARK)).thenReturn(defaultImgUrl);
+
+		FeedCommentResponseDTO.CommentListResponseDTO response =
+				feedCommentService.listComments(MEMBER_ID, TEAM_ID, FEED_ID, null, null, 10);
+
+		assertThat(response.getItems()).hasSize(1);
+		assertThat(response.getItems().get(0).getAuthor().getProfileImageUrl()).isEqualTo(defaultImgUrl);
 	}
 
 	private void stubActiveViewer() {
