@@ -121,4 +121,15 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 			@Param("teamIds") Collection<Long> teamIds,
 			@Param("memberStatus") TeamMemberStatus memberStatus
 	);
+
+	@Query("""
+			select count(tm)
+			from TeamMember tm
+			where tm.team.id = :teamId
+				and tm.status = :memberStatus
+			""")
+	long countByTeamIdAndStatus(
+			@Param("teamId") Long teamId,
+			@Param("memberStatus") TeamMemberStatus memberStatus
+	);
 }

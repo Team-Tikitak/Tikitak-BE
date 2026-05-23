@@ -29,6 +29,7 @@ import java.util.UUID;
 public class TeamInvitationService {
 
 	private static final int INVITE_EXPIRE_DAYS = 7;
+	private static final int TEAM_MEMBER_LIMIT = 100;
 
 	private final TeamRepository teamRepository;
 	private final MemberRepository memberRepository;
@@ -169,6 +170,11 @@ public class TeamInvitationService {
 
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER001));
+
+		long activeCount = teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMemberStatus.ACTIVE);
+		if (activeCount >= TEAM_MEMBER_LIMIT) {
+			throw new BusinessException(ErrorCode.INVITE008);
+		}
 
 		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
 				.ifPresentOrElse(
