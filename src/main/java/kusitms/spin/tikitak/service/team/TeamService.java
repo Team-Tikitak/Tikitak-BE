@@ -53,7 +53,7 @@ public class TeamService {
         // TeamMember 생성
         String profileImgUrl = (request.getProfileImageUrl() != null && !request.getProfileImageUrl().isBlank())
                 ? request.getProfileImageUrl()
-                : defaultProfileImageResolver.resolve(member.getProfileCharacterType());
+                : null;
 
         TeamMember teamMember = TeamMember.builder()
                 .team(team)
