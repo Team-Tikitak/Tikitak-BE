@@ -6,10 +6,12 @@ import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -37,8 +39,10 @@ import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.createRequ
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.validCreateRequest;
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.uploadedFeedImage;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -75,6 +79,9 @@ class FeedServiceTest extends UnitTest {
 	@Mock
 	private TeamMemberRepository teamMemberRepository;
 
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
 	private FeedService feedService;
 	private Team team;
 	private TeamMember author;
@@ -88,7 +95,8 @@ class FeedServiceTest extends UnitTest {
 				placeRepository,
 				mediaRepository,
 				teamRepository,
-				teamMemberRepository
+				teamMemberRepository,
+				defaultProfileImageResolver
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
@@ -325,6 +333,39 @@ class FeedServiceTest extends UnitTest {
 				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED009));
+	}
+
+	@Test
+	@DisplayName("피드 목록 조회 시 작성자의 profileImgUrl이 없으면 캐릭터 기본 이미지로 fallback된다")
+	void getEveryonePickItemsUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
+		YearMonth now = YearMonth.now();
+		LocalDateTime start = now.atDay(1).atStartOfDay();
+		LocalDateTime end = now.plusMonths(1).atDay(1).atStartOfDay();
+
+		Member memberWithCharacter = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		TeamMember authorWithoutImg = activeMemberWithoutProfileImg(TEAM_MEMBER_ID, memberWithCharacter, team);
+		String defaultImgUrl = "https://cdn.example.com/default-profiles/tak-leader.png";
+
+		Long feedId = 201L;
+		List<Long> rankedIds = List.of(feedId);
+		Feed feed = Feed.builder().id(feedId).team(team).teamMember(authorWithoutImg).content("피드").build();
+
+		when(teamRepository.findById(TEAM_ID)).thenReturn(Optional.of(team));
+		when(teamMemberRepository.findActiveByMemberIdAndTeamId(
+				eq(MEMBER_ID), eq(TEAM_ID), eq(TeamMemberStatus.ACTIVE), eq(TeamStatus.ACTIVE)
+		)).thenReturn(Optional.of(authorWithoutImg));
+		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(5L);
+		when(feedRepository.findEveryonePickFeedIds(eq(TEAM_ID), eq(start), eq(end))).thenReturn(rankedIds);
+		when(feedRepository.findActiveByIds(eq(TEAM_ID), eq(rankedIds))).thenReturn(List.of(feed));
+		when(feedCommentRepository.countByFeedIds(rankedIds)).thenReturn(List.of());
+		when(feedReactionRepository.countByReactionTypeByFeedIds(rankedIds)).thenReturn(List.of());
+		when(feedReactionRepository.findMyReactions(eq(rankedIds), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_LEADER)).thenReturn(defaultImgUrl);
+
+		List<FeedResponseDTO.FeedListItemDTO> result = feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID);
+
+		assertThat(result).hasSize(1);
+		assertThat(result.get(0).getAuthor().getProfileImageUrl()).isEqualTo(defaultImgUrl);
 	}
 
 	private void stubActiveAuthor() {

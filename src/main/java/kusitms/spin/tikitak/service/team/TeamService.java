@@ -13,6 +13,7 @@ import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.team.dto.TeamRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamResponseDTO;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class TeamService {
     private final MemberRepository memberRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamInviteRepository teamInviteRepository;
+    private final DefaultProfileImageResolver defaultProfileImageResolver;
 
     @Transactional
     public TeamResponseDTO.TeamCreateResponseDTO createTeam(Long memberId, TeamRequestDTO.TeamCreateRequestDTO request) {
@@ -49,11 +51,15 @@ public class TeamService {
         teamRepository.save(team);
 
         // TeamMember 생성
+        String profileImgUrl = (request.getProfileImageUrl() != null && !request.getProfileImageUrl().isBlank())
+                ? request.getProfileImageUrl()
+                : null;
+
         TeamMember teamMember = TeamMember.builder()
                 .team(team)
                 .member(member)
                 .nickname(request.getNickName())
-                .profileImgUrl(request.getProfileImageUrl())
+                .profileImgUrl(profileImgUrl)
                 .role(TeamMemberRole.OWNER)
                 .status(TeamMemberStatus.ACTIVE)
                 .build();
@@ -116,7 +122,7 @@ public class TeamService {
                         .nickname(tm.getNickname())
                         .teamMemberRole(tm.getRole())
                         .email(tm.getMember().getEmail())
-                        .profileImgUrl(tm.getProfileImgUrl())
+                        .profileImgUrl(resolveProfileImgUrl(tm))
                         .build())
                 .toList();
 
@@ -125,7 +131,7 @@ public class TeamService {
                 .myProfile(TeamResponseDTO.MyProfileDTO.builder()
                         .nickname(currentMember.getNickname())
                         .teamMemberRole(currentMember.getRole())
-                        .profileImgUrl(currentMember.getProfileImgUrl())
+                        .profileImgUrl(resolveProfileImgUrl(currentMember))
                         .build())
                 .teamMembers(members)
                 .build();
@@ -179,5 +185,12 @@ public class TeamService {
 
         // 팀의 status를 ACTIVE로 변경
         team.recover();
+    }
+
+    private String resolveProfileImgUrl(TeamMember teamMember) {
+        if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+            return teamMember.getProfileImgUrl();
+        }
+        return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
     }
 }

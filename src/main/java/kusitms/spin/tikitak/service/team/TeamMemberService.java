@@ -8,6 +8,7 @@ import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberResponseDTO;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class TeamMemberService {
 
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final DefaultProfileImageResolver defaultProfileImageResolver;
 
     public TeamMemberResponseDTO.TeamMemberListResponseDTO listTeamMembers(Long memberId, Long teamId) {
         // TeamMember까지 같이 조회
@@ -42,7 +44,7 @@ public class TeamMemberService {
                         .teamMemberId(tm.getId())
                         .nickname(tm.getNickname())
                         .role(tm.getRole())
-                        .profileImgUrl(tm.getProfileImgUrl())
+                        .profileImgUrl(resolveProfileImgUrl(tm))
                         .build())
                 .toList();
 
@@ -119,5 +121,12 @@ public class TeamMemberService {
         }
 
         target.kickTeamMember();
+    }
+
+    private String resolveProfileImgUrl(TeamMember teamMember) {
+        if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+            return teamMember.getProfileImgUrl();
+        }
+        return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
     }
 }
