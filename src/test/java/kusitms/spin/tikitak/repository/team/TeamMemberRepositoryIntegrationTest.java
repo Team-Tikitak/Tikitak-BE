@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.repository.team;
 
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
@@ -107,6 +108,59 @@ class TeamMemberRepositoryIntegrationTest extends IntegrationTest {
 				TeamMemberStatus.LEFT,
 				TeamStatus.ACTIVE
 		)).isFalse();
+	}
+
+	@Test
+	@DisplayName("counts new feed activities by inactive selected teams excluding my feeds and deleted feeds")
+	void countNewActivitiesByMemberTeams() {
+		Member member = persist(member("activity-member", kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE, null));
+		Member other = persist(member("activity-other"));
+		Team selectedTeam = persist(team("selected"));
+		Team targetTeam = persist(team("target"));
+		Team emptyTeam = persist(team("empty"));
+		TeamMember selectedMembership = persist(teamMember(member, selectedTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember targetMembership = persist(teamMember(member, targetTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(member, emptyTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember otherTargetMembership = persist(teamMember(other, targetTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+
+		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(1), null));
+		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(2), null));
+		persist(feed(targetTeam, targetMembership, BASE_TIME.plusMinutes(3), null));
+		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.minusMinutes(1), null));
+		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(4), BASE_TIME.plusMinutes(5)));
+		persist(feed(selectedTeam, selectedMembership, BASE_TIME.plusMinutes(1), null));
+		flushAndClear();
+
+		List<Object[]> counts = teamMemberRepository.countNewActivitiesByMemberTeams(
+				member.getId(),
+				selectedTeam.getId(),
+				TeamMemberStatus.ACTIVE.name(),
+				TeamStatus.ACTIVE.name()
+		);
+
+		assertThat(counts)
+				.anySatisfy(row -> {
+					assertThat(row[0]).isEqualTo(targetTeam.getId());
+					assertThat(row[1]).isEqualTo(2L);
+				})
+				.anySatisfy(row -> {
+					assertThat(row[0]).isEqualTo(emptyTeam.getId());
+					assertThat(row[1]).isEqualTo(0L);
+				});
+		assertThat(counts)
+				.extracting(row -> row[0])
+				.doesNotContain(selectedTeam.getId());
+	}
+
+	private Feed feed(Team team, TeamMember author, java.time.LocalDateTime createdAt, java.time.LocalDateTime deletedAt) {
+		return Feed.builder()
+				.team(team)
+				.teamMember(author)
+				.content("feed")
+				.createdAt(createdAt)
+				.updatedAt(createdAt)
+				.deletedAt(deletedAt)
+				.build();
 	}
 
 }

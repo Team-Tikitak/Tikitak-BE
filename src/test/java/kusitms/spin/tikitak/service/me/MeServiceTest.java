@@ -96,6 +96,12 @@ class MeServiceTest extends UnitTest {
 				.thenReturn(List.of(oldMembership, activeMembership, newMembership));
 		when(teamMemberRepository.countActiveMembersByTeamIds(List.of(10L, 20L, 30L), TeamMemberStatus.ACTIVE))
 				.thenReturn(List.of(new Object[]{10L, 2L}, new Object[]{20L, 5L}, new Object[]{30L, 1L}));
+		when(teamMemberRepository.countNewActivitiesByMemberTeams(
+				1L,
+				20L,
+				TeamMemberStatus.ACTIVE.name(),
+				TeamStatus.ACTIVE.name()
+		)).thenReturn(List.of(new Object[]{10L, 4L}, new Object[]{30L, 6L}));
 
 		MeResponseDTO.TeamListResponseDTO response = meService.getMyTeams(1L);
 
@@ -104,6 +110,9 @@ class MeServiceTest extends UnitTest {
 				.containsExactly(20L, 30L, 10L);
 		assertThat(response.getTeams().getFirst().isActive()).isTrue();
 		assertThat(response.getTeams().getFirst().getMemberCount()).isEqualTo(5L);
+		assertThat(response.getTeams())
+				.extracting(MeResponseDTO.TeamItemDTO::getNewActivityCount)
+				.containsExactly(0L, 6L, 4L);
 	}
 
 	@Test
@@ -120,6 +129,38 @@ class MeServiceTest extends UnitTest {
 		verify(activeTeamService).validateChangeableTeam(1L, 10L);
 		assertThat(response.getActiveTeamId()).isEqualTo(10L);
 		assertThat(member.getActiveTeamId()).isEqualTo(10L);
+	}
+
+	@Test
+	@DisplayName("선택 팀 변경 시 이전 선택 팀과 새 선택 팀의 활동 확인 시점을 갱신한다")
+	void updateActiveTeamChecksPreviousAndNextSelectedTeams() {
+		Member member = activeMemberWithActiveTeam(1L, 10L);
+		Team previousTeam = activeTeam(10L);
+		Team nextTeam = activeTeam(20L);
+		TeamMember previousMembership = kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember(10L, member, previousTeam);
+		TeamMember nextMembership = activeOwner(20L, member, nextTeam);
+		java.time.LocalDateTime previousCheckedAt = previousMembership.getLastActivityCheckedAt();
+		java.time.LocalDateTime nextCheckedAt = nextMembership.getLastActivityCheckedAt();
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+		when(teamMemberRepository.findActiveByMemberIdAndTeamIds(
+				1L,
+				List.of(10L, 20L),
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		)).thenReturn(List.of(previousMembership, nextMembership));
+
+		meService.updateActiveTeam(1L, new MeRequestDTO.ActiveTeamUpdateRequestDTO(20L));
+
+		verify(activeTeamService).validateChangeableTeam(1L, 20L);
+		verify(teamMemberRepository).findActiveByMemberIdAndTeamIds(
+				1L,
+				List.of(10L, 20L),
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		);
+		assertThat(member.getActiveTeamId()).isEqualTo(20L);
+		assertThat(previousMembership.getLastActivityCheckedAt()).isAfter(previousCheckedAt);
+		assertThat(nextMembership.getLastActivityCheckedAt()).isAfter(nextCheckedAt);
 	}
 
 	@Test

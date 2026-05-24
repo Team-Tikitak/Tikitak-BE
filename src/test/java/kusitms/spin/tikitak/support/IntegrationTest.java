@@ -92,6 +92,7 @@ public abstract class IntegrationTest {
 				.role(role)
 				.status(status)
 				.createdAt(BASE_TIME)
+				.lastActivityCheckedAt(BASE_TIME)
 				.build();
 	}
 

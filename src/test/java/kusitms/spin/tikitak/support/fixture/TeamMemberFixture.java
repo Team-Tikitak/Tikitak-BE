@@ -31,6 +31,7 @@ public final class TeamMemberFixture {
 				.role(TeamMemberRole.MEMBER)
 				.status(TeamMemberStatus.ACTIVE)
 				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
+				.lastActivityCheckedAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
 				.build();
 	}
 
@@ -50,6 +51,7 @@ public final class TeamMemberFixture {
 				.role(role)
 				.status(status)
 				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
+				.lastActivityCheckedAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
 				.build();
 	}
 }
