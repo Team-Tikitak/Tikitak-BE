@@ -53,6 +53,7 @@ public class MeResponseDTO {
 		private TeamMemberRole role;
 		private String nickname;
 		private long memberCount;
+		private long newActivityCount;
 		@JsonProperty("isActive")
 		private boolean isActive;
 		private LocalDateTime joinedAt;

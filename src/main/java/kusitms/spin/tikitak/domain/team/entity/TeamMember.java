@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
@@ -64,6 +65,9 @@ public class TeamMember {
 	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
+	@Column(nullable = false)
+	private LocalDateTime lastActivityCheckedAt;
+
 	private LocalDateTime deletedAt;
 
 	void setTeam(Team team) {
@@ -92,5 +96,17 @@ public class TeamMember {
 	public void rejoin() {
 		this.status = TeamMemberStatus.ACTIVE;
 		this.deletedAt = null;
+		this.lastActivityCheckedAt = LocalDateTime.now();
+	}
+
+	public void checkActivity() {
+		this.lastActivityCheckedAt = LocalDateTime.now();
+	}
+
+	@PrePersist
+	protected void onCreate() {
+		if (lastActivityCheckedAt == null) {
+			lastActivityCheckedAt = LocalDateTime.now();
+		}
 	}
 }

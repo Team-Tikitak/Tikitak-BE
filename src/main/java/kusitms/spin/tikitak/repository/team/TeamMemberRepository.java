@@ -131,6 +131,43 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long>, D
 			@Param("memberStatus") TeamMemberStatus memberStatus
 	);
 
+	@Query(value = """
+			select tm.team_id, count(f.id)
+			from team_member tm
+			join team t on t.id = tm.team_id
+			left join feed f on f.team_id = tm.team_id
+				and f.created_at > tm.last_activity_checked_at
+				and f.team_member_id <> tm.id
+				and f.deleted_at is null
+			where tm.member_id = :memberId
+				and tm.status = :memberStatus
+				and t.status = :teamStatus
+				and (:selectedTeamId is null or tm.team_id <> :selectedTeamId)
+			group by tm.team_id
+			""", nativeQuery = true)
+	List<Object[]> countNewActivitiesByMemberTeams(
+			@Param("memberId") Long memberId,
+			@Param("selectedTeamId") Long selectedTeamId,
+			@Param("memberStatus") String memberStatus,
+			@Param("teamStatus") String teamStatus
+	);
+
+	@Query("""
+			select tm
+			from TeamMember tm
+			join tm.team t
+			where tm.member.id = :memberId
+				and tm.team.id in :teamIds
+				and tm.status = :memberStatus
+				and t.status = :teamStatus
+			""")
+	List<TeamMember> findActiveByMemberIdAndTeamIds(
+			@Param("memberId") Long memberId,
+			@Param("teamIds") Collection<Long> teamIds,
+			@Param("memberStatus") TeamMemberStatus memberStatus,
+			@Param("teamStatus") TeamStatus teamStatus
+	);
+
 	@Query("""
 			select count(tm)
 			from TeamMember tm
