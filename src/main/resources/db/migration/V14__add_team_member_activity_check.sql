@@ -2,7 +2,7 @@ ALTER TABLE team_member
     ADD COLUMN last_activity_checked_at TIMESTAMP;
 
 UPDATE team_member
-SET last_activity_checked_at = created_at
+SET last_activity_checked_at = CURRENT_TIMESTAMP
 WHERE last_activity_checked_at IS NULL;
 
 ALTER TABLE team_member
