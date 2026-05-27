@@ -313,33 +313,12 @@ public class FeedService {
 		Place place = resolvePlace(request.getPlace());
 		List<TeamMember> taggedMembers = resolveTaggedMembers(teamId, request.getTaggedTeamMemberIds());
 
-		Set<Long> nextMediaIds = medias.stream().map(Media::getId).collect(Collectors.toSet());
-		feed.getImages().stream()
-				.map(FeedImage::getMedia)
-				.filter(Objects::nonNull)
-				.filter(media -> !nextMediaIds.contains(media.getId()))
-				.forEach(Media::markDeleted);
-
-		for (Media media : medias) {
-			media.markUsed();
-		}
-
-		List<FeedImage> images = new ArrayList<>();
-		for (int i = 0; i < medias.size(); i++) {
-			Media media = medias.get(i);
-			images.add(FeedImage.builder()
-					.media(media)
-					.imgUrl(media.getUrl())
-					.orderIndex(i)
-					.build());
-		}
-
 		List<FeedTag> tags = taggedMembers.stream()
 				.map(teamMember -> FeedTag.builder().teamMember(teamMember).build())
 				.toList();
 
 		feed.updateGeneralFeed(content, place);
-		feed.replaceImages(images);
+		syncImages(feed, medias);
 		feed.replaceTags(tags);
 		return toMutation(feed);
 	}
@@ -475,6 +454,42 @@ public class FeedService {
 		}
 		if (media.getStatus() != MediaStatus.UPLOADED) {
 			throw new BusinessException(ErrorCode.MEDIA018);
+		}
+	}
+
+	private void syncImages(Feed feed, List<Media> medias) {
+		Map<Long, FeedImage> currentImageByMediaId = feed.getImages().stream()
+				.filter(image -> image.getMedia() != null)
+				.collect(Collectors.toMap(
+						image -> image.getMedia().getId(),
+						Function.identity()
+				));
+		Set<Long> nextMediaIds = medias.stream()
+				.map(Media::getId)
+				.collect(Collectors.toSet());
+
+		feed.getImages().removeIf(image -> {
+			Media media = image.getMedia();
+			boolean removed = media == null || !nextMediaIds.contains(media.getId());
+			if (removed && media != null) {
+				media.markDeleted();
+			}
+			return removed;
+		});
+
+		for (int i = 0; i < medias.size(); i++) {
+			Media media = medias.get(i);
+			FeedImage existingImage = currentImageByMediaId.get(media.getId());
+			if (existingImage != null) {
+				existingImage.updateOrderIndex(i);
+				continue;
+			}
+			media.markUsed();
+			feed.addImage(FeedImage.builder()
+					.media(media)
+					.imgUrl(media.getUrl())
+					.orderIndex(i)
+					.build());
 		}
 	}
 
@@ -627,6 +642,7 @@ public class FeedService {
 				.images(sortedImages(feed).stream()
 						.map(image -> FeedResponseDTO.ImageDTO.builder()
 								.feedImageId(image.getId())
+								.mediaPublicId(image.getMedia() == null ? null : image.getMedia().getPublicId())
 								.imageUrl(image.getImgUrl())
 								.orderIndex(image.getOrderIndex())
 								.build())

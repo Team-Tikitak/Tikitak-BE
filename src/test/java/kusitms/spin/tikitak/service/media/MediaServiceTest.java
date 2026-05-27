@@ -259,6 +259,25 @@ class MediaServiceTest extends UnitTest {
     }
 
     @Test
+    @DisplayName("삭제 후 보관 기간이 지난 DELETED 미디어는 deletedAt 기준으로 조회한다")
+    void findExpiredDeletedMediaIds() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 3, 4, 20, 30);
+        when(mediaRepository.findExpiredDeletedMediaIds(any(MediaStatus.class), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(6L, 7L));
+
+        List<Long> mediaIds = mediaService.findExpiredDeletedMediaIds(cutoff, 100);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(mediaRepository).findExpiredDeletedMediaIds(
+                eq(MediaStatus.DELETED),
+                eq(cutoff),
+                pageableCaptor.capture()
+        );
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
+        assertThat(mediaIds).containsExactly(6L, 7L);
+    }
+
+    @Test
     @DisplayName("만료된 PENDING 미디어를 R2에서 삭제하고 DB 상태를 DELETED로 변경한다")
     void deleteExpiredPendingMedia() {
         Media media = media(MediaStatus.PENDING, MEMBER_ID);
@@ -281,6 +300,32 @@ class MediaServiceTest extends UnitTest {
 
         assertThat(deleted).isFalse();
         verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    @DisplayName("만료된 DELETED 미디어를 R2에서 삭제하고 DB row를 제거한다")
+    void deleteExpiredDeletedMedia() {
+        Media media = media(MediaStatus.DELETED, MEMBER_ID);
+        when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+        when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+
+        boolean deleted = mediaService.deleteExpiredDeletedMedia(MEDIA_ID);
+
+        assertThat(deleted).isTrue();
+        verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+        verify(mediaRepository).delete(media);
+    }
+
+    @Test
+    @DisplayName("만료 대상 미디어가 DELETED 상태가 아니면 삭제하지 않는다")
+    void deleteExpiredDeletedMediaSkipsWhenNotDeleted() {
+        when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.USED, MEMBER_ID)));
+
+        boolean deleted = mediaService.deleteExpiredDeletedMedia(MEDIA_ID);
+
+        assertThat(deleted).isFalse();
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+        verify(mediaRepository, never()).delete(any(Media.class));
     }
 
     @Test

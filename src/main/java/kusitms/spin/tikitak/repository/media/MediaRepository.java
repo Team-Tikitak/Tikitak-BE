@@ -54,6 +54,24 @@ public interface MediaRepository extends JpaRepository<Media, Long>, DailyQuesti
             Pageable pageable
     );
 
+    @Query("""
+            select m.id
+            from Media m
+            where m.status = :status
+              and m.deletedAt < :cutoff
+              and not exists (
+                select 1
+                from FeedImage fi
+                where fi.media = m
+              )
+            order by m.deletedAt asc, m.id asc
+            """)
+    List<Long> findExpiredDeletedMediaIds(
+            @Param("status") MediaStatus status,
+            @Param("cutoff") LocalDateTime cutoff,
+            Pageable pageable
+    );
+
     List<Media> findByMemberIdAndPurpose(Long memberId, MediaPurpose purpose);
 
     long countByTeamIdAndPurposeAndStatus(Long teamId, MediaPurpose purpose, MediaStatus status);
