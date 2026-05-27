@@ -56,6 +56,10 @@ public class FeedImage {
 		this.feed = feed;
 	}
 
+	public void updateOrderIndex(int orderIndex) {
+		this.orderIndex = orderIndex;
+	}
+
 	@PrePersist
 	protected void onCreate() {
 		if (createdAt == null) {

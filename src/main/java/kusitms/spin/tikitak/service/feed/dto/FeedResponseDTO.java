@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 public class FeedResponseDTO {
 
@@ -142,6 +143,7 @@ public class FeedResponseDTO {
 	@AllArgsConstructor
 	public static class ImageDTO {
 		private Long feedImageId;
+		private UUID mediaPublicId;
 		private String imageUrl;
 		private Integer orderIndex;
 	}
