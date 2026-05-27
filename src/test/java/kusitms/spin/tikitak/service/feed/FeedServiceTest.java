@@ -1,7 +1,9 @@
 package kusitms.spin.tikitak.service.feed;
 
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
@@ -37,6 +39,7 @@ import java.util.UUID;
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.createRequestWithContent;
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.createRequestWithMediaCount;
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.validCreateRequest;
+import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.uploadedFeedImage;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
@@ -56,7 +59,14 @@ class FeedServiceTest extends UnitTest {
 	private static final Long TEAM_ID = 10L;
 	private static final Long TEAM_MEMBER_ID = 100L;
 	private static final Long MEDIA_ID = 1000L;
+	private static final Long NEXT_MEDIA_ID = 1001L;
+	private static final Long NEW_MEDIA_ID = 1002L;
+	private static final Long FEED_ID = 2000L;
+	private static final Long FEED_IMAGE_ID = 3000L;
+	private static final Long NEXT_FEED_IMAGE_ID = 3001L;
 	private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+	private static final UUID NEXT_MEDIA_PUBLIC_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+	private static final UUID NEW_MEDIA_PUBLIC_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
 	@Mock
 	private FeedRepository feedRepository;
@@ -196,6 +206,88 @@ class FeedServiceTest extends UnitTest {
 		assertThatThrownBy(() -> feedService.createFeed(MEMBER_ID, TEAM_ID, request))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED007));
+	}
+
+	@Test
+	@DisplayName("피드 상세 조회 이미지 응답에 mediaPublicId를 포함한다")
+	void getFeedIncludesMediaPublicId() {
+		Media media = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Feed feed = Feed.builder()
+				.id(FEED_ID)
+				.team(team)
+				.teamMember(author)
+				.content("content")
+				.build();
+		feed.addImage(feedImage(FEED_IMAGE_ID, media, 0));
+		stubActiveAuthor();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		when(feedCommentRepository.countByFeedIdAndDeletedFalse(FEED_ID)).thenReturn(0L);
+		when(feedReactionRepository.countByReactionType(FEED_ID)).thenReturn(List.of());
+		when(feedReactionRepository.findByFeedIdAndTeamMemberId(FEED_ID, TEAM_MEMBER_ID)).thenReturn(Optional.empty());
+
+		FeedResponseDTO.FeedDetailResponseDTO response = feedService.getFeed(MEMBER_ID, TEAM_ID, FEED_ID);
+
+		assertThat(response.getImages()).hasSize(1);
+		assertThat(response.getImages().get(0).getFeedImageId()).isEqualTo(FEED_IMAGE_ID);
+		assertThat(response.getImages().get(0).getMediaPublicId()).isEqualTo(MEDIA_PUBLIC_ID);
+	}
+
+	@Test
+	@DisplayName("피드 수정 시 기존 이미지는 재사용하고 요청 순서대로 orderIndex만 갱신한다")
+	void updateFeedReusesExistingImagesAndUpdatesOrderIndex() {
+		Media firstMedia = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Media secondMedia = media(NEXT_MEDIA_ID, MEMBER_ID, NEXT_MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Media newMedia = media(NEW_MEDIA_ID, MEMBER_ID, NEW_MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.UPLOADED);
+		Feed feed = generalFeedWithImages(firstMedia, secondMedia);
+		FeedRequestDTO.FeedUpdateRequestDTO request = new FeedRequestDTO.FeedUpdateRequestDTO(
+				"updated",
+				List.of(NEXT_MEDIA_PUBLIC_ID, MEDIA_PUBLIC_ID, NEW_MEDIA_PUBLIC_ID),
+				null,
+				List.of()
+		);
+		stubActiveAuthor();
+		when(feedRepository.findActiveForUpdate(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		when(mediaRepository.findByPublicIdsForUpdate(request.getMediaPublicIds()))
+				.thenReturn(List.of(firstMedia, secondMedia, newMedia));
+
+		feedService.updateFeed(MEMBER_ID, TEAM_ID, FEED_ID, request);
+
+		assertThat(feed.getImages()).hasSize(3);
+		assertThat(imageByMediaId(feed, NEXT_MEDIA_ID).getId()).isEqualTo(NEXT_FEED_IMAGE_ID);
+		assertThat(imageByMediaId(feed, NEXT_MEDIA_ID).getOrderIndex()).isZero();
+		assertThat(imageByMediaId(feed, MEDIA_ID).getId()).isEqualTo(FEED_IMAGE_ID);
+		assertThat(imageByMediaId(feed, MEDIA_ID).getOrderIndex()).isEqualTo(1);
+		assertThat(imageByMediaId(feed, NEW_MEDIA_ID).getId()).isNull();
+		assertThat(imageByMediaId(feed, NEW_MEDIA_ID).getOrderIndex()).isEqualTo(2);
+		assertThat(firstMedia.getStatus()).isEqualTo(MediaStatus.USED);
+		assertThat(secondMedia.getStatus()).isEqualTo(MediaStatus.USED);
+		assertThat(newMedia.getStatus()).isEqualTo(MediaStatus.USED);
+	}
+
+	@Test
+	@DisplayName("피드 수정에서 빠진 기존 이미지만 제거하고 해당 미디어를 DELETED 처리한다")
+	void updateFeedDeletesOnlyRemovedImages() {
+		Media keptMedia = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Media removedMedia = media(NEXT_MEDIA_ID, MEMBER_ID, NEXT_MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Feed feed = generalFeedWithImages(keptMedia, removedMedia);
+		FeedRequestDTO.FeedUpdateRequestDTO request = new FeedRequestDTO.FeedUpdateRequestDTO(
+				"updated",
+				List.of(MEDIA_PUBLIC_ID),
+				null,
+				List.of()
+		);
+		stubActiveAuthor();
+		when(feedRepository.findActiveForUpdate(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		when(mediaRepository.findByPublicIdsForUpdate(request.getMediaPublicIds()))
+				.thenReturn(List.of(keptMedia));
+
+		feedService.updateFeed(MEMBER_ID, TEAM_ID, FEED_ID, request);
+
+		assertThat(feed.getImages()).hasSize(1);
+		assertThat(imageByMediaId(feed, MEDIA_ID).getId()).isEqualTo(FEED_IMAGE_ID);
+		assertThat(keptMedia.getStatus()).isEqualTo(MediaStatus.USED);
+		assertThat(removedMedia.getStatus()).isEqualTo(MediaStatus.DELETED);
+		assertThat(removedMedia.getDeletedAt()).isNotNull();
 	}
 
 	@Test
@@ -376,5 +468,33 @@ class FeedServiceTest extends UnitTest {
 				eq(TeamMemberStatus.ACTIVE),
 				eq(TeamStatus.ACTIVE)
 		)).thenReturn(Optional.of(author));
+	}
+
+	private Feed generalFeedWithImages(Media firstMedia, Media secondMedia) {
+		Feed feed = Feed.builder()
+				.id(FEED_ID)
+				.team(team)
+				.teamMember(author)
+				.content("content")
+				.build();
+		feed.addImage(feedImage(FEED_IMAGE_ID, firstMedia, 0));
+		feed.addImage(feedImage(NEXT_FEED_IMAGE_ID, secondMedia, 1));
+		return feed;
+	}
+
+	private FeedImage feedImage(Long id, Media media, int orderIndex) {
+		return FeedImage.builder()
+				.id(id)
+				.media(media)
+				.imgUrl(media.getUrl())
+				.orderIndex(orderIndex)
+				.build();
+	}
+
+	private FeedImage imageByMediaId(Feed feed, Long mediaId) {
+		return feed.getImages().stream()
+				.filter(image -> image.getMedia() != null && image.getMedia().getId().equals(mediaId))
+				.findFirst()
+				.orElseThrow();
 	}
 }
