@@ -72,4 +72,16 @@ public class HomeController {
 	) {
 		return CommonResponse.success(homeService.getRegions(memberId, teamId));
 	}
+
+	@GetMapping("/recommended-places")
+	@Operation(
+			summary = "N월 추천 장소 조회 API",
+			description = "이달의 추천 장소 2개를 랜덤으로 반환합니다."
+	)
+	public CommonResponse<HomeResponseDTO.RecommendedPlacesResponse> getRecommendedPlaces(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		return CommonResponse.success(homeService.getRecommendedPlaces(memberId, teamId));
+	}
 }

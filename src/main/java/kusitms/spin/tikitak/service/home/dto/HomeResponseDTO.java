@@ -72,4 +72,24 @@ public class HomeResponseDTO {
 		private long feedCount;
 		private String thumbnailImageUrl;
 	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class RecommendedPlacesResponse {
+		private int month;
+		private List<RecommendedPlaceItemDTO> places;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class RecommendedPlaceItemDTO {
+		private String name;
+		private String curation;
+		private String imageUrl;
+		private String kakaoMapUrl;
+	}
 }
