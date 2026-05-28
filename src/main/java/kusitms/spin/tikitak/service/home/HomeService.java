@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -103,5 +104,19 @@ public class HomeService {
 				.toList();
 
 		return HomeResponseDTO.RegionResponse.builder().regions(regions).build();
+	}
+
+	public HomeResponseDTO.RecommendedPlacesResponse getRecommendedPlaces(Long memberId, Long teamId) {
+		teamMemberRepository.findActiveByMemberIdAndTeamId(
+						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
+
+		List<HomeResponseDTO.RecommendedPlaceItemDTO> shuffled = new ArrayList<>(MayRecommendedPlaces.ALL);
+		Collections.shuffle(shuffled);
+
+		return HomeResponseDTO.RecommendedPlacesResponse.builder()
+				.month(5)
+				.places(shuffled.subList(0, 2))
+				.build();
 	}
 }
