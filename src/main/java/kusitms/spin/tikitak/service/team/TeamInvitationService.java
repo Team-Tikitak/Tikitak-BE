@@ -16,7 +16,6 @@ import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationResponseDTO;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +39,7 @@ public class TeamInvitationService {
 	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO generateOrReissueInviteLink(
 			Long memberId, Long teamId
 	) {
-		Team team = teamRepository.findById(teamId)
+		Team team = teamRepository.findByIdForUpdate(teamId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
 
 		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
@@ -50,7 +49,6 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
 
-		// 링크 생성 권한 검증
 		if (caller.getRole() != TeamMemberRole.OWNER) {
 			throw new BusinessException(ErrorCode.INVITE001);
 		}
@@ -58,26 +56,19 @@ public class TeamInvitationService {
 		String newToken = UUID.randomUUID().toString().replace("-", "");
 		LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(INVITE_EXPIRE_DAYS);
 
-		TeamInvite invite;
-		try {
-			invite = teamInviteRepository.findByTeamId(teamId)
+		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.map(existing -> {
-					existing.update(newToken, newExpiresAt);	// 기존 초대링크가 있으면 무효화 후 재발급
+					existing.update(newToken, newExpiresAt);
 					return existing;
 				})
 				.orElseGet(() -> teamInviteRepository.save(
-					TeamInvite.builder()					// 기존 초대링크가 없으면 생성
+						TeamInvite.builder()
 								.team(team)
 								.inviteToken(newToken)
 								.expiresAt(newExpiresAt)
 								.active(true)
 								.build()
 				));
-		} catch (DataIntegrityViolationException e) {
-			invite = teamInviteRepository.findByTeamId(teamId)
-					.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
-			invite.update(newToken, newExpiresAt);
-		}
 
 		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
 				.inviteToken(invite.getInviteToken())
@@ -103,7 +94,7 @@ public class TeamInvitationService {
 				.filter(TeamInvite::isActive)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE002));
 
-		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+		if (invite.isExpired()) {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
 
@@ -118,13 +109,7 @@ public class TeamInvitationService {
 		TeamInvite invite = teamInviteRepository.findByInviteToken(token)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
 
-		if (!invite.isActive()) {
-			throw new BusinessException(ErrorCode.INVITE004);
-		}
-
-		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-			throw new BusinessException(ErrorCode.INVITE005);
-		}
+		validateInviteUsable(invite);
 
 		Team team = teamRepository.findTeamWithTeamMembersById(invite.getTeam().getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
@@ -153,13 +138,7 @@ public class TeamInvitationService {
 		TeamInvite invite = teamInviteRepository.findByInviteToken(token)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
 
-		if (!invite.isActive()) {
-			throw new BusinessException(ErrorCode.INVITE004);
-		}
-
-		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-			throw new BusinessException(ErrorCode.INVITE005);
-		}
+		validateInviteUsable(invite);
 
 		Team team = teamRepository.findByIdForUpdate(invite.getTeam().getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
@@ -204,5 +183,14 @@ public class TeamInvitationService {
 				.teamId(team.getId())
 				.teamName(team.getName())
 				.build();
+	}
+
+	private void validateInviteUsable(TeamInvite invite) {
+		if (!invite.isActive()) {
+			throw new BusinessException(ErrorCode.INVITE004);
+		}
+		if (invite.isExpired()) {
+			throw new BusinessException(ErrorCode.INVITE005);
+		}
 	}
 }
