@@ -22,12 +22,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
@@ -77,11 +79,32 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 profileImagePublicId가 없으면 TeamMember에 null을 저장한다")
+	@DisplayName("createTeam changes active team to created team")
+	void createTeamChangesActiveTeamToCreatedTeam() {
+		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> {
+			Team savedTeam = inv.getArgument(0);
+			ReflectionTestUtils.setField(savedTeam, "id", TEAM_ID);
+			return savedTeam;
+		});
+		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		teamService.createTeam(MEMBER_ID, request);
+
+		assertThat(member.getActiveTeamId()).isEqualTo(TEAM_ID);
+	}
+
+	@Test
+	@DisplayName("createTeam stores null when profileImagePublicId is absent")
 	void createTeamStoresNullWhenProfileImagePublicIdIsAbsent() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		TeamRequestDTO.TeamCreateRequestDTO request =
-				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", null, "닉네임");
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
 
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -96,13 +119,13 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 유효한 profileImagePublicId가 있으면 media URL을 TeamMember에 저장한다")
+	@DisplayName("createTeam stores media url when profileImagePublicId is provided")
 	void createTeamStoresMediaUrlWhenProfileImagePublicIdIsProvided() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		UUID mediaPublicId = UUID.randomUUID();
 		Media profileMedia = media(1L, MEMBER_ID, mediaPublicId, MediaPurpose.PROFILE_IMAGE, MediaStatus.UPLOADED);
 		TeamRequestDTO.TeamCreateRequestDTO request =
-				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", mediaPublicId, "닉네임");
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", mediaPublicId, "nickname");
 
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 		when(mediaRepository.findByPublicIdForUpdate(mediaPublicId)).thenReturn(Optional.of(profileMedia));
@@ -119,7 +142,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 상세 조회 시 profileImgUrl이 없으면 내 프로필과 팀원 모두 기본 이미지로 fallback된다")
+	@DisplayName("viewTeamDetail falls back to default images")
 	void viewTeamDetailUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
 		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		Member otherMember = activeMemberWithCharacterType(OTHER_MEMBER_ID, ProfileCharacterType.TAK_SPARK);
@@ -131,14 +154,14 @@ class TeamServiceTest extends UnitTest {
 		TeamMember other = activeMemberWithoutProfileImg(OTHER_TEAM_MEMBER_ID, otherMember, tempTeam);
 		Team teamWithMembers = Team.builder()
 				.id(TEAM_ID)
-				.name("팀명")
+				.name("team")
 				.status(TeamStatus.ACTIVE)
 				.teamMembers(List.of(owner, other))
 				.build();
 
 		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(teamWithMembers));
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_LEADER)).thenReturn(ownerDefaultImg);
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_SPARK)).thenReturn(otherDefaultImg);
+		when(defaultProfileImageResolver.resolveForTeamMember(owner)).thenReturn(ownerDefaultImg);
+		when(defaultProfileImageResolver.resolveForTeamMember(other)).thenReturn(otherDefaultImg);
 
 		TeamResponseDTO.TeamDetailResponseDTO response = teamService.viewTeamDetail(MEMBER_ID, TEAM_ID);
 
@@ -148,7 +171,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 상세 조회 시 profileImgUrl이 있으면 저장된 이미지를 그대로 반환한다")
+	@DisplayName("viewTeamDetail returns stored profile image when present")
 	void viewTeamDetailReturnsStoredProfileImageWhenPresent() {
 		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 
@@ -157,12 +180,14 @@ class TeamServiceTest extends UnitTest {
 				OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
 		Team teamWithMembers = Team.builder()
 				.id(TEAM_ID)
-				.name("팀명")
+				.name("team")
 				.status(TeamStatus.ACTIVE)
 				.teamMembers(List.of(ownerWithImg))
 				.build();
 
 		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(teamWithMembers));
+		when(defaultProfileImageResolver.resolveForTeamMember(ownerWithImg))
+				.thenReturn("https://example.com/team-member" + OWNER_TEAM_MEMBER_ID + ".png");
 
 		TeamResponseDTO.TeamDetailResponseDTO response = teamService.viewTeamDetail(MEMBER_ID, TEAM_ID);
 
