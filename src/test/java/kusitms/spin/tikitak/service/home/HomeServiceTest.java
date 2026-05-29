@@ -15,6 +15,7 @@ import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.feed.FeedService.CombinationItemsResult;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,13 +53,16 @@ class HomeServiceTest extends UnitTest {
 	@Mock
 	private FeedRepository feedRepository;
 
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
 	private HomeService homeService;
 	private Team team;
 	private TeamMember requester;
 
 	@BeforeEach
 	void setUp() {
-		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService, feedRepository);
+		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService, feedRepository, defaultProfileImageResolver);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
 	}
