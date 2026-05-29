@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.service.feed;
 
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
+import kusitms.spin.tikitak.domain.feed.entity.FeedTag;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
@@ -458,6 +459,74 @@ class FeedServiceTest extends UnitTest {
 
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).getAuthor().getProfileImageUrl()).isEqualTo(defaultImgUrl);
+	}
+
+	@Test
+	@DisplayName("피드 목록 조회 시 태그된 멤버의 profileImgUrl이 없으면 캐릭터 기본 이미지로 fallback된다")
+	void listFeedsIncludesTaggedMembersWithDefaultProfileImageWhenProfileImgUrlIsNull() {
+		Member taggedMember = activeMemberWithCharacterType(2L, ProfileCharacterType.TAK_SPARK);
+		TeamMember taggedWithoutImg = activeMemberWithoutProfileImg(101L, taggedMember, team);
+		String defaultImgUrl = "https://cdn.example.com/default-profiles/tak-spark.png";
+		Feed feed = Feed.builder()
+				.id(FEED_ID)
+				.team(team)
+				.teamMember(author)
+				.content("content")
+				.build();
+		feed.addTag(FeedTag.builder().teamMember(taggedWithoutImg).build());
+
+		stubActiveAuthor();
+		when(feedRepository.findActiveFirstPage(eq(TEAM_ID), eq(null), any(Pageable.class)))
+				.thenReturn(List.of(feed));
+		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
+		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
+		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_SPARK)).thenReturn(defaultImgUrl);
+
+		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, null);
+
+		assertThat(response.getItems()).hasSize(1);
+		assertThat(response.getItems().get(0).getTaggedMembers()).hasSize(1);
+		assertThat(response.getItems().get(0).getTaggedMembers().get(0).getProfileImageUrl())
+				.isEqualTo(defaultImgUrl);
+	}
+
+	@Test
+	@DisplayName("조합 활동 조회 시 조합 멤버의 profileImgUrl이 없으면 캐릭터 기본 이미지로 fallback된다")
+	void getCombinationItemsUsesDefaultProfileImageForCombinationMembers() {
+		Member taggedMember = activeMemberWithCharacterType(2L, ProfileCharacterType.TAK_CARE);
+		TeamMember taggedWithoutImg = activeMemberWithoutProfileImg(101L, taggedMember, team);
+		String defaultImgUrl = "https://cdn.example.com/default-profiles/tak-care.png";
+		Feed feed = Feed.builder()
+				.id(FEED_ID)
+				.team(team)
+				.teamMember(author)
+				.content("content")
+				.build();
+
+		stubActiveAuthor();
+		when(feedRepository.findTopCombinationPair(TEAM_ID)).thenReturn(List.<Object[]>of(new Object[]{101L, 102L}));
+		when(feedRepository.findCombinationFeedIds(TEAM_ID, 101L, 102L)).thenReturn(List.of(FEED_ID, 2001L, 2002L));
+		when(feedRepository.findAlwaysCoTaggedMemberIds(TEAM_ID, 101L, 102L)).thenReturn(List.of(101L));
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(List.of(101L)),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(taggedWithoutImg));
+		when(feedRepository.findActiveByIds(eq(TEAM_ID), eq(List.of(FEED_ID, 2001L, 2002L))))
+				.thenReturn(List.of(feed));
+		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID, 2001L, 2002L))).thenReturn(List.of());
+		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID, 2001L, 2002L))).thenReturn(List.of());
+		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID, 2001L, 2002L)), eq(TEAM_MEMBER_ID)))
+				.thenReturn(List.of());
+		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_CARE)).thenReturn(defaultImgUrl);
+
+		FeedService.CombinationItemsResult result = feedService.getCombinationItems(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.combination()).hasSize(1);
+		assertThat(result.combination().get(0).getProfileImageUrl()).isEqualTo(defaultImgUrl);
 	}
 
 	private void stubActiveAuthor() {

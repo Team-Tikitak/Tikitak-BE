@@ -7,6 +7,7 @@ import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.auth.TokenService;
 import kusitms.spin.tikitak.service.me.ActiveTeamService;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.me.MeService;
 import kusitms.spin.tikitak.service.me.dto.MeRequestDTO;
 import kusitms.spin.tikitak.service.me.dto.MeResponseDTO;
@@ -55,7 +56,8 @@ class AgreementPropertyTest {
 				memberRepository,
 				mock(TeamMemberRepository.class),
 				mock(TokenService.class),
-				mock(ActiveTeamService.class)
+				mock(ActiveTeamService.class),
+				mock(DefaultProfileImageResolver.class)
 		);
 	}
 }
