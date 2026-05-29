@@ -55,13 +55,14 @@ public class TeamService {
 
         teamRepository.save(team);
 
-        String profileImgUrl = resolveProfileImgUrlFromMedia(memberId, request.getProfileImagePublicId());
+        Media profileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
 
         TeamMember teamMember = TeamMember.builder()
                 .team(team)
                 .member(member)
                 .nickname(request.getNickName())
-                .profileImgUrl(profileImgUrl)
+                .profileImgUrl(profileMedia != null ? profileMedia.getUrl() : null)
+                .profileMedia(profileMedia)
                 .role(TeamMemberRole.OWNER)
                 .status(TeamMemberStatus.ACTIVE)
                 .build();
@@ -196,7 +197,7 @@ public class TeamService {
         return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
     }
 
-    private String resolveProfileImgUrlFromMedia(Long memberId, UUID mediaPublicId) {
+    private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
         if (mediaPublicId == null) return null;
         Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
                 .filter(m -> m.getMemberId().equals(memberId)
@@ -204,6 +205,6 @@ public class TeamService {
                         && m.getStatus() == MediaStatus.UPLOADED)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
         media.markUsed();
-        return media.getUrl();
+        return media;
     }
 }

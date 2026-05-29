@@ -160,7 +160,7 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.INVITE008);
 		}
 
-		String profileImgUrl = resolveProfileImgUrlFromMedia(memberId, request.getProfileImagePublicId());
+		Media newProfileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
 
 		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
 				.ifPresentOrElse(
@@ -171,14 +171,22 @@ public class TeamInvitationService {
 							if (existing.getStatus() == TeamMemberStatus.BANNED) {
 								throw new BusinessException(ErrorCode.INVITE007);
 							}
+							if (newProfileMedia != null && existing.getProfileMedia() != null) {
+								existing.getProfileMedia().markDeleted();
+							}
 							existing.rejoin();
-							existing.updateProfile(request.getNickname(), profileImgUrl);
+							existing.updateProfile(
+									request.getNickname(),
+									newProfileMedia != null ? newProfileMedia.getUrl() : null,
+									newProfileMedia
+							);
 						},
 						() -> teamMemberRepository.save(TeamMember.builder()
 								.team(team)
 								.member(member)
 								.nickname(request.getNickname())
-								.profileImgUrl(profileImgUrl)
+								.profileImgUrl(newProfileMedia != null ? newProfileMedia.getUrl() : null)
+								.profileMedia(newProfileMedia)
 								.role(TeamMemberRole.MEMBER)
 								.status(TeamMemberStatus.ACTIVE)
 								.build())
@@ -201,7 +209,7 @@ public class TeamInvitationService {
 		}
 	}
 
-	private String resolveProfileImgUrlFromMedia(Long memberId, UUID mediaPublicId) {
+	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
 		if (mediaPublicId == null) return null;
 		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
 				.filter(m -> m.getMemberId().equals(memberId)
@@ -209,6 +217,6 @@ public class TeamInvitationService {
 						&& m.getStatus() == MediaStatus.UPLOADED)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
 		media.markUsed();
-		return media.getUrl();
+		return media;
 	}
 }

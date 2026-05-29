@@ -70,8 +70,15 @@ public class TeamMemberService {
             throw new BusinessException(ErrorCode.TEAM003);
         }
 
-        String profileImgUrl = resolveProfileImgUrlFromMedia(memberId, request.getProfileImagePublicId());
-        teamMember.updateProfile(request.getNickname(), profileImgUrl);
+        Media newProfileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
+        if (newProfileMedia != null && teamMember.getProfileMedia() != null) {
+            teamMember.getProfileMedia().markDeleted();
+        }
+        teamMember.updateProfile(
+                request.getNickname(),
+                newProfileMedia != null ? newProfileMedia.getUrl() : null,
+                newProfileMedia
+        );
 
         return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
                 .nickname(teamMember.getNickname())
@@ -137,7 +144,7 @@ public class TeamMemberService {
         return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
     }
 
-    private String resolveProfileImgUrlFromMedia(Long memberId, UUID mediaPublicId) {
+    private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
         if (mediaPublicId == null) return null;
         Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
                 .filter(m -> m.getMemberId().equals(memberId)
@@ -145,6 +152,6 @@ public class TeamMemberService {
                         && m.getStatus() == MediaStatus.UPLOADED)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
         media.markUsed();
-        return media.getUrl();
+        return media;
     }
 }
