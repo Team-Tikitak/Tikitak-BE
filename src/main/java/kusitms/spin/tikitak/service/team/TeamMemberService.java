@@ -82,7 +82,7 @@ public class TeamMemberService {
 
         return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
                 .nickname(teamMember.getNickname())
-                .profileImgUrl(teamMember.getProfileImgUrl())
+                .profileImgUrl(resolveProfileImgUrl(teamMember))
                 .build();
     }
 

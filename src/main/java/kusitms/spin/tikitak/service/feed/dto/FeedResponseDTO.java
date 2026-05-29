@@ -36,6 +36,7 @@ public class FeedResponseDTO {
 		private String thumbnailImageUrl;
 		private int imageCount;
 		private AuthorDTO author;
+		private List<TaggedMemberDTO> taggedMembers;
 		private PlaceDTO place;
 		private QuestionDTO question;
 		private long commentCount;
