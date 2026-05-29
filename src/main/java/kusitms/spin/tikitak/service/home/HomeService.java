@@ -65,18 +65,21 @@ public class HomeService {
 		}
 
 		return HomeResponseDTO.BestAttendanceResponse.builder()
+				.month(currentMonth.getMonthValue())
 				.members(members)
 				.build();
 	}
 
 	public HomeResponseDTO.EveryonePickResponse getEveryonePick(Long memberId, Long teamId) {
 		return HomeResponseDTO.EveryonePickResponse.builder()
+				.month(YearMonth.now().getMonthValue())
 				.picks(feedService.getEveryonePickItems(memberId, teamId))
 				.build();
 	}
 
 	public HomeResponseDTO.AllTaggedResponse getAllTaggedFeeds(Long memberId, Long teamId) {
 		return HomeResponseDTO.AllTaggedResponse.builder()
+				.month(YearMonth.now().getMonthValue())
 				.feeds(feedService.getAllTaggedItems(memberId, teamId))
 				.build();
 	}
@@ -84,6 +87,7 @@ public class HomeService {
 	public HomeResponseDTO.CombinationResponse getCombination(Long memberId, Long teamId) {
 		FeedService.CombinationItemsResult result = feedService.getCombinationItems(memberId, teamId);
 		return HomeResponseDTO.CombinationResponse.builder()
+				.month(YearMonth.now().getMonthValue())
 				.combination(result.combination())
 				.feeds(result.feeds())
 				.build();
@@ -95,7 +99,10 @@ public class HomeService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
 		if (feedRepository.countActiveFeedsWithRegion(teamId) < REGION_MIN_FEEDS) {
-			return HomeResponseDTO.RegionResponse.builder().regions(List.of()).build();
+			return HomeResponseDTO.RegionResponse.builder()
+					.month(YearMonth.now().getMonthValue())
+					.regions(List.of())
+					.build();
 		}
 
 		List<HomeResponseDTO.RegionItemDTO> regions = feedRepository.findRegionSummaries(teamId)
@@ -107,7 +114,10 @@ public class HomeService {
 						.build())
 				.toList();
 
-		return HomeResponseDTO.RegionResponse.builder().regions(regions).build();
+		return HomeResponseDTO.RegionResponse.builder()
+				.month(YearMonth.now().getMonthValue())
+				.regions(regions)
+				.build();
 	}
 
 	public HomeResponseDTO.RecommendedPlacesResponse getRecommendedPlaces(Long memberId, Long teamId) {
@@ -121,7 +131,7 @@ public class HomeService {
 		Collections.shuffle(shuffled);
 
 		return HomeResponseDTO.RecommendedPlacesResponse.builder()
-				.month(5)
+				.month(YearMonth.now().getMonthValue())
 				.places(shuffled.subList(0, 2))
 				.build();
 	}
