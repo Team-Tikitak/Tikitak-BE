@@ -3,6 +3,7 @@ package kusitms.spin.tikitak.service.home;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -35,6 +36,7 @@ public class HomeService {
 	private final FeedService feedService;
 	private final FeedRepository feedRepository;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final R2Properties r2Properties;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
@@ -113,7 +115,9 @@ public class HomeService {
 						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
-		List<HomeResponseDTO.RecommendedPlaceItemDTO> shuffled = new ArrayList<>(MayRecommendedPlaces.ALL);
+		List<HomeResponseDTO.RecommendedPlaceItemDTO> shuffled = new ArrayList<>(
+				MayRecommendedPlaces.all(r2Properties.getPublicBaseUrl())
+		);
 		Collections.shuffle(shuffled);
 
 		return HomeResponseDTO.RecommendedPlacesResponse.builder()

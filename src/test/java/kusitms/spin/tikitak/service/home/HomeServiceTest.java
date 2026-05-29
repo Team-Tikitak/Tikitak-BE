@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -56,13 +57,23 @@ class HomeServiceTest extends UnitTest {
 	@Mock
 	private DefaultProfileImageResolver defaultProfileImageResolver;
 
+	private R2Properties r2Properties;
 	private HomeService homeService;
 	private Team team;
 	private TeamMember requester;
 
 	@BeforeEach
 	void setUp() {
-		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService, feedRepository, defaultProfileImageResolver);
+		r2Properties = new R2Properties();
+		r2Properties.setPublicBaseUrl("https://media.tikitak.space");
+		homeService = new HomeService(
+				feedTagRepository,
+				teamMemberRepository,
+				feedService,
+				feedRepository,
+				defaultProfileImageResolver,
+				r2Properties
+		);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
 	}
