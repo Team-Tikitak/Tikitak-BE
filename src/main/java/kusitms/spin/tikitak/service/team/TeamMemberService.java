@@ -50,7 +50,7 @@ public class TeamMemberService {
                         .teamMemberId(tm.getId())
                         .nickname(tm.getNickname())
                         .role(tm.getRole())
-                        .profileImgUrl(resolveProfileImgUrl(tm))
+                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
                         .build())
                 .toList();
 
@@ -82,7 +82,7 @@ public class TeamMemberService {
 
         return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
                 .nickname(teamMember.getNickname())
-                .profileImgUrl(resolveProfileImgUrl(teamMember))
+                .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
                 .build();
     }
 
@@ -135,13 +135,6 @@ public class TeamMemberService {
         }
 
         target.kickTeamMember();
-    }
-
-    private String resolveProfileImgUrl(TeamMember teamMember) {
-        if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-            return teamMember.getProfileImgUrl();
-        }
-        return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
     }
 
     private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {

@@ -279,19 +279,12 @@ public class MeService {
 				.description(team.getDescription())
 				.role(teamMember.getRole())
 				.nickname(teamMember.getNickname())
-				.profileImgUrl(resolveProfileImgUrl(teamMember))
+				.profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.memberCount(memberCountByTeamId.getOrDefault(team.getId(), 0L))
 				.newActivityCount(isActive ? 0L : newActivityCountByTeamId.getOrDefault(team.getId(), 0L))
 				.isActive(isActive)
 				.joinedAt(teamMember.getCreatedAt())
 				.build();
-	}
-
-	private String resolveProfileImgUrl(TeamMember teamMember) {
-		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-			return teamMember.getProfileImgUrl();
-		}
-		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 
 	private MeResponseDTO.AgreementResponseDTO toAgreementResponse(Member member) {

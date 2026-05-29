@@ -684,7 +684,7 @@ public class FeedService {
 		return FeedResponseDTO.AuthorDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(resolveProfileImgUrl(teamMember))
+				.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.isAnonymous(false)
 				.build();
 	}
@@ -693,15 +693,8 @@ public class FeedService {
 		return FeedResponseDTO.TaggedMemberDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(resolveProfileImgUrl(teamMember))
+				.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.build();
-	}
-
-	private String resolveProfileImgUrl(TeamMember teamMember) {
-		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-			return teamMember.getProfileImgUrl();
-		}
-		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 
 	private FeedResponseDTO.PlaceDTO toPlace(Place place, boolean includeAddress) {
