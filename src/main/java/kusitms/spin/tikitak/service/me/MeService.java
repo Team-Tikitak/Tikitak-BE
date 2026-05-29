@@ -107,6 +107,11 @@ public class MeService {
 		try {
 			Member member = getActiveMember(memberId);
 			activeTeamService.validateChangeableTeam(memberId, request.getTeamId());
+			if (request.getTeamId().equals(member.getActiveTeamId())) {
+				return MeResponseDTO.ActiveTeamUpdateResponseDTO.builder()
+						.activeTeamId(member.getActiveTeamId())
+						.build();
+			}
 			checkActivityOnSelectedTeamChange(memberId, member.getActiveTeamId(), request.getTeamId());
 			member.changeActiveTeam(request.getTeamId());
 

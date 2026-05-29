@@ -54,6 +54,7 @@ public class TeamService {
                 .build();
 
         teamRepository.save(team);
+        member.changeActiveTeam(team.getId());
 
         Media profileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
 
@@ -68,7 +69,6 @@ public class TeamService {
                 .build();
 
         teamMemberRepository.save(teamMember);
-        memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
 
         // 팀 초대링크 생성
         teamInviteRepository.save(TeamInvite.builder()
