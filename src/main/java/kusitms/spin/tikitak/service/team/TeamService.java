@@ -49,6 +49,7 @@ public class TeamService {
                 .build();
 
         teamRepository.save(team);
+        member.changeActiveTeam(team.getId());
 
         // TeamMember 생성
         String profileImgUrl = (request.getProfileImageUrl() != null && !request.getProfileImageUrl().isBlank())
@@ -65,7 +66,6 @@ public class TeamService {
                 .build();
 
         teamMemberRepository.save(teamMember);
-        memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
 
         // 팀 초대링크 생성
         teamInviteRepository.save(TeamInvite.builder()
