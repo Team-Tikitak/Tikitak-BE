@@ -45,7 +45,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Test
-        run: ./gradlew clean test
+        run: ./gradlew clean test integrationTest
 
       - name: Login to GHCR
         uses: docker/login-action@v3

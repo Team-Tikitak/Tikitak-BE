@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.domain.feed.entity;
 
 import jakarta.persistence.*;
+import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.domain.place.entity.Place;
 import kusitms.spin.tikitak.domain.question.entity.Question;
 import kusitms.spin.tikitak.domain.team.entity.Team;
@@ -36,7 +37,7 @@ public class Feed {
 	@JoinColumn(name = "team_id", nullable = false)
 	private Team team;
 
-	@OneToOne(fetch = FetchType.LAZY)
+	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "place_id")
 	private Place place;
 
@@ -48,6 +49,11 @@ public class Feed {
 	private String content;
 
 	private LocalDate meetingDate;
+
+	private LocalDate questionAnswerDate;
+
+	@Column(length = 100, unique = true)
+	private String dailyAnswerActiveKey;
 
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
@@ -72,4 +78,74 @@ public class Feed {
 	@Builder.Default
 	@OneToMany(mappedBy = "feed", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<FeedReaction> reactions = new ArrayList<>();
+
+	public FeedType getType() {
+		return FeedType.from(this);
+	}
+
+	public boolean hasQuestion() {
+		return question != null;
+	}
+
+	public void addImage(FeedImage image) {
+		images.add(image);
+		image.setFeed(this);
+	}
+
+	public void addTag(FeedTag tag) {
+		tags.add(tag);
+		tag.setFeed(this);
+	}
+
+	public void updateGeneralFeed(String content, Place place) {
+		this.content = content;
+		this.place = place;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void updateDailyAnswerContent(String content) {
+		this.content = content;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void setDailyAnswer(Question question, LocalDate questionAnswerDate, String dailyAnswerActiveKey) {
+		this.question = question;
+		this.questionAnswerDate = questionAnswerDate;
+		this.dailyAnswerActiveKey = dailyAnswerActiveKey;
+	}
+
+	public void replaceImages(List<FeedImage> images) {
+		this.images.clear();
+		images.forEach(this::addImage);
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void replaceTags(List<FeedTag> tags) {
+		this.tags.clear();
+		tags.forEach(this::addTag);
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void delete() {
+		LocalDateTime now = LocalDateTime.now();
+		this.deletedAt = now;
+		this.dailyAnswerActiveKey = null;
+		this.updatedAt = now;
+	}
+
+	@PrePersist
+	protected void onCreate() {
+		LocalDateTime now = LocalDateTime.now();
+		if (createdAt == null) {
+			createdAt = now;
+		}
+		if (updatedAt == null) {
+			updatedAt = now;
+		}
+	}
+
+	@PreUpdate
+	protected void onUpdate() {
+		updatedAt = LocalDateTime.now();
+	}
 }

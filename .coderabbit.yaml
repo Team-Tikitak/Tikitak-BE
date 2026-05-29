@@ -1,0 +1,31 @@
+# .coderabbit.yaml
+language: 'ko-KR'
+
+tone_instructions: |
+  핵심만 짧게 지적하고, 왜 문제인지와 개선 방향을 함께 제시합니다.
+  사소한 스타일 지적보다 버그 가능성과 유지보수 영향을 우선합니다.
+
+reviews:
+  profile: 'assertive'
+  high_level_summary: true
+  changed_files_summary: true
+  abort_on_close: true
+
+  auto_review:
+    drafts: false
+
+  path_filters:
+    - "!.gradle/**"
+    - "!build/**"
+    - "!**/target/**"
+    - "!**/*.lock"
+    - "!**/*.log"
+    - "!*.md"
+    - "!src/test/**"
+
+  tools:
+    gitleaks:
+      enabled: true
+
+chat:
+  auto_reply: true

@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -13,6 +15,7 @@ import java.time.LocalDateTime;
 @Table(name = "team_invite")
 @Getter
 @Builder
+@EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class TeamInvite {
@@ -34,6 +37,17 @@ public class TeamInvite {
 	@Column(name = "is_active", nullable = false)
 	private boolean active;
 
-	@Column(nullable = false)
+	@CreatedDate
+	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;
+
+	public boolean isExpired() {
+		return expiresAt.isBefore(LocalDateTime.now());
+	}
+
+	public void update(String newToken, LocalDateTime newExpiresAt) {
+		this.inviteToken = newToken;
+		this.expiresAt = newExpiresAt;
+		this.active = true;
+	}
 }
