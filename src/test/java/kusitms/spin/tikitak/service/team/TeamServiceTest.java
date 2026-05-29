@@ -115,6 +115,7 @@ class TeamServiceTest extends UnitTest {
 		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
 		verify(teamMemberRepository).save(captor.capture());
 		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(profileMedia.getUrl());
+		assertThat(captor.getValue().getProfileMedia()).isEqualTo(profileMedia);
 	}
 
 	@Test
