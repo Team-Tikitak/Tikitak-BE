@@ -1,5 +1,9 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
@@ -8,7 +12,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -34,6 +38,7 @@ public class TeamInvitationService {
 	private final MemberRepository memberRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamInviteRepository teamInviteRepository;
+	private final MediaRepository mediaRepository;
 
 	@Transactional
 	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO generateOrReissueInviteLink(
@@ -155,6 +160,8 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.INVITE008);
 		}
 
+		Media newProfileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
+
 		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
 				.ifPresentOrElse(
 						existing -> {
@@ -164,14 +171,22 @@ public class TeamInvitationService {
 							if (existing.getStatus() == TeamMemberStatus.BANNED) {
 								throw new BusinessException(ErrorCode.INVITE007);
 							}
+							if (newProfileMedia != null && existing.getProfileMedia() != null) {
+								existing.getProfileMedia().markDeleted();
+							}
 							existing.rejoin();
-							existing.updateProfile(request.getNickname(), request.getProfileImgUrl());
+							existing.updateProfile(
+									request.getNickname(),
+									newProfileMedia != null ? newProfileMedia.getUrl() : null,
+									newProfileMedia
+							);
 						},
 						() -> teamMemberRepository.save(TeamMember.builder()
 								.team(team)
 								.member(member)
 								.nickname(request.getNickname())
-								.profileImgUrl(request.getProfileImgUrl())
+								.profileImgUrl(newProfileMedia != null ? newProfileMedia.getUrl() : null)
+								.profileMedia(newProfileMedia)
 								.role(TeamMemberRole.MEMBER)
 								.status(TeamMemberStatus.ACTIVE)
 								.build())
@@ -192,5 +207,16 @@ public class TeamInvitationService {
 		if (invite.isExpired()) {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
+	}
+
+	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
+		if (mediaPublicId == null) return null;
+		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+				.filter(m -> m.getMemberId().equals(memberId)
+						&& m.getPurpose() == MediaPurpose.PROFILE_IMAGE
+						&& m.getStatus() == MediaStatus.UPLOADED)
+				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
+		media.markUsed();
+		return media;
 	}
 }

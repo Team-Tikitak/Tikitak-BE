@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 public class TeamRequestDTO {
 
     @Getter
@@ -15,7 +17,7 @@ public class TeamRequestDTO {
         private String teamName;
         @NotBlank
         private String introduction;
-        private String profileImageUrl;
+        private UUID profileImagePublicId;
         @NotBlank
         private String nickName;
     }

@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
@@ -24,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HomeControllerTest extends ApiTest {
 
 	private static final Long TEAM_ID = 10L;
+	private static final int MONTH = YearMonth.now().getMonthValue();
 
 	@Mock
 	private HomeService homeService;
@@ -39,6 +41,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("GET /api/v1/teams/{teamId}/home/best-attendance는 상위 3명을 반환한다")
 	void getBestAttendance() throws Exception {
 		HomeResponseDTO.BestAttendanceResponse response = HomeResponseDTO.BestAttendanceResponse.builder()
+				.month(MONTH)
 				.members(List.of(
 						member(1, 101L, "다다", "https://example.com/1.png", 5L),
 						member(2, 102L, "가가", "https://example.com/2.png", 3L),
@@ -52,6 +55,7 @@ class HomeControllerTest extends ApiTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.status").value(200))
+				.andExpect(jsonPath("$.data.month").value(MONTH))
 				.andExpect(jsonPath("$.data.members").isArray())
 				.andExpect(jsonPath("$.data.members.length()").value(3))
 				.andExpect(jsonPath("$.data.members[0].rank").value(1))
@@ -68,7 +72,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("태그된 팀원이 없으면 빈 목록을 반환한다")
 	void getBestAttendanceReturnsEmptyList() throws Exception {
 		when(homeService.getBestAttendance(TEST_MEMBER_ID, TEAM_ID))
-				.thenReturn(HomeResponseDTO.BestAttendanceResponse.builder().members(List.of()).build());
+				.thenReturn(HomeResponseDTO.BestAttendanceResponse.builder().month(MONTH).members(List.of()).build());
 
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/best-attendance", TEAM_ID))
 				.andExpect(status().isOk())
@@ -90,6 +94,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("GET /api/v1/teams/{teamId}/home/everyone-pick는 PICK 목록을 반환한다")
 	void getEveryonePick() throws Exception {
 		HomeResponseDTO.EveryonePickResponse response = HomeResponseDTO.EveryonePickResponse.builder()
+				.month(MONTH)
 				.picks(List.of(
 						feedListItem(301L, "오늘 정말 즐거웠다", 5, 3),
 						feedListItem(302L, "다음에 또 가고 싶다", 3, 1)
@@ -101,6 +106,7 @@ class HomeControllerTest extends ApiTest {
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/everyone-pick", TEAM_ID))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.month").value(MONTH))
 				.andExpect(jsonPath("$.data.picks").isArray())
 				.andExpect(jsonPath("$.data.picks.length()").value(2))
 				.andExpect(jsonPath("$.data.picks[0].feedId").value(301))
@@ -114,7 +120,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("당월 피드가 부족하면 빈 PICK 목록을 반환한다")
 	void getEveryonePickReturnsEmptyWhenNotEnoughFeeds() throws Exception {
 		when(homeService.getEveryonePick(TEST_MEMBER_ID, TEAM_ID))
-				.thenReturn(HomeResponseDTO.EveryonePickResponse.builder().picks(List.of()).build());
+				.thenReturn(HomeResponseDTO.EveryonePickResponse.builder().month(MONTH).picks(List.of()).build());
 
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/everyone-pick", TEAM_ID))
 				.andExpect(status().isOk())
@@ -136,6 +142,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("GET /api/v1/teams/{teamId}/home/all-tagged는 전원 태그 피드 목록을 반환한다")
 	void getAllTaggedFeeds() throws Exception {
 		HomeResponseDTO.AllTaggedResponse response = HomeResponseDTO.AllTaggedResponse.builder()
+				.month(MONTH)
 				.feeds(List.of(
 						feedListItem(401L, "전원 태그 피드1", 2, 1),
 						feedListItem(402L, "전원 태그 피드2", 1, 0),
@@ -148,6 +155,7 @@ class HomeControllerTest extends ApiTest {
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/all-tagged", TEAM_ID))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.month").value(MONTH))
 				.andExpect(jsonPath("$.data.feeds").isArray())
 				.andExpect(jsonPath("$.data.feeds.length()").value(3))
 				.andExpect(jsonPath("$.data.feeds[0].feedId").value(401))
@@ -160,7 +168,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("전원 태그 피드가 3개 미만이면 빈 목록을 반환한다")
 	void getAllTaggedFeedsReturnsEmptyWhenNotEnough() throws Exception {
 		when(homeService.getAllTaggedFeeds(TEST_MEMBER_ID, TEAM_ID))
-				.thenReturn(HomeResponseDTO.AllTaggedResponse.builder().feeds(List.of()).build());
+				.thenReturn(HomeResponseDTO.AllTaggedResponse.builder().month(MONTH).feeds(List.of()).build());
 
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/all-tagged", TEAM_ID))
 				.andExpect(status().isOk())
@@ -182,6 +190,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("GET /api/v1/teams/{teamId}/home/combinations는 콤비네이션 조합과 피드를 반환한다")
 	void getCombination() throws Exception {
 		HomeResponseDTO.CombinationResponse response = HomeResponseDTO.CombinationResponse.builder()
+				.month(MONTH)
 				.combination(List.of(
 						taggedMember(101L, "홍길동"),
 						taggedMember(102L, "김철수")
@@ -198,6 +207,7 @@ class HomeControllerTest extends ApiTest {
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/combinations", TEAM_ID))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.month").value(MONTH))
 				.andExpect(jsonPath("$.data.combination").isArray())
 				.andExpect(jsonPath("$.data.combination.length()").value(2))
 				.andExpect(jsonPath("$.data.combination[0].teamMemberId").value(101))
@@ -214,7 +224,7 @@ class HomeControllerTest extends ApiTest {
 	void getCombinationReturnsEmptyWhenNotEnoughFeeds() throws Exception {
 		when(homeService.getCombination(TEST_MEMBER_ID, TEAM_ID))
 				.thenReturn(HomeResponseDTO.CombinationResponse.builder()
-						.combination(List.of()).feeds(List.of()).build());
+						.month(MONTH).combination(List.of()).feeds(List.of()).build());
 
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/combinations", TEAM_ID))
 				.andExpect(status().isOk())
@@ -237,6 +247,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("GET /api/v1/teams/{teamId}/home/regions는 지역 목록을 반환한다")
 	void getRegions() throws Exception {
 		HomeResponseDTO.RegionResponse response = HomeResponseDTO.RegionResponse.builder()
+				.month(MONTH)
 				.regions(List.of(
 						regionItem("서울 강남구", 12L, "https://example.com/img1.jpg"),
 						regionItem("경기 성남시 분당구", 5L, null)
@@ -248,6 +259,7 @@ class HomeControllerTest extends ApiTest {
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/regions", TEAM_ID))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.month").value(MONTH))
 				.andExpect(jsonPath("$.data.regions").isArray())
 				.andExpect(jsonPath("$.data.regions.length()").value(2))
 				.andExpect(jsonPath("$.data.regions[0].region").value("서울 강남구"))
@@ -261,7 +273,7 @@ class HomeControllerTest extends ApiTest {
 	@DisplayName("장소 있는 피드가 3개 미만이면 빈 지역 목록을 반환한다")
 	void getRegionsReturnsEmptyWhenNotEnoughFeeds() throws Exception {
 		when(homeService.getRegions(TEST_MEMBER_ID, TEAM_ID))
-				.thenReturn(HomeResponseDTO.RegionResponse.builder().regions(List.of()).build());
+				.thenReturn(HomeResponseDTO.RegionResponse.builder().month(MONTH).regions(List.of()).build());
 
 		mockMvc.perform(get("/api/v1/teams/{teamId}/home/regions", TEAM_ID))
 				.andExpect(status().isOk())

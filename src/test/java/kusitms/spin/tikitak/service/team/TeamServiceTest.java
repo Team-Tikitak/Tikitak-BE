@@ -1,10 +1,14 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -22,9 +26,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
+import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +59,9 @@ class TeamServiceTest extends UnitTest {
 	private TeamInviteRepository teamInviteRepository;
 
 	@Mock
+	private MediaRepository mediaRepository;
+
+	@Mock
 	private DefaultProfileImageResolver defaultProfileImageResolver;
 
 	private TeamService teamService;
@@ -64,16 +73,17 @@ class TeamServiceTest extends UnitTest {
 				memberRepository,
 				teamMemberRepository,
 				teamInviteRepository,
+				mediaRepository,
 				defaultProfileImageResolver
 		);
 	}
 
 	@Test
-	@DisplayName("팀 생성 후 새 팀을 활성 팀으로 선택한다")
+	@DisplayName("createTeam changes active team to created team")
 	void createTeamChangesActiveTeamToCreatedTeam() {
 		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
 		TeamRequestDTO.TeamCreateRequestDTO request =
-				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", null, "닉네임");
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
 
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 		when(teamRepository.save(any())).thenAnswer(inv -> {
@@ -90,11 +100,11 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 profileImageUrl이 없으면 TeamMember에 null을 저장한다")
-	void createTeamStoresNullWhenProfileImageUrlIsAbsent() {
+	@DisplayName("createTeam stores null when profileImagePublicId is absent")
+	void createTeamStoresNullWhenProfileImagePublicIdIsAbsent() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		TeamRequestDTO.TeamCreateRequestDTO request =
-				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", null, "닉네임");
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
 
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -109,14 +119,16 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 profileImageUrl이 있으면 해당 URL을 TeamMember에 저장한다")
-	void createTeamStoresProvidedProfileImageUrl() {
+	@DisplayName("createTeam stores media url when profileImagePublicId is provided")
+	void createTeamStoresMediaUrlWhenProfileImagePublicIdIsProvided() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
-		String customImgUrl = "https://example.com/my-photo.png";
+		UUID mediaPublicId = UUID.randomUUID();
+		Media profileMedia = media(1L, MEMBER_ID, mediaPublicId, MediaPurpose.PROFILE_IMAGE, MediaStatus.UPLOADED);
 		TeamRequestDTO.TeamCreateRequestDTO request =
-				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", customImgUrl, "닉네임");
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", mediaPublicId, "nickname");
 
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(mediaRepository.findByPublicIdForUpdate(mediaPublicId)).thenReturn(Optional.of(profileMedia));
 		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -125,11 +137,12 @@ class TeamServiceTest extends UnitTest {
 
 		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
 		verify(teamMemberRepository).save(captor.capture());
-		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(customImgUrl);
+		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(profileMedia.getUrl());
+		assertThat(captor.getValue().getProfileMedia()).isEqualTo(profileMedia);
 	}
 
 	@Test
-	@DisplayName("팀 상세 조회 시 profileImgUrl이 없으면 내 프로필과 팀원 모두 기본 이미지로 fallback된다")
+	@DisplayName("viewTeamDetail falls back to default images")
 	void viewTeamDetailUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
 		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		Member otherMember = activeMemberWithCharacterType(OTHER_MEMBER_ID, ProfileCharacterType.TAK_SPARK);
@@ -141,7 +154,7 @@ class TeamServiceTest extends UnitTest {
 		TeamMember other = activeMemberWithoutProfileImg(OTHER_TEAM_MEMBER_ID, otherMember, tempTeam);
 		Team teamWithMembers = Team.builder()
 				.id(TEAM_ID)
-				.name("팀명")
+				.name("team")
 				.status(TeamStatus.ACTIVE)
 				.teamMembers(List.of(owner, other))
 				.build();
@@ -158,7 +171,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 상세 조회 시 profileImgUrl이 있으면 저장된 이미지를 그대로 반환한다")
+	@DisplayName("viewTeamDetail returns stored profile image when present")
 	void viewTeamDetailReturnsStoredProfileImageWhenPresent() {
 		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 
@@ -167,7 +180,7 @@ class TeamServiceTest extends UnitTest {
 				OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
 		Team teamWithMembers = Team.builder()
 				.id(TEAM_ID)
-				.name("팀명")
+				.name("team")
 				.status(TeamStatus.ACTIVE)
 				.teamMembers(List.of(ownerWithImg))
 				.build();
