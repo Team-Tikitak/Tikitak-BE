@@ -125,7 +125,7 @@ public class TeamService {
                         .nickname(tm.getNickname())
                         .teamMemberRole(tm.getRole())
                         .email(tm.getMember().getEmail())
-                        .profileImgUrl(resolveProfileImgUrl(tm))
+                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
                         .build())
                 .toList();
 
@@ -134,7 +134,7 @@ public class TeamService {
                 .myProfile(TeamResponseDTO.MyProfileDTO.builder()
                         .nickname(currentMember.getNickname())
                         .teamMemberRole(currentMember.getRole())
-                        .profileImgUrl(resolveProfileImgUrl(currentMember))
+                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(currentMember))
                         .build())
                 .teamMembers(members)
                 .build();
@@ -188,13 +188,6 @@ public class TeamService {
 
         // 팀의 status를 ACTIVE로 변경
         team.recover();
-    }
-
-    private String resolveProfileImgUrl(TeamMember teamMember) {
-        if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-            return teamMember.getProfileImgUrl();
-        }
-        return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
     }
 
     private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {

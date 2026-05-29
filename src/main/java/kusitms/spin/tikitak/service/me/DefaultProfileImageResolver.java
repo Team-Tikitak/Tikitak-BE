@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.me;
 
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
+import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
@@ -27,5 +28,12 @@ public class DefaultProfileImageResolver {
 				: ProfileCharacterType.TAK_LEADER;
 
 		return publicBaseUrl.replaceAll("/+$", "") + "/" + effective.getImagePath();
+	}
+
+	public String resolveForTeamMember(TeamMember teamMember) {
+		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+			return teamMember.getProfileImgUrl();
+		}
+		return resolve(teamMember.getMember().getProfileCharacterType());
 	}
 }

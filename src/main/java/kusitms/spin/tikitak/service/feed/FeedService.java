@@ -229,11 +229,7 @@ public class FeedService {
 		List<FeedResponseDTO.TaggedMemberDTO> combination = teamMemberRepository
 				.findActiveByTeamIdAndIds(teamId, memberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
 				.stream()
-				.map(tm -> FeedResponseDTO.TaggedMemberDTO.builder()
-						.teamMemberId(tm.getId())
-						.nickname(tm.getNickname())
-						.profileImageUrl(tm.getProfileImgUrl())
-						.build())
+				.map(this::toTaggedMember)
 				.toList();
 
 		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
@@ -618,6 +614,10 @@ public class FeedService {
 				.thumbnailImageUrl(thumbnailImageUrl(feed))
 				.imageCount(feed.getImages().size())
 				.author(toAuthor(feed.getTeamMember()))
+				.taggedMembers(feed.getTags().stream()
+						.map(FeedTag::getTeamMember)
+						.map(this::toTaggedMember)
+						.toList())
 				.place(toPlace(feed.getPlace(), false))
 				.question(toQuestion(feed))
 				.commentCount(commentCount)
@@ -684,7 +684,7 @@ public class FeedService {
 		return FeedResponseDTO.AuthorDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(resolveProfileImgUrl(teamMember))
+				.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.isAnonymous(false)
 				.build();
 	}
@@ -693,15 +693,8 @@ public class FeedService {
 		return FeedResponseDTO.TaggedMemberDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(resolveProfileImgUrl(teamMember))
+				.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.build();
-	}
-
-	private String resolveProfileImgUrl(TeamMember teamMember) {
-		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-			return teamMember.getProfileImgUrl();
-		}
-		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 
 	private FeedResponseDTO.PlaceDTO toPlace(Place place, boolean includeAddress) {

@@ -47,6 +47,9 @@ class MeServiceTest extends UnitTest {
 	@Mock
 	private ActiveTeamService activeTeamService;
 
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
 	@InjectMocks
 	private MeService meService;
 

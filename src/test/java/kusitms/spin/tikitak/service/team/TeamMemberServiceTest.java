@@ -77,8 +77,8 @@ class TeamMemberServiceTest extends UnitTest {
 				.build();
 
 		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(teamWithMembers));
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_LEADER)).thenReturn(memberDefaultImg);
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_SPARK)).thenReturn(otherDefaultImg);
+		when(defaultProfileImageResolver.resolveForTeamMember(memberTm)).thenReturn(memberDefaultImg);
+		when(defaultProfileImageResolver.resolveForTeamMember(otherTm)).thenReturn(otherDefaultImg);
 
 		TeamMemberResponseDTO.TeamMemberListResponseDTO response =
 				teamMemberService.listTeamMembers(MEMBER_ID, TEAM_ID);
@@ -103,6 +103,8 @@ class TeamMemberServiceTest extends UnitTest {
 				.build();
 
 		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(teamWithMembers));
+		when(defaultProfileImageResolver.resolveForTeamMember(memberTm))
+				.thenReturn("https://example.com/team-member" + TEAM_MEMBER_ID + ".png");
 
 		TeamMemberResponseDTO.TeamMemberListResponseDTO response =
 				teamMemberService.listTeamMembers(MEMBER_ID, TEAM_ID);
