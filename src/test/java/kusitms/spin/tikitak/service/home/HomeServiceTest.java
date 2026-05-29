@@ -96,6 +96,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.BestAttendanceResponse result = homeService.getBestAttendance(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getMembers()).hasSize(3);
 		assertThat(result.getMembers().get(0).getRank()).isEqualTo(1);
 		assertThat(result.getMembers().get(0).getTagCount()).isEqualTo(5L);
@@ -156,6 +157,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.AllTaggedResponse result = homeService.getAllTaggedFeeds(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getFeeds()).hasSize(3);
 		assertThat(result.getFeeds().get(0).getFeedId()).isEqualTo(301L);
 	}
@@ -185,6 +187,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.CombinationResponse result = homeService.getCombination(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getCombination()).hasSize(2);
 		assertThat(result.getCombination().get(0).getTeamMemberId()).isEqualTo(101L);
 		assertThat(result.getFeeds()).hasSize(3);
@@ -215,6 +218,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getRegions()).hasSize(2);
 		assertThat(result.getRegions().get(0).getRegion()).isEqualTo("서울 강남구");
 		assertThat(result.getRegions().get(0).getFeedCount()).isEqualTo(3L);
@@ -231,6 +235,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getRegions()).isEmpty();
 	}
 
