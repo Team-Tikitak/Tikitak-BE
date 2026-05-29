@@ -453,7 +453,7 @@ class FeedServiceTest extends UnitTest {
 		when(feedCommentRepository.countByFeedIds(rankedIds)).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(rankedIds)).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(rankedIds), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_LEADER)).thenReturn(defaultImgUrl);
+		when(defaultProfileImageResolver.resolveForTeamMember(authorWithoutImg)).thenReturn(defaultImgUrl);
 
 		List<FeedResponseDTO.FeedListItemDTO> result = feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID);
 
@@ -481,7 +481,8 @@ class FeedServiceTest extends UnitTest {
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_SPARK)).thenReturn(defaultImgUrl);
+		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
+		when(defaultProfileImageResolver.resolveForTeamMember(taggedWithoutImg)).thenReturn(defaultImgUrl);
 
 		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
 				MEMBER_ID, TEAM_ID, null, null, null, null, null, null);
@@ -521,7 +522,8 @@ class FeedServiceTest extends UnitTest {
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID, 2001L, 2002L))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID, 2001L, 2002L)), eq(TEAM_MEMBER_ID)))
 				.thenReturn(List.of());
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_CARE)).thenReturn(defaultImgUrl);
+		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
+		when(defaultProfileImageResolver.resolveForTeamMember(taggedWithoutImg)).thenReturn(defaultImgUrl);
 
 		FeedService.CombinationItemsResult result = feedService.getCombinationItems(MEMBER_ID, TEAM_ID);
 
