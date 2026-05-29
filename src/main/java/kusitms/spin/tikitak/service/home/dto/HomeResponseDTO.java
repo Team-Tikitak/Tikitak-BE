@@ -15,6 +15,7 @@ public class HomeResponseDTO {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class BestAttendanceResponse {
+		private int month;
 		private List<BestAttendanceMemberDTO> members;
 	}
 
@@ -35,6 +36,7 @@ public class HomeResponseDTO {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class EveryonePickResponse {
+		private int month;
 		private List<FeedResponseDTO.FeedListItemDTO> picks;
 	}
 
@@ -43,6 +45,7 @@ public class HomeResponseDTO {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class AllTaggedResponse {
+		private int month;
 		private List<FeedResponseDTO.FeedListItemDTO> feeds;
 	}
 
@@ -51,6 +54,7 @@ public class HomeResponseDTO {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class CombinationResponse {
+		private int month;
 		private List<FeedResponseDTO.TaggedMemberDTO> combination;
 		private List<FeedResponseDTO.FeedListItemDTO> feeds;
 	}
@@ -60,6 +64,7 @@ public class HomeResponseDTO {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class RegionResponse {
+		private int month;
 		private List<RegionItemDTO> regions;
 	}
 
