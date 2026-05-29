@@ -18,11 +18,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,6 +66,27 @@ class TeamServiceTest extends UnitTest {
 				teamInviteRepository,
 				defaultProfileImageResolver
 		);
+	}
+
+	@Test
+	@DisplayName("팀 생성 후 새 팀을 활성 팀으로 선택한다")
+	void createTeamChangesActiveTeamToCreatedTeam() {
+		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", null, "닉네임");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> {
+			Team savedTeam = inv.getArgument(0);
+			ReflectionTestUtils.setField(savedTeam, "id", TEAM_ID);
+			return savedTeam;
+		});
+		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		teamService.createTeam(MEMBER_ID, request);
+
+		assertThat(member.getActiveTeamId()).isEqualTo(TEAM_ID);
 	}
 
 	@Test
