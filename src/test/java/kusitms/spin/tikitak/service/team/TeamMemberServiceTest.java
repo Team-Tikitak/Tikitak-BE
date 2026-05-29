@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
@@ -40,6 +41,9 @@ class TeamMemberServiceTest extends UnitTest {
 	private TeamMemberRepository teamMemberRepository;
 
 	@Mock
+	private MediaRepository mediaRepository;
+
+	@Mock
 	private DefaultProfileImageResolver defaultProfileImageResolver;
 
 	private TeamMemberService teamMemberService;
@@ -49,6 +53,7 @@ class TeamMemberServiceTest extends UnitTest {
 		teamMemberService = new TeamMemberService(
 				teamRepository,
 				teamMemberRepository,
+				mediaRepository,
 				defaultProfileImageResolver
 		);
 	}
