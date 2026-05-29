@@ -1,11 +1,15 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
@@ -16,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +29,7 @@ public class TeamMemberService {
 
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final MediaRepository mediaRepository;
     private final DefaultProfileImageResolver defaultProfileImageResolver;
 
     public TeamMemberResponseDTO.TeamMemberListResponseDTO listTeamMembers(Long memberId, Long teamId) {
@@ -64,7 +70,8 @@ public class TeamMemberService {
             throw new BusinessException(ErrorCode.TEAM003);
         }
 
-        teamMember.updateProfile(request.getNickname(), request.getProfileImgUrl());
+        String profileImgUrl = resolveProfileImgUrlFromMedia(memberId, request.getProfileImagePublicId());
+        teamMember.updateProfile(request.getNickname(), profileImgUrl);
 
         return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
                 .nickname(teamMember.getNickname())
@@ -128,5 +135,16 @@ public class TeamMemberService {
             return teamMember.getProfileImgUrl();
         }
         return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
+    }
+
+    private String resolveProfileImgUrlFromMedia(Long memberId, UUID mediaPublicId) {
+        if (mediaPublicId == null) return null;
+        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+                .filter(m -> m.getMemberId().equals(memberId)
+                        && m.getPurpose() == MediaPurpose.PROFILE_IMAGE
+                        && m.getStatus() == MediaStatus.UPLOADED)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
+        media.markUsed();
+        return media.getUrl();
     }
 }

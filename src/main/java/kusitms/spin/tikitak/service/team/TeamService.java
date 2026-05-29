@@ -1,5 +1,8 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
@@ -9,6 +12,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -33,6 +37,7 @@ public class TeamService {
     private final MemberRepository memberRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamInviteRepository teamInviteRepository;
+    private final MediaRepository mediaRepository;
     private final DefaultProfileImageResolver defaultProfileImageResolver;
 
     @Transactional
@@ -50,10 +55,7 @@ public class TeamService {
 
         teamRepository.save(team);
 
-        // TeamMember 생성
-        String profileImgUrl = (request.getProfileImageUrl() != null && !request.getProfileImageUrl().isBlank())
-                ? request.getProfileImageUrl()
-                : null;
+        String profileImgUrl = resolveProfileImgUrlFromMedia(memberId, request.getProfileImagePublicId());
 
         TeamMember teamMember = TeamMember.builder()
                 .team(team)
@@ -192,5 +194,16 @@ public class TeamService {
             return teamMember.getProfileImgUrl();
         }
         return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
+    }
+
+    private String resolveProfileImgUrlFromMedia(Long memberId, UUID mediaPublicId) {
+        if (mediaPublicId == null) return null;
+        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+                .filter(m -> m.getMemberId().equals(memberId)
+                        && m.getPurpose() == MediaPurpose.PROFILE_IMAGE
+                        && m.getStatus() == MediaStatus.UPLOADED)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
+        media.markUsed();
+        return media.getUrl();
     }
 }
