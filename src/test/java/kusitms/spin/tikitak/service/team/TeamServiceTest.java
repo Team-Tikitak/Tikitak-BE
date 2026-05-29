@@ -1,10 +1,14 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -21,7 +25,9 @@ import org.mockito.Mock;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
+import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
@@ -51,6 +57,9 @@ class TeamServiceTest extends UnitTest {
 	private TeamInviteRepository teamInviteRepository;
 
 	@Mock
+	private MediaRepository mediaRepository;
+
+	@Mock
 	private DefaultProfileImageResolver defaultProfileImageResolver;
 
 	private TeamService teamService;
@@ -62,13 +71,14 @@ class TeamServiceTest extends UnitTest {
 				memberRepository,
 				teamMemberRepository,
 				teamInviteRepository,
+				mediaRepository,
 				defaultProfileImageResolver
 		);
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 profileImageUrl이 없으면 TeamMember에 null을 저장한다")
-	void createTeamStoresNullWhenProfileImageUrlIsAbsent() {
+	@DisplayName("팀 생성 시 profileImagePublicId가 없으면 TeamMember에 null을 저장한다")
+	void createTeamStoresNullWhenProfileImagePublicIdIsAbsent() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		TeamRequestDTO.TeamCreateRequestDTO request =
 				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", null, "닉네임");
@@ -86,14 +96,16 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("팀 생성 시 profileImageUrl이 있으면 해당 URL을 TeamMember에 저장한다")
-	void createTeamStoresProvidedProfileImageUrl() {
+	@DisplayName("팀 생성 시 유효한 profileImagePublicId가 있으면 media URL을 TeamMember에 저장한다")
+	void createTeamStoresMediaUrlWhenProfileImagePublicIdIsProvided() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
-		String customImgUrl = "https://example.com/my-photo.png";
+		UUID mediaPublicId = UUID.randomUUID();
+		Media profileMedia = media(1L, MEMBER_ID, mediaPublicId, MediaPurpose.PROFILE_IMAGE, MediaStatus.UPLOADED);
 		TeamRequestDTO.TeamCreateRequestDTO request =
-				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", customImgUrl, "닉네임");
+				new TeamRequestDTO.TeamCreateRequestDTO("팀명", "소개", mediaPublicId, "닉네임");
 
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(mediaRepository.findByPublicIdForUpdate(mediaPublicId)).thenReturn(Optional.of(profileMedia));
 		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -102,7 +114,8 @@ class TeamServiceTest extends UnitTest {
 
 		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
 		verify(teamMemberRepository).save(captor.capture());
-		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(customImgUrl);
+		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(profileMedia.getUrl());
+		assertThat(captor.getValue().getProfileMedia()).isEqualTo(profileMedia);
 	}
 
 	@Test

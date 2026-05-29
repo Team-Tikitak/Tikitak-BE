@@ -3,6 +3,7 @@ package kusitms.spin.tikitak.service.home;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -10,6 +11,7 @@ import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +35,8 @@ public class HomeService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final FeedService feedService;
 	private final FeedRepository feedRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final R2Properties r2Properties;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
@@ -55,24 +59,27 @@ public class HomeService {
 					.rank(i + 1)
 					.teamMemberId(tm.getId())
 					.nickname(tm.getNickname())
-					.profileImgUrl(tm.getProfileImgUrl())
+					.profileImgUrl(resolveProfileImgUrl(tm))
 					.tagCount(tagCount)
 					.build());
 		}
 
 		return HomeResponseDTO.BestAttendanceResponse.builder()
+				.month(currentMonth.getMonthValue())
 				.members(members)
 				.build();
 	}
 
 	public HomeResponseDTO.EveryonePickResponse getEveryonePick(Long memberId, Long teamId) {
 		return HomeResponseDTO.EveryonePickResponse.builder()
+				.month(YearMonth.now().getMonthValue())
 				.picks(feedService.getEveryonePickItems(memberId, teamId))
 				.build();
 	}
 
 	public HomeResponseDTO.AllTaggedResponse getAllTaggedFeeds(Long memberId, Long teamId) {
 		return HomeResponseDTO.AllTaggedResponse.builder()
+				.month(YearMonth.now().getMonthValue())
 				.feeds(feedService.getAllTaggedItems(memberId, teamId))
 				.build();
 	}
@@ -80,6 +87,7 @@ public class HomeService {
 	public HomeResponseDTO.CombinationResponse getCombination(Long memberId, Long teamId) {
 		FeedService.CombinationItemsResult result = feedService.getCombinationItems(memberId, teamId);
 		return HomeResponseDTO.CombinationResponse.builder()
+				.month(YearMonth.now().getMonthValue())
 				.combination(result.combination())
 				.feeds(result.feeds())
 				.build();
@@ -91,7 +99,10 @@ public class HomeService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
 		if (feedRepository.countActiveFeedsWithRegion(teamId) < REGION_MIN_FEEDS) {
-			return HomeResponseDTO.RegionResponse.builder().regions(List.of()).build();
+			return HomeResponseDTO.RegionResponse.builder()
+					.month(YearMonth.now().getMonthValue())
+					.regions(List.of())
+					.build();
 		}
 
 		List<HomeResponseDTO.RegionItemDTO> regions = feedRepository.findRegionSummaries(teamId)
@@ -103,7 +114,10 @@ public class HomeService {
 						.build())
 				.toList();
 
-		return HomeResponseDTO.RegionResponse.builder().regions(regions).build();
+		return HomeResponseDTO.RegionResponse.builder()
+				.month(YearMonth.now().getMonthValue())
+				.regions(regions)
+				.build();
 	}
 
 	public HomeResponseDTO.RecommendedPlacesResponse getRecommendedPlaces(Long memberId, Long teamId) {
@@ -111,12 +125,21 @@ public class HomeService {
 						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
-		List<HomeResponseDTO.RecommendedPlaceItemDTO> shuffled = new ArrayList<>(MayRecommendedPlaces.ALL);
+		List<HomeResponseDTO.RecommendedPlaceItemDTO> shuffled = new ArrayList<>(
+				MayRecommendedPlaces.all(r2Properties.getPublicBaseUrl())
+		);
 		Collections.shuffle(shuffled);
 
 		return HomeResponseDTO.RecommendedPlacesResponse.builder()
-				.month(5)
+				.month(YearMonth.now().getMonthValue())
 				.places(shuffled.subList(0, 2))
 				.build();
+	}
+
+	private String resolveProfileImgUrl(TeamMember teamMember) {
+		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+			return teamMember.getProfileImgUrl();
+		}
+		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 }

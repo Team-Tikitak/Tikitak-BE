@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -15,6 +16,7 @@ import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.feed.FeedService.CombinationItemsResult;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,13 +54,26 @@ class HomeServiceTest extends UnitTest {
 	@Mock
 	private FeedRepository feedRepository;
 
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
+	private R2Properties r2Properties;
 	private HomeService homeService;
 	private Team team;
 	private TeamMember requester;
 
 	@BeforeEach
 	void setUp() {
-		homeService = new HomeService(feedTagRepository, teamMemberRepository, feedService, feedRepository);
+		r2Properties = new R2Properties();
+		r2Properties.setPublicBaseUrl("https://media.tikitak.space");
+		homeService = new HomeService(
+				feedTagRepository,
+				teamMemberRepository,
+				feedService,
+				feedRepository,
+				defaultProfileImageResolver,
+				r2Properties
+		);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
 	}
@@ -81,6 +96,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.BestAttendanceResponse result = homeService.getBestAttendance(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getMembers()).hasSize(3);
 		assertThat(result.getMembers().get(0).getRank()).isEqualTo(1);
 		assertThat(result.getMembers().get(0).getTagCount()).isEqualTo(5L);
@@ -141,6 +157,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.AllTaggedResponse result = homeService.getAllTaggedFeeds(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getFeeds()).hasSize(3);
 		assertThat(result.getFeeds().get(0).getFeedId()).isEqualTo(301L);
 	}
@@ -170,6 +187,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.CombinationResponse result = homeService.getCombination(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getCombination()).hasSize(2);
 		assertThat(result.getCombination().get(0).getTeamMemberId()).isEqualTo(101L);
 		assertThat(result.getFeeds()).hasSize(3);
@@ -200,6 +218,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getRegions()).hasSize(2);
 		assertThat(result.getRegions().get(0).getRegion()).isEqualTo("서울 강남구");
 		assertThat(result.getRegions().get(0).getFeedCount()).isEqualTo(3L);
@@ -216,6 +235,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
+		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
 		assertThat(result.getRegions()).isEmpty();
 	}
 

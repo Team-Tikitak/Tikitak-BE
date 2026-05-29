@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 public class TeamInvitationRequestDTO {
 
 	@Getter
@@ -15,6 +17,6 @@ public class TeamInvitationRequestDTO {
 		@NotBlank
 		@Size(max = 30)
 		private String nickname;
-		private String profileImgUrl;
+		private UUID profileImagePublicId;
 	}
 }
