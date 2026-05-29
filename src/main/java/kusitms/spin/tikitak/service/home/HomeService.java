@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class HomeService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final FeedService feedService;
 	private final FeedRepository feedRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
@@ -55,7 +57,7 @@ public class HomeService {
 					.rank(i + 1)
 					.teamMemberId(tm.getId())
 					.nickname(tm.getNickname())
-					.profileImgUrl(tm.getProfileImgUrl())
+					.profileImgUrl(resolveProfileImgUrl(tm))
 					.tagCount(tagCount)
 					.build());
 		}
@@ -118,5 +120,12 @@ public class HomeService {
 				.month(5)
 				.places(shuffled.subList(0, 2))
 				.build();
+	}
+
+	private String resolveProfileImgUrl(TeamMember teamMember) {
+		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
+			return teamMember.getProfileImgUrl();
+		}
+		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 }
