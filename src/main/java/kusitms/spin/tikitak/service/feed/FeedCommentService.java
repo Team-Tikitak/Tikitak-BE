@@ -221,20 +221,13 @@ public class FeedCommentService {
 				.author(FeedCommentResponseDTO.AuthorDTO.builder()
 						.teamMemberId(author.getId())
 						.nickname(author.getNickname())
-						.profileImageUrl(resolveProfileImgUrl(author))
+						.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(author))
 						.isAnonymous(false)
 						.build())
 				.isMine(author.getId().equals(viewerTeamMemberId))
 				.createdAt(comment.getCreatedAt())
 				.updatedAt(comment.getUpdatedAt())
 				.build();
-	}
-
-	private String resolveProfileImgUrl(TeamMember teamMember) {
-		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-			return teamMember.getProfileImgUrl();
-		}
-		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
 	}
 
 	private record Cursor(LocalDateTime createdAt, Long commentId) {

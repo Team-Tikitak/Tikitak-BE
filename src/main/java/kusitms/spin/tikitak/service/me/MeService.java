@@ -32,6 +32,7 @@ public class MeService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final TokenService tokenService;
 	private final ActiveTeamService activeTeamService;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
 
 	@Transactional
 	public MeResponseDTO.MeProfileResponseDTO getMyProfile(Long memberId) {
@@ -107,6 +108,11 @@ public class MeService {
 		try {
 			Member member = getActiveMember(memberId);
 			activeTeamService.validateChangeableTeam(memberId, request.getTeamId());
+			if (request.getTeamId().equals(member.getActiveTeamId())) {
+				return MeResponseDTO.ActiveTeamUpdateResponseDTO.builder()
+						.activeTeamId(member.getActiveTeamId())
+						.build();
+			}
 			checkActivityOnSelectedTeamChange(memberId, member.getActiveTeamId(), request.getTeamId());
 			member.changeActiveTeam(request.getTeamId());
 
@@ -273,6 +279,7 @@ public class MeService {
 				.description(team.getDescription())
 				.role(teamMember.getRole())
 				.nickname(teamMember.getNickname())
+				.profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.memberCount(memberCountByTeamId.getOrDefault(team.getId(), 0L))
 				.newActivityCount(isActive ? 0L : newActivityCountByTeamId.getOrDefault(team.getId(), 0L))
 				.isActive(isActive)

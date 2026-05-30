@@ -52,6 +52,7 @@ public class MeResponseDTO {
 		private String description;
 		private TeamMemberRole role;
 		private String nickname;
+		private String profileImgUrl;
 		private long memberCount;
 		private long newActivityCount;
 		@JsonProperty("isActive")

@@ -287,7 +287,7 @@ class FeedCommentServiceTest extends UnitTest {
 		FeedComment commentByAuthorWithoutImg = comment(10L, authorWithoutImg, LocalDateTime.of(2026, 3, 4, 20, 30));
 		when(feedCommentRepository.findActiveFirstPageByFeedId(eq(FEED_ID), any(Pageable.class)))
 				.thenReturn(List.of(commentByAuthorWithoutImg));
-		when(defaultProfileImageResolver.resolve(ProfileCharacterType.TAK_SPARK)).thenReturn(defaultImgUrl);
+		when(defaultProfileImageResolver.resolveForTeamMember(authorWithoutImg)).thenReturn(defaultImgUrl);
 
 		FeedCommentResponseDTO.CommentListResponseDTO response =
 				feedCommentService.listComments(MEMBER_ID, TEAM_ID, FEED_ID, null, null, 10);

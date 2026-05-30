@@ -59,7 +59,7 @@ public class HomeService {
 					.rank(i + 1)
 					.teamMemberId(tm.getId())
 					.nickname(tm.getNickname())
-					.profileImgUrl(resolveProfileImgUrl(tm))
+					.profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
 					.tagCount(tagCount)
 					.build());
 		}
@@ -136,10 +136,4 @@ public class HomeService {
 				.build();
 	}
 
-	private String resolveProfileImgUrl(TeamMember teamMember) {
-		if (teamMember.getProfileImgUrl() != null && !teamMember.getProfileImgUrl().isBlank()) {
-			return teamMember.getProfileImgUrl();
-		}
-		return defaultProfileImageResolver.resolve(teamMember.getMember().getProfileCharacterType());
-	}
 }

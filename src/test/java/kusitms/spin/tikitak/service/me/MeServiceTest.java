@@ -30,6 +30,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeOwner
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class MeServiceTest extends UnitTest {
@@ -45,6 +46,9 @@ class MeServiceTest extends UnitTest {
 
 	@Mock
 	private ActiveTeamService activeTeamService;
+
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
 
 	@InjectMocks
 	private MeService meService;
@@ -127,6 +131,23 @@ class MeServiceTest extends UnitTest {
 		);
 
 		verify(activeTeamService).validateChangeableTeam(1L, 10L);
+		assertThat(response.getActiveTeamId()).isEqualTo(10L);
+		assertThat(member.getActiveTeamId()).isEqualTo(10L);
+	}
+
+	@Test
+	@DisplayName("이미 선택된 활성 팀으로 변경 요청하면 활동 확인을 생략한다")
+	void updateActiveTeamSkipsActivityCheckWhenSameTeamSelected() {
+		Member member = activeMemberWithActiveTeam(1L, 10L);
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+		MeResponseDTO.ActiveTeamUpdateResponseDTO response = meService.updateActiveTeam(
+				1L,
+				new MeRequestDTO.ActiveTeamUpdateRequestDTO(10L)
+		);
+
+		verify(activeTeamService).validateChangeableTeam(1L, 10L);
+		verifyNoInteractions(teamMemberRepository);
 		assertThat(response.getActiveTeamId()).isEqualTo(10L);
 		assertThat(member.getActiveTeamId()).isEqualTo(10L);
 	}
