@@ -16,12 +16,14 @@ import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberResponseDTO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -70,7 +72,15 @@ public class TeamMemberService {
             throw new BusinessException(ErrorCode.TEAM003);
         }
 
+        log.info("[updateMyProfile] memberId={}, teamId={}, profileImagePublicId={}",
+                memberId, teamId, request.getProfileImagePublicId());
+
         Media newProfileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
+
+        log.info("[updateMyProfile] newProfileMedia={}, url={}",
+                newProfileMedia != null ? newProfileMedia.getId() : null,
+                newProfileMedia != null ? newProfileMedia.getUrl() : null);
+
         if (newProfileMedia != null && teamMember.getProfileMedia() != null) {
             teamMember.getProfileMedia().markDeleted();
         }
@@ -140,10 +150,22 @@ public class TeamMemberService {
     private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
         if (mediaPublicId == null) return null;
         Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-                .filter(m -> m.getMemberId().equals(memberId)
-                        && m.getPurpose() == MediaPurpose.PROFILE_IMAGE
-                        && m.getStatus() == MediaStatus.UPLOADED)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
+                .orElse(null);
+        if (media == null) {
+            log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
+            throw new BusinessException(ErrorCode.MEDIA018);
+        }
+        log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
+                media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
+        log.info("[resolveProfileMedia] filter check. memberIdMatch={}, purposeMatch={}, statusMatch={}",
+                media.getMemberId().equals(memberId),
+                media.getPurpose() == MediaPurpose.PROFILE_IMAGE,
+                media.getStatus() == MediaStatus.UPLOADED);
+        if (!media.getMemberId().equals(memberId)
+                || media.getPurpose() != MediaPurpose.PROFILE_IMAGE
+                || media.getStatus() != MediaStatus.UPLOADED) {
+            throw new BusinessException(ErrorCode.MEDIA018);
+        }
         media.markUsed();
         return media;
     }
