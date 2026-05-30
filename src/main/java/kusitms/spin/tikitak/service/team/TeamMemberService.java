@@ -153,7 +153,7 @@ public class TeamMemberService {
                 .orElse(null);
         if (media == null) {
             log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
-            throw new BusinessException(ErrorCode.MEDIA018);
+            return null;
         }
         log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
                 media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
@@ -164,7 +164,7 @@ public class TeamMemberService {
         if (!media.getMemberId().equals(memberId)
                 || media.getPurpose() != MediaPurpose.PROFILE_IMAGE
                 || media.getStatus() != MediaStatus.UPLOADED) {
-            throw new BusinessException(ErrorCode.MEDIA018);
+            return null;
         }
         media.markUsed();
         return media;
