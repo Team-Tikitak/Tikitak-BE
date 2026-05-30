@@ -16,6 +16,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "feed")
@@ -123,6 +125,22 @@ public class Feed {
 	public void replaceTags(List<FeedTag> tags) {
 		this.tags.clear();
 		tags.forEach(this::addTag);
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void syncTags(List<TeamMember> teamMembers) {
+		Set<Long> nextTeamMemberIds = teamMembers.stream()
+				.map(TeamMember::getId)
+				.collect(Collectors.toSet());
+		this.tags.removeIf(tag -> !nextTeamMemberIds.contains(tag.getTeamMember().getId()));
+
+		Set<Long> currentTeamMemberIds = this.tags.stream()
+				.map(tag -> tag.getTeamMember().getId())
+				.collect(Collectors.toSet());
+		teamMembers.stream()
+				.filter(teamMember -> !currentTeamMemberIds.contains(teamMember.getId()))
+				.map(teamMember -> FeedTag.builder().teamMember(teamMember).build())
+				.forEach(this::addTag);
 		this.updatedAt = LocalDateTime.now();
 	}
 
