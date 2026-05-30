@@ -1,7 +1,10 @@
 package kusitms.spin.tikitak.global.config;
 
+import kusitms.spin.tikitak.global.filter.RequestBodyLoggingFilter;
 import kusitms.spin.tikitak.global.security.CurrentMemberIdArgumentResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
