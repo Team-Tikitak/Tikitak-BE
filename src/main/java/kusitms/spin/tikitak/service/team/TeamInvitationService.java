@@ -212,9 +212,6 @@ public class TeamInvitationService {
 	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
 		if (mediaPublicId == null) return null;
 		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-				.filter(m -> m.getMemberId().equals(memberId)
-						&& m.getPurpose() == MediaPurpose.PROFILE_IMAGE
-						&& m.getStatus() == MediaStatus.UPLOADED)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
 		media.markUsed();
 		return media;
