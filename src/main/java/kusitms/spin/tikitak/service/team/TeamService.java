@@ -58,9 +58,9 @@ public class TeamService {
         teamRepository.save(team);
         member.changeActiveTeam(team.getId());
 
-        log.info("[createTeam] memberId={}, profileImagePublicId={}", memberId, request.getProfileImagePublicId());
+        log.info("[createTeam] memberId={}, profileImagePublicId={}", memberId, request.getMediaPublicId());
 
-        Media profileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
+        Media profileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
         log.info("[createTeam] profileMedia={}, url={}",
                 profileMedia != null ? profileMedia.getId() : null,

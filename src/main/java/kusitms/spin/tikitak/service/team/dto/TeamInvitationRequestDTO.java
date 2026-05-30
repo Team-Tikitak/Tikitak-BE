@@ -17,6 +17,6 @@ public class TeamInvitationRequestDTO {
 		@NotBlank
 		@Size(max = 30)
 		private String nickname;
-		private UUID profileImagePublicId;
+		private UUID mediaPublicId;
 	}
 }

@@ -73,9 +73,9 @@ public class TeamMemberService {
         }
 
         log.info("[updateMyProfile] memberId={}, teamId={}, profileImagePublicId={}",
-                memberId, teamId, request.getProfileImagePublicId());
+                memberId, teamId, request.getMediaPublicId());
 
-        Media newProfileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
+        Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
         log.info("[updateMyProfile] newProfileMedia={}, url={}",
                 newProfileMedia != null ? newProfileMedia.getId() : null,

@@ -17,7 +17,7 @@ public class TeamRequestDTO {
         private String teamName;
         @NotBlank
         private String introduction;
-        private UUID profileImagePublicId;
+        private UUID mediaPublicId;
         @NotBlank
         private String nickName;
     }
