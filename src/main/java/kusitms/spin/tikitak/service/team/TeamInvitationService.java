@@ -1,8 +1,6 @@
 package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.media.entity.Media;
-import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
-import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
@@ -160,7 +158,7 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.INVITE008);
 		}
 
-		Media newProfileMedia = resolveProfileMedia(memberId, request.getProfileImagePublicId());
+		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
 		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
 				.ifPresentOrElse(
