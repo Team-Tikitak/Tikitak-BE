@@ -1,10 +1,7 @@
 package kusitms.spin.tikitak.global.config;
 
-import kusitms.spin.tikitak.global.filter.RequestBodyLoggingFilter;
 import kusitms.spin.tikitak.global.security.CurrentMemberIdArgumentResolver;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -20,14 +17,5 @@ public class WebConfig implements WebMvcConfigurer {
 	@Override
 	public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
 		resolvers.add(currentMemberIdArgumentResolver);
-	}
-
-	@Bean
-	public FilterRegistrationBean<RequestBodyLoggingFilter> requestBodyLoggingFilter() {
-		FilterRegistrationBean<RequestBodyLoggingFilter> bean = new FilterRegistrationBean<>();
-		bean.setFilter(new RequestBodyLoggingFilter());
-		bean.addUrlPatterns("/api/v1/teams/*", "/api/v1/teams");
-		bean.setOrder(1);
-		return bean;
 	}
 }
