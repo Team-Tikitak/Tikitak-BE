@@ -21,13 +21,4 @@ public class WebConfig implements WebMvcConfigurer {
 	public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
 		resolvers.add(currentMemberIdArgumentResolver);
 	}
-
-	@Bean
-	public FilterRegistrationBean<RequestBodyLoggingFilter> requestBodyLoggingFilter() {
-		FilterRegistrationBean<RequestBodyLoggingFilter> bean = new FilterRegistrationBean<>();
-		bean.setFilter(new RequestBodyLoggingFilter());
-		bean.addUrlPatterns("/api/v1/teams/*", "/api/v1/teams");
-		bean.setOrder(1);
-		return bean;
-	}
 }
