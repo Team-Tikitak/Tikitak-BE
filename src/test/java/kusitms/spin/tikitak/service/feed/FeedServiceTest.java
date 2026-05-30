@@ -51,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -129,6 +130,9 @@ class FeedServiceTest extends UnitTest {
 		assertThat(response.getContent()).isEqualTo("오늘 카페 좋았다");
 		assertThat(response.getImageCount()).isEqualTo(1);
 		assertThat(response.getThumbnailImageUrl()).isEqualTo(media.getUrl());
+		assertThat(response.getTaggedMembers())
+				.extracting(FeedResponseDTO.TaggedMemberDTO::getTeamMemberId)
+				.containsExactly(TEAM_MEMBER_ID);
 		assertThat(media.getStatus()).isEqualTo(MediaStatus.USED);
 		verify(feedRepository).save(any(Feed.class));
 	}
@@ -289,6 +293,118 @@ class FeedServiceTest extends UnitTest {
 		assertThat(keptMedia.getStatus()).isEqualTo(MediaStatus.USED);
 		assertThat(removedMedia.getStatus()).isEqualTo(MediaStatus.DELETED);
 		assertThat(removedMedia.getDeletedAt()).isNotNull();
+	}
+
+	@Test
+	@DisplayName("피드 수정에서 mediaPublicIds가 null이면 기존 이미지를 유지한다")
+	void updateFeedKeepsExistingImagesWhenMediaPublicIdsIsNull() {
+		Media firstMedia = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Media secondMedia = media(NEXT_MEDIA_ID, MEMBER_ID, NEXT_MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Feed feed = generalFeedWithImages(firstMedia, secondMedia);
+		FeedRequestDTO.FeedUpdateRequestDTO request = new FeedRequestDTO.FeedUpdateRequestDTO(
+				"updated",
+				null,
+				null,
+				List.of()
+		);
+		stubActiveAuthor();
+		when(feedRepository.findActiveForUpdate(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+
+		feedService.updateFeed(MEMBER_ID, TEAM_ID, FEED_ID, request);
+
+		assertThat(feed.getImages()).hasSize(2);
+		assertThat(firstMedia.getStatus()).isEqualTo(MediaStatus.USED);
+		assertThat(secondMedia.getStatus()).isEqualTo(MediaStatus.USED);
+		verify(mediaRepository, never()).findByPublicIdsForUpdate(any());
+	}
+
+	@Test
+	@DisplayName("피드 수정에서 태그가 null이면 기존 태그를 유지하고 작성자 태그를 보장한다")
+	void updateFeedKeepsExistingTagsWhenTaggedTeamMemberIdsIsNull() {
+		Media media = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		TeamMember taggedMember = activeMember(101L, activeMember(2L), team);
+		Feed feed = generalFeedWithImages(media);
+		feed.addTag(FeedTag.builder().id(4000L).teamMember(taggedMember).build());
+		FeedRequestDTO.FeedUpdateRequestDTO request = new FeedRequestDTO.FeedUpdateRequestDTO(
+				"updated",
+				null,
+				null,
+				null
+		);
+		stubActiveAuthor();
+		when(feedRepository.findActiveForUpdate(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+
+		feedService.updateFeed(MEMBER_ID, TEAM_ID, FEED_ID, request);
+
+		assertThat(feed.getTags())
+				.extracting(tag -> tag.getTeamMember().getId())
+				.containsExactly(101L, TEAM_MEMBER_ID);
+	}
+
+	@Test
+	@DisplayName("피드 수정에서 빈 태그 목록이면 작성자 태그만 남긴다")
+	void updateFeedKeepsOnlyAuthorTagWhenTaggedTeamMemberIdsIsEmpty() {
+		Media media = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		TeamMember taggedMember = activeMember(101L, activeMember(2L), team);
+		Feed feed = generalFeedWithImages(media);
+		feed.addTag(FeedTag.builder().id(4000L).teamMember(taggedMember).build());
+		FeedRequestDTO.FeedUpdateRequestDTO request = new FeedRequestDTO.FeedUpdateRequestDTO(
+				"updated",
+				null,
+				null,
+				List.of()
+		);
+		stubActiveAuthor();
+		when(feedRepository.findActiveForUpdate(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+
+		feedService.updateFeed(MEMBER_ID, TEAM_ID, FEED_ID, request);
+
+		assertThat(feed.getTags())
+				.extracting(tag -> tag.getTeamMember().getId())
+				.containsExactly(TEAM_MEMBER_ID);
+	}
+
+	@Test
+	@DisplayName("피드 수정에서 태그는 기존 태그를 재사용하고 새 태그만 추가한다")
+	void updateFeedSyncsTagsByDiff() {
+		Media media = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		TeamMember existingTaggedMember = activeMember(101L, activeMember(2L), team);
+		TeamMember removedTaggedMember = activeMember(102L, activeMember(3L), team);
+		TeamMember newTaggedMember = activeMember(103L, activeMember(4L), team);
+		Feed feed = generalFeedWithImages(media);
+		feed.addTag(FeedTag.builder().id(4000L).teamMember(author).build());
+		feed.addTag(FeedTag.builder().id(4001L).teamMember(existingTaggedMember).build());
+		feed.addTag(FeedTag.builder().id(4002L).teamMember(removedTaggedMember).build());
+		FeedRequestDTO.FeedUpdateRequestDTO request = new FeedRequestDTO.FeedUpdateRequestDTO(
+				"updated",
+				null,
+				null,
+				List.of(author.getId(), existingTaggedMember.getId(), newTaggedMember.getId())
+		);
+		stubActiveAuthor();
+		when(feedRepository.findActiveForUpdate(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(List.of(existingTaggedMember.getId(), newTaggedMember.getId())),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(existingTaggedMember, newTaggedMember));
+
+		feedService.updateFeed(MEMBER_ID, TEAM_ID, FEED_ID, request);
+
+		assertThat(feed.getTags())
+				.extracting(tag -> tag.getTeamMember().getId())
+				.containsExactly(TEAM_MEMBER_ID, 101L, 103L);
+		assertThat(feed.getTags())
+				.filteredOn(tag -> tag.getTeamMember().getId().equals(existingTaggedMember.getId()))
+				.singleElement()
+				.extracting(FeedTag::getId)
+				.isEqualTo(4001L);
+		assertThat(feed.getTags())
+				.filteredOn(tag -> tag.getTeamMember().getId().equals(newTaggedMember.getId()))
+				.singleElement()
+				.extracting(FeedTag::getId)
+				.isNull();
 	}
 
 	@Test
@@ -550,6 +666,17 @@ class FeedServiceTest extends UnitTest {
 				.build();
 		feed.addImage(feedImage(FEED_IMAGE_ID, firstMedia, 0));
 		feed.addImage(feedImage(NEXT_FEED_IMAGE_ID, secondMedia, 1));
+		return feed;
+	}
+
+	private Feed generalFeedWithImages(Media media) {
+		Feed feed = Feed.builder()
+				.id(FEED_ID)
+				.team(team)
+				.teamMember(author)
+				.content("content")
+				.build();
+		feed.addImage(feedImage(FEED_IMAGE_ID, media, 0));
 		return feed;
 	}
 
