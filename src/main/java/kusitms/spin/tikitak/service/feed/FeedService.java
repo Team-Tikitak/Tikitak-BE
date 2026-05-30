@@ -262,7 +262,8 @@ public class FeedService {
 		List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
 		List<Media> medias = validateCreateMedias(memberId, mediaPublicIds);
 		Place place = resolvePlace(request.getPlace());
-		List<TeamMember> taggedMembers = resolveTaggedMembers(teamId, request.getTaggedTeamMemberIds());
+		List<TeamMember> taggedMembers = resolveTaggedMembersIncludingAuthor(
+				teamId, author, request.getTaggedTeamMemberIds());
 
 		Feed feed = Feed.builder()
 				.team(author.getTeam())
@@ -304,18 +305,21 @@ public class FeedService {
 		}
 
 		String content = normalizeContent(request.getContent());
-		List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
-		List<Media> medias = validateUpdateMedias(memberId, feed, mediaPublicIds);
 		Place place = resolvePlace(request.getPlace());
-		List<TeamMember> taggedMembers = resolveTaggedMembers(teamId, request.getTaggedTeamMemberIds());
-
-		List<FeedTag> tags = taggedMembers.stream()
-				.map(teamMember -> FeedTag.builder().teamMember(teamMember).build())
-				.toList();
 
 		feed.updateGeneralFeed(content, place);
-		syncImages(feed, medias);
-		feed.replaceTags(tags);
+		if (request.getMediaPublicIds() != null) {
+			List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
+			List<Media> medias = validateUpdateMedias(memberId, feed, mediaPublicIds);
+			syncImages(feed, medias);
+		}
+		if (request.getTaggedTeamMemberIds() == null) {
+			ensureAuthorTagged(feed, editor);
+		} else {
+			List<TeamMember> taggedMembers = resolveTaggedMembersIncludingAuthor(
+					teamId, editor, request.getTaggedTeamMemberIds());
+			feed.syncTags(taggedMembers);
+		}
 		return toMutation(feed);
 	}
 
@@ -573,6 +577,44 @@ public class FeedService {
 		return distinctIds.stream()
 				.map(memberById::get)
 				.toList();
+	}
+
+	private List<TeamMember> resolveTaggedMembersIncludingAuthor(
+			Long teamId,
+			TeamMember author,
+			List<Long> taggedTeamMemberIds
+	) {
+		List<Long> distinctIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
+		List<Long> finalIds = new ArrayList<>();
+		finalIds.add(author.getId());
+		distinctIds.stream()
+				.filter(id -> !id.equals(author.getId()))
+				.forEach(finalIds::add);
+		if (finalIds.size() > MAX_TAG_COUNT) {
+			throw new BusinessException(ErrorCode.FEED009);
+		}
+
+		List<Long> idsToResolve = finalIds.stream()
+				.filter(id -> !id.equals(author.getId()))
+				.toList();
+		List<TeamMember> resolvedMembers = idsToResolve.isEmpty()
+				? List.of()
+				: resolveTaggedMembers(teamId, idsToResolve);
+		Map<Long, TeamMember> memberById = resolvedMembers.stream()
+				.collect(Collectors.toMap(TeamMember::getId, Function.identity()));
+		memberById.put(author.getId(), author);
+
+		return finalIds.stream()
+				.map(memberById::get)
+				.toList();
+	}
+
+	private void ensureAuthorTagged(Feed feed, TeamMember author) {
+		boolean authorTagged = feed.getTags().stream()
+				.anyMatch(tag -> tag.getTeamMember().getId().equals(author.getId()));
+		if (!authorTagged) {
+			feed.addTag(FeedTag.builder().teamMember(author).build());
+		}
 	}
 
 	private List<Long> normalizeTaggedTeamMemberIds(List<Long> taggedTeamMemberIds) {
