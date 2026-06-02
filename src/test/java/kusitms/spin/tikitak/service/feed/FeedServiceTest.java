@@ -40,6 +40,7 @@ import java.util.UUID;
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.createRequestWithContent;
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.createRequestWithMediaCount;
 import static kusitms.spin.tikitak.support.fixture.FeedRequestFixture.validCreateRequest;
+import static kusitms.spin.tikitak.support.fixture.ImageUrlResolverFixture.disabledImageUrlResolver;
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.uploadedFeedImage;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
@@ -108,7 +109,8 @@ class FeedServiceTest extends UnitTest {
 				mediaRepository,
 				teamRepository,
 				teamMemberRepository,
-				defaultProfileImageResolver
+				defaultProfileImageResolver,
+				disabledImageUrlResolver()
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
@@ -695,4 +697,5 @@ class FeedServiceTest extends UnitTest {
 				.findFirst()
 				.orElseThrow();
 	}
+
 }
