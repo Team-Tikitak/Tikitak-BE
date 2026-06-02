@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.me.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
@@ -52,6 +53,7 @@ public class MeResponseDTO {
 		private String description;
 		private TeamMemberRole role;
 		private String nickname;
+		@Schema(description = "팀 내 프로필 이미지 URL(profile_avatar preset 적용)", example = "https://dev-media.tikitak.space/default-profiles/tak-builder.png?preset=profile_avatar")
 		private String profileImgUrl;
 		private long memberCount;
 		private long newActivityCount;
