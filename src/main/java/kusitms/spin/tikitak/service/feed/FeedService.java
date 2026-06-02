@@ -25,6 +25,8 @@ import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.feed.dto.FeedRequestDTO;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -76,6 +78,7 @@ public class FeedService {
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final ImageUrlResolver imageUrlResolver;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
 			Long memberId,
@@ -98,6 +101,8 @@ public class FeedService {
 
 		List<Feed> feeds = findFeedPage(
 				teamId, normalizedPlaceId, normalizedRegion, feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
+		long totalCount = countFeeds(
+				teamId, normalizedPlaceId, normalizedRegion, feedType, normalizedTaggedTeamMemberIds);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -128,6 +133,7 @@ public class FeedService {
 						.nextCursor(nextCursor)
 						.hasNext(hasNext)
 						.size(pageSize)
+						.totalCount(totalCount)
 						.build())
 				.build();
 	}
@@ -685,7 +691,7 @@ public class FeedService {
 						.map(image -> FeedResponseDTO.ImageDTO.builder()
 								.feedImageId(image.getId())
 								.mediaPublicId(image.getMedia() == null ? null : image.getMedia().getPublicId())
-								.imageUrl(image.getImgUrl())
+								.imageUrl(imageUrlResolver.resolve(image.getImgUrl(), ImagePreset.FEED_DETAIL))
 								.orderIndex(image.getOrderIndex())
 								.build())
 						.toList())
@@ -767,7 +773,23 @@ public class FeedService {
 		return sortedImages(feed).stream()
 				.findFirst()
 				.map(FeedImage::getImgUrl)
+				.map(url -> imageUrlResolver.resolve(url, ImagePreset.FEED_THUMB))
 				.orElse(null);
+	}
+
+	private long countFeeds(
+			Long teamId,
+			String placeId,
+			String region,
+			FeedTypeFilter feedType,
+			List<Long> taggedTeamMemberIds
+	) {
+		String feedTypeName = feedType.queryValue();
+		if (taggedTeamMemberIds.isEmpty()) {
+			return feedRepository.countActiveFeeds(teamId, placeId, region, feedTypeName);
+		}
+		return feedRepository.countActiveFeedsByTaggedTeamMemberIds(
+				teamId, placeId, region, feedTypeName, taggedTeamMemberIds, taggedTeamMemberIds.size());
 	}
 
 	private List<FeedImage> sortedImages(Feed feed) {

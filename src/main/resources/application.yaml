@@ -59,6 +59,11 @@ r2:
   endpoint: ${R2_ENDPOINT}
   public-base-url: ${R2_PUBLIC_BASE_URL:}
 
+image:
+  optimization:
+    enabled: ${IMAGE_OPTIMIZATION_ENABLED:true}
+    preset-query-param: ${IMAGE_OPTIMIZATION_PRESET_QUERY_PARAM:preset}
+
 kakao:
   map:
     rest-api-key: ${KAKAO_MAP_REST_API_KEY}

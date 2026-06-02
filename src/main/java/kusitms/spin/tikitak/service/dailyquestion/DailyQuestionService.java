@@ -22,6 +22,8 @@ import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamMemberRepo
 import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamRepository;
 import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionRequestDTO;
 import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionResponseDTO;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -50,6 +52,7 @@ public class DailyQuestionService {
 	private final DailyQuestionFeedRepository feedRepository;
 	private final DailyQuestionMediaRepository mediaRepository;
 	private final KstDateProvider dateProvider;
+	private final ImageUrlResolver imageUrlResolver;
 
 	public DailyQuestionResponseDTO.TodayQuestionResponseDTO getTodayQuestion(Long memberId, Long teamId) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
@@ -280,6 +283,7 @@ public class DailyQuestionService {
 				.imageUrl(feed.getImages().stream()
 						.min(Comparator.comparing(FeedImage::getOrderIndex))
 						.map(FeedImage::getImgUrl)
+						.map(url -> imageUrlResolver.resolve(url, ImagePreset.FEED_DETAIL))
 						.orElse(null))
 				.createdAt(feed.getCreatedAt())
 				.updatedAt(feed.getUpdatedAt())

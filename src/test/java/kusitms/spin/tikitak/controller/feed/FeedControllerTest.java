@@ -57,6 +57,7 @@ class FeedControllerTest extends ApiTest {
 								.nextCursor("2026-03-04T20:30:00_25")
 								.hasNext(true)
 								.size(20)
+								.totalCount(42)
 								.build())
 						.build());
 
@@ -70,7 +71,8 @@ class FeedControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.data.items[0].feedId").value(FEED_ID))
 				.andExpect(jsonPath("$.data.items[0].type").value("GENERAL"))
 				.andExpect(jsonPath("$.data.items[0].reactionSummary.totalCount").value(1))
-				.andExpect(jsonPath("$.data.pageInfo.nextCursor").value("2026-03-04T20:30:00_25"));
+				.andExpect(jsonPath("$.data.pageInfo.nextCursor").value("2026-03-04T20:30:00_25"))
+				.andExpect(jsonPath("$.data.pageInfo.totalCount").value(42));
 
 		verify(feedService).listFeeds(TEST_MEMBER_ID, TEAM_ID, null, 20, "kakao_12345", null, "DAILY_QUESTION", null);
 	}

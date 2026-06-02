@@ -263,6 +263,57 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 	);
 
 	@Query("""
+			select count(distinct f)
+			from Feed f
+			left join f.place p
+			where f.team.id = :teamId
+				and f.deletedAt is null
+				and (:placeId is null or p.externalPlaceId = :placeId)
+				and (:region is null or p.region = :region)
+				and (
+					:feedType is null
+					or (:feedType = 'GENERAL' and f.question is null)
+					or (:feedType = 'DAILY_QUESTION' and f.question is not null)
+				)
+			""")
+	long countActiveFeeds(
+			@Param("teamId") Long teamId,
+			@Param("placeId") String placeId,
+			@Param("region") String region,
+			@Param("feedType") String feedType
+	);
+
+	@Query("""
+			select count(distinct f)
+			from Feed f
+			left join f.place p
+			where f.team.id = :teamId
+				and f.deletedAt is null
+				and (:placeId is null or p.externalPlaceId = :placeId)
+				and (:region is null or p.region = :region)
+				and (
+					:feedType is null
+					or (:feedType = 'GENERAL' and f.question is null)
+					or (:feedType = 'DAILY_QUESTION' and f.question is not null)
+				)
+				and f.id in (
+					select tag.feed.id
+					from FeedTag tag
+					where tag.teamMember.id in :taggedTeamMemberIds
+					group by tag.feed.id
+					having count(distinct tag.teamMember.id) = :taggedTeamMemberCount
+				)
+			""")
+	long countActiveFeedsByTaggedTeamMemberIds(
+			@Param("teamId") Long teamId,
+			@Param("placeId") String placeId,
+			@Param("region") String region,
+			@Param("feedType") String feedType,
+			@Param("taggedTeamMemberIds") List<Long> taggedTeamMemberIds,
+			@Param("taggedTeamMemberCount") long taggedTeamMemberCount
+	);
+
+	@Query("""
 			select f.id
 			from Feed f
 			where f.deletedAt is not null

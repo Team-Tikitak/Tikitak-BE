@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.map.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -28,6 +29,10 @@ public class MapResponseDTO {
 		private BigDecimal latitude;
 		private BigDecimal longitude;
 		private String address;
+		@Schema(
+				description = "지도 핀 대표 썸네일 이미지 URL. feed_thumb preset이 적용됩니다.",
+				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_thumb"
+		)
 		private String thumbnailUrl;
 		private long feedCount;
 	}
