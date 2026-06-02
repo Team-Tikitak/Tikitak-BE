@@ -102,6 +102,7 @@ public class FeedResponseDTO {
 		private String nextCursor;
 		private boolean hasNext;
 		private int size;
+		private long totalCount;
 	}
 
 	@Getter
