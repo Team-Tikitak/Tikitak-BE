@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.global.config.R2Properties;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ImageUrlResolverTest {
 
@@ -69,6 +70,28 @@ class ImageUrlResolverTest {
 
 		assertThat(result).isEqualTo(
 				"https://media.tikitak.space/media/feed-image/test.jpg?preset=feed_thumb");
+	}
+
+	@Test
+	void validateConfigurationThrowsWhenPublicBaseUrlMissingAndOptimizationEnabled() {
+		ImageUrlResolver resolver = resolver(true, "");
+
+		assertThatThrownBy(resolver::validateConfiguration)
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("r2.public-base-url");
+	}
+
+	@Test
+	void validateConfigurationThrowsWhenPresetQueryParamMissingAndOptimizationEnabled() {
+		R2Properties r2Properties = new R2Properties();
+		r2Properties.setPublicBaseUrl("https://media.tikitak.space");
+		ImageOptimizationProperties properties = new ImageOptimizationProperties();
+		properties.setPresetQueryParam("");
+		ImageUrlResolver resolver = new ImageUrlResolver(r2Properties, properties);
+
+		assertThatThrownBy(resolver::validateConfiguration)
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("image.optimization.preset-query-param");
 	}
 
 	private ImageUrlResolver resolver(boolean enabled, String publicBaseUrl) {
