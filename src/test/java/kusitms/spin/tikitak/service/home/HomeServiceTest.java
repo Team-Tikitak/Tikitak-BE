@@ -31,6 +31,7 @@ import java.util.Optional;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember;
+import static kusitms.spin.tikitak.support.fixture.ImageUrlResolverFixture.disabledImageUrlResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
@@ -72,7 +73,8 @@ class HomeServiceTest extends UnitTest {
 				feedService,
 				feedRepository,
 				defaultProfileImageResolver,
-				r2Properties
+				r2Properties,
+				disabledImageUrlResolver()
 		);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
@@ -302,4 +304,5 @@ class HomeServiceTest extends UnitTest {
 				eq(TEAM_ID), eq(start), eq(end), eq(TeamMemberStatus.ACTIVE)
 		)).thenReturn(rows);
 	}
+
 }

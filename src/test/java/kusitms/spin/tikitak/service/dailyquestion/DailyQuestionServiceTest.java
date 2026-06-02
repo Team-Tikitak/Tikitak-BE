@@ -37,6 +37,7 @@ import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember;
+import static kusitms.spin.tikitak.support.fixture.ImageUrlResolverFixture.disabledImageUrlResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -74,7 +75,8 @@ class DailyQuestionServiceTest extends UnitTest {
 				questionRepository,
 				feedRepository,
 				mediaRepository,
-				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul")))
+				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul"))),
+				disabledImageUrlResolver()
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
@@ -301,4 +303,5 @@ class DailyQuestionServiceTest extends UnitTest {
 				.updatedAt(LocalDateTime.of(2026, 3, 4, 0, 0))
 				.build();
 	}
+
 }

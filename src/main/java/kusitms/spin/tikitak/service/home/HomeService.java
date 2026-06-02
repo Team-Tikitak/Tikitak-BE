@@ -11,6 +11,8 @@ import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.feed.FeedService;
 import kusitms.spin.tikitak.service.home.dto.HomeResponseDTO;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.home.dto.RegionRow;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class HomeService {
 	private final FeedRepository feedRepository;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
 	private final R2Properties r2Properties;
+	private final ImageUrlResolver imageUrlResolver;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
@@ -110,7 +113,7 @@ public class HomeService {
 				.map(row -> HomeResponseDTO.RegionItemDTO.builder()
 						.region(row.getRegion())
 						.feedCount(row.getFeedCount())
-						.thumbnailImageUrl(row.getThumbnailUrl())
+						.thumbnailImageUrl(imageUrlResolver.resolve(row.getThumbnailUrl(), ImagePreset.FEED_THUMB))
 						.build())
 				.toList();
 
@@ -127,6 +130,14 @@ public class HomeService {
 
 		List<HomeResponseDTO.RecommendedPlaceItemDTO> shuffled = new ArrayList<>(
 				MayRecommendedPlaces.all(r2Properties.getPublicBaseUrl())
+						.stream()
+						.map(place -> HomeResponseDTO.RecommendedPlaceItemDTO.builder()
+								.name(place.getName())
+								.curation(place.getCuration())
+								.imageUrl(imageUrlResolver.resolve(place.getImageUrl(), ImagePreset.PLACE_CARD))
+								.kakaoMapUrl(place.getKakaoMapUrl())
+								.build())
+						.toList()
 		);
 		Collections.shuffle(shuffled);
 
