@@ -44,19 +44,20 @@ public class AuthController {
 	@Operation(
 			summary = "OAuth 로그인 시작",
 			description = "지원하는 OAuth Provider 인증 페이지로 리다이렉트합니다. "
-					+ "모바일 앱에서 호출할 때는 mode=app을 추가해주세요. "
-					+ "Swagger에서 테스트할 때는 redirect=false로 호출하면 인증 URL을 JSON으로 확인할 수 있습니다."
+					+ "provider는 google, kakao, apple을 지원합니다. "
+					+ "앱 로그인은 mode=app을 추가하면 callback 후 tikitak://oauth/callback?loginCode={code}로 이동합니다. "
+					+ "Swagger 테스트 시 redirect=false로 호출하면 인증 URL을 공통 응답 JSON으로 확인할 수 있습니다."
 	)
 	@GetMapping("/api/v1/auth/oauth/{provider}/start")
 	public ResponseEntity<?> startOAuthLogin(
-			@Parameter(description = "OAuth Provider. google, kakao", example = "kakao")
+			@Parameter(description = "OAuth Provider. google, kakao, apple", example = "apple")
 			@PathVariable String provider,
 			@Parameter(
-					description = "true면 302 Redirect, false면 Swagger 테스트용 JSON 응답",
+					description = "true 또는 생략 시 302 Redirect, false면 Swagger 테스트용 JSON 응답",
 					schema = @Schema(defaultValue = "false")
 			)
 			@RequestParam(required = false) Boolean redirect,
-			@Parameter(description = "app이면 모바일 딥링크 흐름으로 처리")
+			@Parameter(description = "app이면 모바일 딥링크 흐름으로 처리", example = "app")
 			@RequestParam(required = false) String mode
 	) {
 		OAuthAuthorizeUrlResponse response = authService.getAuthorizeUrl(provider);
@@ -81,10 +82,11 @@ public class AuthController {
 	}
 
 	@Operation(
-			summary = "OAuth 콜백 처리 및 로그인 완료",
-			description = "Provider에서 전달한 인가 코드를 검증하고 로그인 또는 회원가입을 완료합니다. "
-					+ "웹 흐름: 프론트 웹앱으로 리다이렉트합니다. "
-					+ "앱 흐름(oauthMode=app 쿠키): tikitak://oauth/callback?loginCode={code} 딥링크로 리다이렉트합니다."
+			summary = "Google/Kakao OAuth 콜백 처리",
+			description = "Google 또는 Kakao가 전달한 인가 코드를 검증하고 로그인 또는 회원가입을 완료합니다. "
+					+ "웹 흐름은 프론트 redirect URI로 이동하고, 앱 흐름(oauthMode=app 쿠키)은 "
+					+ "tikitak://oauth/callback?loginCode={code} 딥링크로 이동합니다. "
+					+ "Apple은 POST /api/v1/auth/oauth/apple/callback을 사용합니다."
 	)
 	@GetMapping("/api/v1/auth/oauth/{provider}/callback")
 	public ResponseEntity<Void> handleOAuthCallback(
@@ -129,8 +131,9 @@ public class AuthController {
 
 	@Operation(
 			summary = "loginCode 교환 (모바일 전용)",
-			description = "딥링크로 수신한 1회용 loginCode를 access token + refresh token으로 교환합니다. "
-					+ "loginCode는 발급 후 5분간 유효하며 1회만 사용 가능합니다."
+			description = "앱 딥링크로 수신한 1회용 loginCode를 access token과 refresh token으로 교환합니다. "
+					+ "Google, Kakao, Apple 앱 로그인에서 공통으로 사용합니다. "
+					+ "loginCode는 발급 후 5분간 유효하며 1회만 사용할 수 있습니다."
 	)
 	@PostMapping("/api/v1/auth/oauth/login-code/exchange")
 	public ResponseEntity<CommonResponse<LoginResponse>> exchangeLoginCode(
@@ -162,12 +165,14 @@ public class AuthController {
 	}
 
 	@Operation(
-			summary = "Apple OAuth 콜백 처리 및 로그인 완료",
-			description = "Apple에서 전달한 인가 코드와 id_token을 검증하고 로그인 또는 회원가입을 완료한 뒤 프론트 웹앱으로 리다이렉트합니다."
+			summary = "Apple OAuth 콜백 처리",
+			description = "Apple이 form_post 방식으로 전달한 code와 id_token을 검증하고 로그인 또는 회원가입을 완료합니다. "
+					+ "웹 흐름은 프론트 redirect URI로 이동하고, 앱 흐름(oauthMode=app 쿠키)은 "
+					+ "tikitak://oauth/callback?loginCode={code} 딥링크로 이동합니다."
 	)
 	@PostMapping("/api/v1/auth/oauth/apple/callback")
 	public ResponseEntity<Void> handleAppleOAuthCallback(
-			@Parameter(description = "Apple에서 전달한 인가 코드")
+			@Parameter(description = "Apple이 전달한 인가 코드")
 			@RequestParam(required = false) String code,
 			@Parameter(description = "OAuth 요청 검증용 state")
 			@RequestParam(required = false) String state,
@@ -208,7 +213,7 @@ public class AuthController {
 
 	@Operation(
 			summary = "로그아웃",
-			description = "브라우저의 refresh token 쿠키를 만료시켜 로그아웃 처리합니다."
+			description = "refresh token을 폐기하고 refreshToken 쿠키를 만료합니다."
 	)
 	@PostMapping("/api/v1/auth/logout")
 	public ResponseEntity<CommonResponse<LogoutResponse>> logout(
