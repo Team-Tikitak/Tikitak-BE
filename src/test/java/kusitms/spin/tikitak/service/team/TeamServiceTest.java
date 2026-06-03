@@ -8,6 +8,8 @@ import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.exception.BusinessException;
+import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
@@ -32,8 +34,12 @@ import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
+import static kusitms.spin.tikitak.support.fixture.TeamFixture.inactiveTeam;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeOwner;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -79,7 +85,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("createTeam changes active team to created team")
+	@DisplayName("팀 생성 시 활성 팀이 생성된 팀으로 변경됨")
 	void createTeamChangesActiveTeamToCreatedTeam() {
 		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
 		TeamRequestDTO.TeamCreateRequestDTO request =
@@ -100,7 +106,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("createTeam stores null when profileImagePublicId is absent")
+	@DisplayName("팀 생성 시 프로필 이미지 ID가 없으면 null로 저장됨")
 	void createTeamStoresNullWhenProfileImagePublicIdIsAbsent() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		TeamRequestDTO.TeamCreateRequestDTO request =
@@ -119,7 +125,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("createTeam stores media url when profileImagePublicId is provided")
+	@DisplayName("팀 생성 시 프로필 이미지 ID가 있으면 미디어 URL로 저장됨")
 	void createTeamStoresMediaUrlWhenProfileImagePublicIdIsProvided() {
 		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		UUID mediaPublicId = UUID.randomUUID();
@@ -142,7 +148,71 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("viewTeamDetail falls back to default images")
+	@DisplayName("팀장만 남아있을 때 팀 삭제 신청 성공")
+	void deleteTeamSucceedsWhenOwnerIsOnlyActiveMember() {
+		Member ownerMember = activeMemberWithActiveTeam(MEMBER_ID, TEAM_ID);
+		Team tempTeam = activeTeam(TEAM_ID);
+		TeamMember owner = activeOwner(OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
+		Team team = Team.builder()
+				.id(TEAM_ID)
+				.name("team")
+				.status(TeamStatus.ACTIVE)
+				.teamMembers(List.of(owner))
+				.build();
+
+		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(team));
+
+		teamService.deleteTeam(MEMBER_ID, TEAM_ID);
+
+		verify(memberRepository).clearActiveTeamIdByTeamId(TEAM_ID);
+	}
+
+	@Test
+	@DisplayName("팀원이 남아있을 때 팀 삭제 신청 시 TEAM010 예외 발생")
+	void deleteTeamThrowsWhenOtherActiveMembersRemain() {
+		Member ownerMember = activeMemberWithActiveTeam(MEMBER_ID, TEAM_ID);
+		Member otherMember = activeMemberWithActiveTeam(OTHER_MEMBER_ID, TEAM_ID);
+		Team tempTeam = activeTeam(TEAM_ID);
+		TeamMember owner = activeOwner(OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
+		TeamMember other = activeMember(OTHER_TEAM_MEMBER_ID, otherMember, tempTeam);
+		Team team = Team.builder()
+				.id(TEAM_ID)
+				.name("team")
+				.status(TeamStatus.ACTIVE)
+				.teamMembers(List.of(owner, other))
+				.build();
+
+		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(team));
+
+		assertThatThrownBy(() -> teamService.deleteTeam(MEMBER_ID, TEAM_ID))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.TEAM010));
+	}
+
+	@Test
+	@DisplayName("팀장이 아닌 팀원이 팀 삭제 신청 시 TEAM005 예외 발생")
+	void deleteTeamThrowsWhenRequesterIsNotOwner() {
+		Member ownerMember = activeMemberWithActiveTeam(MEMBER_ID, TEAM_ID);
+		Member otherMember = activeMemberWithActiveTeam(OTHER_MEMBER_ID, TEAM_ID);
+		Team tempTeam = activeTeam(TEAM_ID);
+		TeamMember owner = activeOwner(OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
+		TeamMember other = activeMember(OTHER_TEAM_MEMBER_ID, otherMember, tempTeam);
+		Team team = Team.builder()
+				.id(TEAM_ID)
+				.name("team")
+				.status(TeamStatus.ACTIVE)
+				.teamMembers(List.of(owner, other))
+				.build();
+
+		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(team));
+
+		assertThatThrownBy(() -> teamService.deleteTeam(OTHER_MEMBER_ID, TEAM_ID))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.TEAM005));
+	}
+
+	@Test
+	@DisplayName("팀 상세 조회 시 프로필 이미지가 없으면 기본 이미지로 반환됨")
 	void viewTeamDetailUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
 		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		Member otherMember = activeMemberWithCharacterType(OTHER_MEMBER_ID, ProfileCharacterType.TAK_SPARK);
@@ -171,7 +241,7 @@ class TeamServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("viewTeamDetail returns stored profile image when present")
+	@DisplayName("팀 상세 조회 시 프로필 이미지가 있으면 저장된 URL로 반환됨")
 	void viewTeamDetailReturnsStoredProfileImageWhenPresent() {
 		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 
