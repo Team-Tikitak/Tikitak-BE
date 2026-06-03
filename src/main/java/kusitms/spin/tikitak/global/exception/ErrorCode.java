@@ -80,6 +80,7 @@ public enum ErrorCode {
     TEAM007("TEAM007", "복구할 권한이 없는 팀입니다", 403),
     TEAM008("TEAM008", "해당 팀에 접근할 수 없습니다.", 403),
     TEAM009("TEAM009", "팀을 찾을 수 없습니다.", 404),
+    TEAM010("TEAM010", "팀원이 남아있어 팀을 삭제할 수 없습니다", 400),
 
     // TeamMember
     TEAM_MEMBER001("TEAM_MEMBER001", "존재하지 않는 팀 멤버입니다", 404),
