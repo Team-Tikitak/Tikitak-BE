@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +32,7 @@ public class MeService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final TokenService tokenService;
 	private final ActiveTeamService activeTeamService;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
 
 	@Transactional
 	public MeResponseDTO.MeProfileResponseDTO getMyProfile(Long memberId) {
@@ -42,6 +44,7 @@ public class MeService {
 			return MeResponseDTO.MeProfileResponseDTO.builder()
 					.memberId(member.getId())
 					.email(member.getEmail())
+					.name(member.getName())
 					.socialProvider(member.getSocialProvider())
 					.status(member.getStatus())
 					.hasAgreedRequiredTerms(member.isTermsAgreed() && member.isPrivacyAgreed())
@@ -73,9 +76,15 @@ public class MeService {
 					.map(teamMember -> teamMember.getTeam().getId())
 					.toList();
 			Map<Long, Long> memberCountByTeamId = countActiveMembers(teamIds);
+			Map<Long, Long> newActivityCountByTeamId = countNewActivities(memberId, activeTeamId);
 
 			List<MeResponseDTO.TeamItemDTO> teams = memberships.stream()
-					.map(teamMember -> toTeamItem(teamMember, activeTeamId, memberCountByTeamId))
+					.map(teamMember -> toTeamItem(
+							teamMember,
+							activeTeamId,
+							memberCountByTeamId,
+							newActivityCountByTeamId
+					))
 					.sorted(Comparator
 							.comparing(MeResponseDTO.TeamItemDTO::isActive).reversed()
 							.thenComparing(MeResponseDTO.TeamItemDTO::getJoinedAt, Comparator.reverseOrder()))
@@ -99,6 +108,12 @@ public class MeService {
 		try {
 			Member member = getActiveMember(memberId);
 			activeTeamService.validateChangeableTeam(memberId, request.getTeamId());
+			if (request.getTeamId().equals(member.getActiveTeamId())) {
+				return MeResponseDTO.ActiveTeamUpdateResponseDTO.builder()
+						.activeTeamId(member.getActiveTeamId())
+						.build();
+			}
+			checkActivityOnSelectedTeamChange(memberId, member.getActiveTeamId(), request.getTeamId());
 			member.changeActiveTeam(request.getTeamId());
 
 			return MeResponseDTO.ActiveTeamUpdateResponseDTO.builder()
@@ -217,10 +232,42 @@ public class MeService {
 				));
 	}
 
+	private Map<Long, Long> countNewActivities(Long memberId, Long activeTeamId) {
+		return teamMemberRepository.countNewActivitiesByMemberTeams(
+						memberId,
+						activeTeamId,
+						TeamMemberStatus.ACTIVE.name(),
+						TeamStatus.ACTIVE.name()
+				).stream()
+				.collect(Collectors.toMap(
+						row -> ((Number) row[0]).longValue(),
+						row -> ((Number) row[1]).longValue()
+				));
+	}
+
+	private void checkActivityOnSelectedTeamChange(Long memberId, Long previousTeamId, Long nextTeamId) {
+		List<Long> teamIds = Stream.of(previousTeamId, nextTeamId)
+				.filter(teamId -> teamId != null)
+				.distinct()
+				.toList();
+		if (teamIds.isEmpty()) {
+			return;
+		}
+
+		teamMemberRepository.findActiveByMemberIdAndTeamIds(
+						memberId,
+						teamIds,
+						TeamMemberStatus.ACTIVE,
+						TeamStatus.ACTIVE
+				)
+				.forEach(TeamMember::checkActivity);
+	}
+
 	private MeResponseDTO.TeamItemDTO toTeamItem(
 			TeamMember teamMember,
 			Long activeTeamId,
-			Map<Long, Long> memberCountByTeamId
+			Map<Long, Long> memberCountByTeamId,
+			Map<Long, Long> newActivityCountByTeamId
 	) {
 		Team team = teamMember.getTeam();
 		boolean isActive = team.getId().equals(activeTeamId);
@@ -232,7 +279,9 @@ public class MeService {
 				.description(team.getDescription())
 				.role(teamMember.getRole())
 				.nickname(teamMember.getNickname())
+				.profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.memberCount(memberCountByTeamId.getOrDefault(team.getId(), 0L))
+				.newActivityCount(isActive ? 0L : newActivityCountByTeamId.getOrDefault(team.getId(), 0L))
 				.isActive(isActive)
 				.joinedAt(teamMember.getCreatedAt())
 				.build();

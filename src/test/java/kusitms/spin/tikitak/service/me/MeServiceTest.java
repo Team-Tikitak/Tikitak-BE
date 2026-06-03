@@ -30,6 +30,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeOwner
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class MeServiceTest extends UnitTest {
@@ -46,6 +47,9 @@ class MeServiceTest extends UnitTest {
 	@Mock
 	private ActiveTeamService activeTeamService;
 
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
 	@InjectMocks
 	private MeService meService;
 
@@ -61,6 +65,7 @@ class MeServiceTest extends UnitTest {
 		MeResponseDTO.MeProfileResponseDTO response = meService.getMyProfile(1L);
 
 		assertThat(response.getMemberId()).isEqualTo(1L);
+		assertThat(response.getName()).isEqualTo("User 1");
 		assertThat(response.getActiveTeamId()).isEqualTo(10L);
 		assertThat(response.isHasTeam()).isTrue();
 		assertThat(response.isOnboardingCompleted()).isFalse();
@@ -95,6 +100,12 @@ class MeServiceTest extends UnitTest {
 				.thenReturn(List.of(oldMembership, activeMembership, newMembership));
 		when(teamMemberRepository.countActiveMembersByTeamIds(List.of(10L, 20L, 30L), TeamMemberStatus.ACTIVE))
 				.thenReturn(List.of(new Object[]{10L, 2L}, new Object[]{20L, 5L}, new Object[]{30L, 1L}));
+		when(teamMemberRepository.countNewActivitiesByMemberTeams(
+				1L,
+				20L,
+				TeamMemberStatus.ACTIVE.name(),
+				TeamStatus.ACTIVE.name()
+		)).thenReturn(List.of(new Object[]{10L, 4L}, new Object[]{30L, 6L}));
 
 		MeResponseDTO.TeamListResponseDTO response = meService.getMyTeams(1L);
 
@@ -103,6 +114,9 @@ class MeServiceTest extends UnitTest {
 				.containsExactly(20L, 30L, 10L);
 		assertThat(response.getTeams().getFirst().isActive()).isTrue();
 		assertThat(response.getTeams().getFirst().getMemberCount()).isEqualTo(5L);
+		assertThat(response.getTeams())
+				.extracting(MeResponseDTO.TeamItemDTO::getNewActivityCount)
+				.containsExactly(0L, 6L, 4L);
 	}
 
 	@Test
@@ -119,6 +133,55 @@ class MeServiceTest extends UnitTest {
 		verify(activeTeamService).validateChangeableTeam(1L, 10L);
 		assertThat(response.getActiveTeamId()).isEqualTo(10L);
 		assertThat(member.getActiveTeamId()).isEqualTo(10L);
+	}
+
+	@Test
+	@DisplayName("이미 선택된 활성 팀으로 변경 요청하면 활동 확인을 생략한다")
+	void updateActiveTeamSkipsActivityCheckWhenSameTeamSelected() {
+		Member member = activeMemberWithActiveTeam(1L, 10L);
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+		MeResponseDTO.ActiveTeamUpdateResponseDTO response = meService.updateActiveTeam(
+				1L,
+				new MeRequestDTO.ActiveTeamUpdateRequestDTO(10L)
+		);
+
+		verify(activeTeamService).validateChangeableTeam(1L, 10L);
+		verifyNoInteractions(teamMemberRepository);
+		assertThat(response.getActiveTeamId()).isEqualTo(10L);
+		assertThat(member.getActiveTeamId()).isEqualTo(10L);
+	}
+
+	@Test
+	@DisplayName("선택 팀 변경 시 이전 선택 팀과 새 선택 팀의 활동 확인 시점을 갱신한다")
+	void updateActiveTeamChecksPreviousAndNextSelectedTeams() {
+		Member member = activeMemberWithActiveTeam(1L, 10L);
+		Team previousTeam = activeTeam(10L);
+		Team nextTeam = activeTeam(20L);
+		TeamMember previousMembership = kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember(10L, member, previousTeam);
+		TeamMember nextMembership = activeOwner(20L, member, nextTeam);
+		java.time.LocalDateTime previousCheckedAt = previousMembership.getLastActivityCheckedAt();
+		java.time.LocalDateTime nextCheckedAt = nextMembership.getLastActivityCheckedAt();
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+		when(teamMemberRepository.findActiveByMemberIdAndTeamIds(
+				1L,
+				List.of(10L, 20L),
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		)).thenReturn(List.of(previousMembership, nextMembership));
+
+		meService.updateActiveTeam(1L, new MeRequestDTO.ActiveTeamUpdateRequestDTO(20L));
+
+		verify(activeTeamService).validateChangeableTeam(1L, 20L);
+		verify(teamMemberRepository).findActiveByMemberIdAndTeamIds(
+				1L,
+				List.of(10L, 20L),
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		);
+		assertThat(member.getActiveTeamId()).isEqualTo(20L);
+		assertThat(previousMembership.getLastActivityCheckedAt()).isAfter(previousCheckedAt);
+		assertThat(nextMembership.getLastActivityCheckedAt()).isAfter(nextCheckedAt);
 	}
 
 	@Test
@@ -162,5 +225,26 @@ class MeServiceTest extends UnitTest {
 		assertThat(response.getProfileCharacterType()).isEqualTo(ProfileCharacterType.TAK_SPARK);
 		assertThat(member.isOnboardingCompleted()).isTrue();
 		assertThat(member.getProfileCharacterType()).isEqualTo(ProfileCharacterType.TAK_SPARK);
+	}
+
+	@Test
+	@DisplayName("탈퇴 시 비활성화하고 providerId를 탈퇴 마커로 치환한 뒤 refresh token을 폐기한다")
+	void withdrawMarksMemberInactiveAndReplacesProviderId() {
+		Member member = activeMember(1L);
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+		when(teamMemberRepository.existsActiveOwnerTeam(
+				1L,
+				kusitms.spin.tikitak.domain.team.enums.TeamMemberRole.OWNER,
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		)).thenReturn(false);
+
+		meService.withdraw(1L);
+
+		assertThat(member.getStatus()).isEqualTo(kusitms.spin.tikitak.domain.member.enums.MemberStatus.INACTIVE);
+		assertThat(member.getDeletedAt()).isNotNull();
+		assertThat(member.getProviderId()).startsWith("WITHDRAWN:1:");
+		assertThat(member.getProviderId()).isNotEqualTo("provider-1");
+		verify(tokenService).revokeAllRefreshTokens(1L);
 	}
 }

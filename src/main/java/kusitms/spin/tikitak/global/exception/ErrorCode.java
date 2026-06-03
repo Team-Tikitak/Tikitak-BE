@@ -28,6 +28,9 @@ public enum ErrorCode {
     AUTH103("AUTH103", "유효하지 않은 OAuth 인증 요청입니다.", 400),
     AUTH104("AUTH104", "OAuth 인증에 실패했습니다.", 401),
     AUTH105("AUTH105", "OAuth 콜백 처리에 실패했습니다.", 500),
+    AUTH106("AUTH106", "유효하지 않은 loginCode입니다.", 400),
+    AUTH107("AUTH107", "만료된 loginCode입니다.", 401),
+    AUTH108("AUTH108", "이미 사용된 loginCode입니다.", 401),
 
     // Me
     ME001("ME001", "회원 정보를 찾을 수 없습니다.", 404),
@@ -97,6 +100,7 @@ public enum ErrorCode {
     INVITE005("INVITE005", "만료된 초대 링크입니다.", 400),
     INVITE006("INVITE006", "이미 팀에 참여 중인 멤버입니다.", 400),
     INVITE007("INVITE007", "강퇴된 멤버는 초대 링크로 참여할 수 없습니다.", 403),
+    INVITE008("INVITE008", "팀 인원은 최대 100명까지 참여할 수 있습니다.", 400),
 
     // Feed
     FEED001("FEED001", "유효하지 않은 피드 유형입니다.", 400),
@@ -107,7 +111,7 @@ public enum ErrorCode {
     FEED006("FEED006", "피드 이미지는 최대 10장까지 등록할 수 있습니다.", 400),
     FEED007("FEED007", "본문 형식이 올바르지 않습니다.", 400),
     FEED008("FEED008", "태그할 수 없는 팀 멤버가 포함되어 있습니다.", 400),
-    FEED009("FEED009", "팀원 태그는 최대 11명까지 가능합니다.", 400),
+    FEED009("FEED009", "팀원 태그는 최대 12명까지 가능합니다.", 400),
     FEED010("FEED010", "피드 작성에 실패했습니다.", 500),
     FEED011("FEED011", "해당 피드를 수정할 수 없습니다.", 403),
     FEED012("FEED012", "피드 수정에 실패했습니다.", 500),
@@ -115,6 +119,17 @@ public enum ErrorCode {
     FEED014("FEED014", "피드 반응 처리에 실패했습니다.", 500),
     FEED015("FEED015", "해당 피드를 삭제할 수 없습니다.", 403),
     FEED016("FEED016", "피드 삭제에 실패했습니다.", 500),
+
+    // Daily Question
+    DAILY_QUESTION001("DAILY_QUESTION001", "오늘의 질문을 찾을 수 없습니다.", 404),
+    DAILY_QUESTION002("DAILY_QUESTION002", "오늘의 질문이 아닙니다.", 400),
+    DAILY_QUESTION003("DAILY_QUESTION003", "이미 오늘의 질문에 답변했습니다.", 409),
+    DAILY_QUESTION004("DAILY_QUESTION004", "오늘의 질문 답변을 찾을 수 없습니다.", 404),
+    DAILY_QUESTION005("DAILY_QUESTION005", "수정할 답변 정보가 없습니다.", 400),
+    DAILY_QUESTION006("DAILY_QUESTION006", "오늘의 질문 답변 이미지는 필수입니다.", 400),
+    DAILY_QUESTION007("DAILY_QUESTION007", "사용할 수 없는 오늘의 질문 답변 이미지입니다.", 400),
+    DAILY_QUESTION008("DAILY_QUESTION008", "오늘의 질문 답변은 전용 API로만 수정할 수 있습니다.", 400),
+    DAILY_QUESTION009("DAILY_QUESTION009", "오늘의 질문 답변 본문 형식이 올바르지 않습니다.", 400),
 
     // Comment
     COMMENT001("COMMENT001", "댓글 목록 조회에 실패했습니다.", 500),

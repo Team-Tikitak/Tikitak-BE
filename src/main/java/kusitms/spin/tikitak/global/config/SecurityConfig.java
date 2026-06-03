@@ -29,7 +29,7 @@ public class SecurityConfig {
     private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
-    @Value("${spring.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    @Value("${spring.cors.allowed-origins:http://localhost:3000,http://localhost:5173,https://tikitak.space,https://tikitak-fe.vercel.app}")
     private String allowedOrigins;
 
     @Bean
@@ -74,6 +74,7 @@ public class SecurityConfig {
                     // auth
                     "/api/v1/auth/oauth/*/start",
                     "/api/v1/auth/oauth/*/callback",
+                    "/api/v1/auth/oauth/login-code/exchange",
                     "/api/v1/auth/token/refresh",
                     "/api/v1/auth/logout",
 

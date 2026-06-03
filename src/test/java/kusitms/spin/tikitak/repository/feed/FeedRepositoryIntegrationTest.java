@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.repository.feed;
 
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
+import kusitms.spin.tikitak.domain.feed.entity.FeedTag;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.place.entity.Place;
 import kusitms.spin.tikitak.domain.team.entity.Team;
@@ -13,6 +14,7 @@ import kusitms.spin.tikitak.support.IntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -123,6 +125,49 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 		flushAndClear();
 
 		assertThat(feedRepository.findMapPinsByTeamId(myTeam.getId())).isEmpty();
+	}
+
+	@Test
+	@DisplayName("태그된 팀 멤버 필터는 요청한 모든 멤버가 태그된 피드만 반환한다")
+	void findActiveFirstPageByTaggedTeamMemberIdsUsesAndCondition() {
+		Team team = persist(team("tag-filter"));
+		Member authorMember = persist(member("tag-author"));
+		Member taggedMemberA = persist(member("tag-a"));
+		Member taggedMemberB = persist(member("tag-b"));
+		Member taggedMemberC = persist(member("tag-c"));
+		TeamMember author = persist(teamMember(authorMember, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember tagA = persist(teamMember(taggedMemberA, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember tagB = persist(teamMember(taggedMemberB, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember tagC = persist(teamMember(taggedMemberC, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		Place place = persist(place("kakao-tag-filter", "태그필터"));
+
+		Feed bothTagged = feed(team, author, place, BASE_TIME.plusMinutes(3));
+		bothTagged.addTag(FeedTag.builder().teamMember(tagA).build());
+		bothTagged.addTag(FeedTag.builder().teamMember(tagB).build());
+		persist(bothTagged);
+
+		Feed onlyATagged = feed(team, author, place, BASE_TIME.plusMinutes(2));
+		onlyATagged.addTag(FeedTag.builder().teamMember(tagA).build());
+		persist(onlyATagged);
+
+		Feed otherTagged = feed(team, author, place, BASE_TIME.plusMinutes(1));
+		otherTagged.addTag(FeedTag.builder().teamMember(tagA).build());
+		otherTagged.addTag(FeedTag.builder().teamMember(tagC).build());
+		persist(otherTagged);
+
+		flushAndClear();
+
+		List<Feed> feeds = feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+				team.getId(),
+				null,
+				null,
+				null,
+				List.of(tagA.getId(), tagB.getId()),
+				2L,
+				PageRequest.of(0, 10)
+		);
+
+		assertThat(feeds).extracting(Feed::getId).containsExactly(bothTagged.getId());
 	}
 
 	// --- helpers ---

@@ -43,8 +43,15 @@ public class Place {
 	@Column(columnDefinition = "text")
 	private String address;
 
+	@Column(columnDefinition = "text")
+	private String region;
+
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
+
+	public void updateRegion(String region) {
+		this.region = region;
+	}
 
 	@PrePersist
 	protected void onCreate() {

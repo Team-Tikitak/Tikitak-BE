@@ -43,7 +43,7 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("OAuth 시작은 redirect=false일 때 인증 URL을 JSON으로 반환한다")
+	@DisplayName("OAuth start returns authorize URL as JSON when redirect is false")
 	void startOAuthLoginReturnsAuthorizeUrlWhenRedirectFalse() throws Exception {
 		when(authService.getAuthorizeUrl("kakao")).thenReturn(new OAuthAuthorizeUrlResponse(
 				URI.create("https://kauth.kakao.com/oauth/authorize?state=state"),
@@ -60,7 +60,7 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("OAuth 시작은 기본적으로 provider 인증 URL로 redirect한다")
+	@DisplayName("OAuth start redirects to provider authorize URL by default")
 	void startOAuthLoginRedirectsByDefault() throws Exception {
 		when(authService.getAuthorizeUrl("kakao")).thenReturn(new OAuthAuthorizeUrlResponse(
 				URI.create("https://kauth.kakao.com/oauth/authorize?state=state"),
@@ -74,9 +74,25 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("OAuth callback은 로그인 결과를 프론트 redirect URI query parameter로 전달한다")
+	@DisplayName("OAuth start sets oauthMode cookie when mode is app")
+	void startOAuthLoginSetsOAuthModeCookieWhenModeIsApp() throws Exception {
+		when(authService.getAuthorizeUrl("kakao")).thenReturn(new OAuthAuthorizeUrlResponse(
+				URI.create("https://kauth.kakao.com/oauth/authorize?state=state"),
+				"state"
+		));
+
+		mockMvc.perform(get("/api/v1/auth/oauth/kakao/start")
+						.param("mode", "app"))
+				.andExpect(status().isFound())
+				.andExpect(cookie().value("oauthState", "state"))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("oauthMode=app"))));
+	}
+
+	@Test
+	@DisplayName("OAuth callback redirects to frontend with login result")
 	void handleOAuthCallbackRedirectsWithLoginResult() throws Exception {
-		when(authService.loginWithOAuth("kakao", "code", "state", "state", null))
+		when(authService.loginWithOAuth("kakao", "code", "state", "state"))
 				.thenReturn(new LoginResponse(
 						"access-token",
 						"refresh-token",
@@ -110,7 +126,7 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("Apple OAuth callback은 id_token 파라미터를 로그인 서비스에 전달한다")
+	@DisplayName("Apple OAuth callback passes id_token to login service")
 	void handleAppleOAuthCallbackUsesIdTokenParameter() throws Exception {
 		when(authService.loginWithOAuth("apple", "code", "state", "state", "id-token"))
 				.thenReturn(new LoginResponse(
@@ -139,7 +155,68 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("토큰 재발급은 request body의 refreshToken을 우선 사용한다")
+	@DisplayName("OAuth callback redirects to deep link when oauthMode is app")
+	void handleOAuthCallbackRedirectsToDeepLinkWhenModeIsApp() throws Exception {
+		when(authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.thenReturn("testlogincode1234567890abcdef");
+
+		String location = mockMvc.perform(get("/api/v1/auth/oauth/kakao/callback")
+						.param("code", "code")
+						.param("state", "state")
+						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state"))
+						.cookie(new jakarta.servlet.http.Cookie("oauthMode", "app")))
+				.andExpect(status().isFound())
+				.andExpect(header().exists("Location"))
+				.andReturn()
+				.getResponse()
+				.getHeader("Location");
+
+		assertThat(location).startsWith("tikitak://oauth/callback");
+		assertThat(location).contains("loginCode=testlogincode1234567890abcdef");
+	}
+
+	@Test
+	@DisplayName("App OAuth callback expires oauthMode cookie")
+	void handleAppOAuthCallbackExpiresOAuthModeCookie() throws Exception {
+		when(authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.thenReturn("testlogincode");
+
+		mockMvc.perform(get("/api/v1/auth/oauth/kakao/callback")
+						.param("code", "code")
+						.param("state", "state")
+						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state"))
+						.cookie(new jakarta.servlet.http.Cookie("oauthMode", "app")))
+				.andExpect(status().isFound())
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("oauthMode=;"))));
+	}
+
+	@Test
+	@DisplayName("Login code exchange returns access token and refresh token")
+	void exchangeLoginCodeReturnsTokens() throws Exception {
+		when(authService.exchangeLoginCode("validlogincode"))
+				.thenReturn(new LoginResponse("access-token", "refresh-token", true, false, null));
+
+		mockMvc.perform(post("/api/v1/auth/oauth/login-code/exchange")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"loginCode": "validlogincode"}
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(cookie().value("refreshToken", "refresh-token"))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("SameSite=None"))))
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.accessToken").value("access-token"))
+				.andExpect(jsonPath("$.data.refreshToken").value("refresh-token"))
+				.andExpect(jsonPath("$.data.isNewMember").value(true))
+				.andExpect(jsonPath("$.data.hasAgreedRequiredTerms").value(false));
+
+		verify(authService).exchangeLoginCode(eq("validlogincode"));
+	}
+
+	@Test
+	@DisplayName("Token refresh uses refreshToken from request body first")
 	void refreshTokenUsesRequestBodyFirst() throws Exception {
 		when(authService.refreshToken("body-refresh-token"))
 				.thenReturn(new TokenResponse("new-access-token", "new-refresh-token", "Bearer", 3600L));
@@ -165,7 +242,7 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("토큰 재발급은 request body가 없으면 cookie refreshToken을 사용한다")
+	@DisplayName("Token refresh uses refreshToken from cookie when request body is missing")
 	void refreshTokenUsesCookieWhenRequestBodyMissing() throws Exception {
 		when(authService.refreshToken("cookie-refresh-token"))
 				.thenReturn(new TokenResponse("new-access-token", "new-refresh-token", "Bearer", 3600L));
@@ -179,7 +256,7 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
-	@DisplayName("로그아웃은 refresh token을 폐기하고 refresh cookie를 만료한다")
+	@DisplayName("Logout revokes refresh token and expires refresh cookie")
 	void logoutRevokesRefreshTokenAndExpiresCookie() throws Exception {
 		mockMvc.perform(post("/api/v1/auth/logout")
 						.cookie(new jakarta.servlet.http.Cookie("refreshToken", "refresh-token")))

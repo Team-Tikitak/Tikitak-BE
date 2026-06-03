@@ -194,6 +194,14 @@ public class MediaService {
         );
     }
 
+    public List<Long> findExpiredDeletedMediaIds(LocalDateTime cutoff, int limit) {
+        return mediaRepository.findExpiredDeletedMediaIds(
+                MediaStatus.DELETED,
+                cutoff,
+                PageRequest.of(0, limit)
+        );
+    }
+
     @Transactional
     public boolean deleteExpiredPendingMedia(Long mediaId) {
         return deleteExpiredMedia(mediaId, MediaStatus.PENDING);
@@ -202,6 +210,20 @@ public class MediaService {
     @Transactional
     public boolean deleteExpiredUploadedMedia(Long mediaId) {
         return deleteExpiredMedia(mediaId, MediaStatus.UPLOADED);
+    }
+
+    @Transactional
+    public boolean deleteExpiredDeletedMedia(Long mediaId) {
+        Media media = mediaRepository.findByIdForUpdate(mediaId)
+                .orElse(null);
+
+        if (media == null || media.getStatus() != MediaStatus.DELETED) {
+            return false;
+        }
+
+        deleteObject(media, true);
+        mediaRepository.delete(media);
+        return true;
     }
 
     private MediaUploadCompleteResponse.Item completeMedia(

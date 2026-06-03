@@ -23,6 +23,16 @@ public class TeamInvitationResponseDTO {
 	@Builder
 	@NoArgsConstructor(access = AccessLevel.PROTECTED)
 	@AllArgsConstructor(access = AccessLevel.PROTECTED)
+	public static class ActiveInviteLinkResponseDTO {
+		private String inviteToken;
+		private String teamName;
+		private LocalDateTime expiresAt;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor(access = AccessLevel.PROTECTED)
+	@AllArgsConstructor(access = AccessLevel.PROTECTED)
 	public static class InviteLinkPreviewResponseDTO {
 		private Long teamId;
 		private String teamName;

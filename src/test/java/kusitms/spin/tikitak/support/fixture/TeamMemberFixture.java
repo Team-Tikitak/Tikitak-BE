@@ -21,6 +21,20 @@ public final class TeamMemberFixture {
 		return teamMember(id, member, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE);
 	}
 
+	public static TeamMember activeMemberWithoutProfileImg(Long id, Member member, Team team) {
+		return TeamMember.builder()
+				.id(id)
+				.team(team)
+				.member(member)
+				.nickname("nickname-" + id)
+				.profileImgUrl(null)
+				.role(TeamMemberRole.MEMBER)
+				.status(TeamMemberStatus.ACTIVE)
+				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
+				.lastActivityCheckedAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
+				.build();
+	}
+
 	public static TeamMember teamMember(
 			Long id,
 			Member member,
@@ -37,6 +51,7 @@ public final class TeamMemberFixture {
 				.role(role)
 				.status(status)
 				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
+				.lastActivityCheckedAt(LocalDateTime.of(2026, 3, 4, 20, 30).plusDays(id))
 				.build();
 	}
 }

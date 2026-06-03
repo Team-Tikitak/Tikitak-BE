@@ -1,0 +1,197 @@
+package kusitms.spin.tikitak.service.team;
+
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
+import kusitms.spin.tikitak.domain.team.entity.Team;
+import kusitms.spin.tikitak.domain.team.entity.TeamMember;
+import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
+import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
+import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
+import kusitms.spin.tikitak.service.team.dto.TeamRequestDTO;
+import kusitms.spin.tikitak.service.team.dto.TeamResponseDTO;
+import kusitms.spin.tikitak.support.UnitTest;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
+import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class TeamServiceTest extends UnitTest {
+
+	private static final Long MEMBER_ID = 1L;
+	private static final Long OTHER_MEMBER_ID = 2L;
+	private static final Long TEAM_ID = 10L;
+	private static final Long OWNER_TEAM_MEMBER_ID = 100L;
+	private static final Long OTHER_TEAM_MEMBER_ID = 101L;
+
+	@Mock
+	private TeamRepository teamRepository;
+
+	@Mock
+	private MemberRepository memberRepository;
+
+	@Mock
+	private TeamMemberRepository teamMemberRepository;
+
+	@Mock
+	private TeamInviteRepository teamInviteRepository;
+
+	@Mock
+	private MediaRepository mediaRepository;
+
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
+	private TeamService teamService;
+
+	@BeforeEach
+	void setUp() {
+		teamService = new TeamService(
+				teamRepository,
+				memberRepository,
+				teamMemberRepository,
+				teamInviteRepository,
+				mediaRepository,
+				defaultProfileImageResolver
+		);
+	}
+
+	@Test
+	@DisplayName("createTeam changes active team to created team")
+	void createTeamChangesActiveTeamToCreatedTeam() {
+		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> {
+			Team savedTeam = inv.getArgument(0);
+			ReflectionTestUtils.setField(savedTeam, "id", TEAM_ID);
+			return savedTeam;
+		});
+		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		teamService.createTeam(MEMBER_ID, request);
+
+		assertThat(member.getActiveTeamId()).isEqualTo(TEAM_ID);
+	}
+
+	@Test
+	@DisplayName("createTeam stores null when profileImagePublicId is absent")
+	void createTeamStoresNullWhenProfileImagePublicIdIsAbsent() {
+		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		teamService.createTeam(MEMBER_ID, request);
+
+		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
+		verify(teamMemberRepository).save(captor.capture());
+		assertThat(captor.getValue().getProfileImgUrl()).isNull();
+	}
+
+	@Test
+	@DisplayName("createTeam stores media url when profileImagePublicId is provided")
+	void createTeamStoresMediaUrlWhenProfileImagePublicIdIsProvided() {
+		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		UUID mediaPublicId = UUID.randomUUID();
+		Media profileMedia = media(1L, MEMBER_ID, mediaPublicId, MediaPurpose.PROFILE_IMAGE, MediaStatus.UPLOADED);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", mediaPublicId, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(mediaRepository.findByPublicIdForUpdate(mediaPublicId)).thenReturn(Optional.of(profileMedia));
+		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(teamInviteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		teamService.createTeam(MEMBER_ID, request);
+
+		ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
+		verify(teamMemberRepository).save(captor.capture());
+		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(profileMedia.getUrl());
+		assertThat(captor.getValue().getProfileMedia()).isEqualTo(profileMedia);
+	}
+
+	@Test
+	@DisplayName("viewTeamDetail falls back to default images")
+	void viewTeamDetailUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
+		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		Member otherMember = activeMemberWithCharacterType(OTHER_MEMBER_ID, ProfileCharacterType.TAK_SPARK);
+		String ownerDefaultImg = "https://cdn.example.com/default-profiles/tak-leader.png";
+		String otherDefaultImg = "https://cdn.example.com/default-profiles/tak-spark.png";
+
+		Team tempTeam = activeTeam(TEAM_ID);
+		TeamMember owner = activeMemberWithoutProfileImg(OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
+		TeamMember other = activeMemberWithoutProfileImg(OTHER_TEAM_MEMBER_ID, otherMember, tempTeam);
+		Team teamWithMembers = Team.builder()
+				.id(TEAM_ID)
+				.name("team")
+				.status(TeamStatus.ACTIVE)
+				.teamMembers(List.of(owner, other))
+				.build();
+
+		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(teamWithMembers));
+		when(defaultProfileImageResolver.resolveForTeamMember(owner)).thenReturn(ownerDefaultImg);
+		when(defaultProfileImageResolver.resolveForTeamMember(other)).thenReturn(otherDefaultImg);
+
+		TeamResponseDTO.TeamDetailResponseDTO response = teamService.viewTeamDetail(MEMBER_ID, TEAM_ID);
+
+		assertThat(response.getMyProfile().getProfileImgUrl()).isEqualTo(ownerDefaultImg);
+		assertThat(response.getTeamMembers()).hasSize(1);
+		assertThat(response.getTeamMembers().get(0).getProfileImgUrl()).isEqualTo(otherDefaultImg);
+	}
+
+	@Test
+	@DisplayName("viewTeamDetail returns stored profile image when present")
+	void viewTeamDetailReturnsStoredProfileImageWhenPresent() {
+		Member ownerMember = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+
+		Team tempTeam = activeTeam(TEAM_ID);
+		TeamMember ownerWithImg = kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember(
+				OWNER_TEAM_MEMBER_ID, ownerMember, tempTeam);
+		Team teamWithMembers = Team.builder()
+				.id(TEAM_ID)
+				.name("team")
+				.status(TeamStatus.ACTIVE)
+				.teamMembers(List.of(ownerWithImg))
+				.build();
+
+		when(teamRepository.findTeamWithTeamMembersById(TEAM_ID)).thenReturn(Optional.of(teamWithMembers));
+		when(defaultProfileImageResolver.resolveForTeamMember(ownerWithImg))
+				.thenReturn("https://example.com/team-member" + OWNER_TEAM_MEMBER_ID + ".png");
+
+		TeamResponseDTO.TeamDetailResponseDTO response = teamService.viewTeamDetail(MEMBER_ID, TEAM_ID);
+
+		assertThat(response.getMyProfile().getProfileImgUrl())
+				.isEqualTo("https://example.com/team-member" + OWNER_TEAM_MEMBER_ID + ".png");
+	}
+}

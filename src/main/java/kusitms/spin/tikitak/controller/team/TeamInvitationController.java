@@ -38,12 +38,12 @@ public class TeamInvitationController {
 	}
 
 	@GetMapping("/teams/{teamId}/invitation-link")
-	@Operation(summary = "현재 활성 초대 링크 조회 API", description = "팀장만 사용할 수 있습니다.")
-	public CommonResponse<TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO> getActiveInviteLink(
+	@Operation(summary = "현재 활성 초대 링크 조회 API", description = "팀장 및 팀원 모두 사용할 수 있습니다.")
+	public CommonResponse<TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO> getActiveInviteLink(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,
 			@PathVariable Long teamId
 	) {
-		TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO response =
+		TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO response =
 				teamInvitationService.getActiveInviteLink(memberId, teamId);
 		return CommonResponse.success(response);
 	}

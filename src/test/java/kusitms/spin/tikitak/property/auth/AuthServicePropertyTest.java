@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.property.auth;
 
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.auth.LoginCodeRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.service.auth.AuthService;
 import kusitms.spin.tikitak.service.auth.AppleOAuthService;
@@ -30,7 +31,8 @@ class AuthServicePropertyTest {
 			mock(OAuthStateStore.class),
 			mock(TokenService.class),
 			mock(MemberRepository.class),
-			mock(ActiveTeamService.class)
+			mock(ActiveTeamService.class),
+			mock(LoginCodeRepository.class)
 	);
 
 	@Property

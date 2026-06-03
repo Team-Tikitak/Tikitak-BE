@@ -41,6 +41,10 @@ public class TeamInvite {
 	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
+	public boolean isExpired() {
+		return expiresAt.isBefore(LocalDateTime.now());
+	}
+
 	public void update(String newToken, LocalDateTime newExpiresAt) {
 		this.inviteToken = newToken;
 		this.expiresAt = newExpiresAt;

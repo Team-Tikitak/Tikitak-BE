@@ -1,5 +1,7 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
@@ -8,7 +10,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -16,7 +18,6 @@ import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationResponseDTO;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,17 +30,19 @@ import java.util.UUID;
 public class TeamInvitationService {
 
 	private static final int INVITE_EXPIRE_DAYS = 7;
+	private static final int TEAM_MEMBER_LIMIT = 100;
 
 	private final TeamRepository teamRepository;
 	private final MemberRepository memberRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamInviteRepository teamInviteRepository;
+	private final MediaRepository mediaRepository;
 
 	@Transactional
 	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO generateOrReissueInviteLink(
 			Long memberId, Long teamId
 	) {
-		Team team = teamRepository.findById(teamId)
+		Team team = teamRepository.findByIdForUpdate(teamId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
 
 		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
@@ -49,7 +52,6 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
 
-		// 링크 생성 권한 검증
 		if (caller.getRole() != TeamMemberRole.OWNER) {
 			throw new BusinessException(ErrorCode.INVITE001);
 		}
@@ -57,26 +59,19 @@ public class TeamInvitationService {
 		String newToken = UUID.randomUUID().toString().replace("-", "");
 		LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(INVITE_EXPIRE_DAYS);
 
-		TeamInvite invite;
-		try {
-			invite = teamInviteRepository.findByTeamId(teamId)
+		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.map(existing -> {
-					existing.update(newToken, newExpiresAt);	// 기존 초대링크가 있으면 무효화 후 재발급
+					existing.update(newToken, newExpiresAt);
 					return existing;
 				})
 				.orElseGet(() -> teamInviteRepository.save(
-					TeamInvite.builder()					// 기존 초대링크가 없으면 생성
+						TeamInvite.builder()
 								.team(team)
 								.inviteToken(newToken)
 								.expiresAt(newExpiresAt)
 								.active(true)
 								.build()
 				));
-		} catch (DataIntegrityViolationException e) {
-			invite = teamInviteRepository.findByTeamId(teamId)
-					.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
-			invite.update(newToken, newExpiresAt);
-		}
 
 		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
 				.inviteToken(invite.getInviteToken())
@@ -84,12 +79,9 @@ public class TeamInvitationService {
 				.build();
 	}
 
-	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO getActiveInviteLink(
+	public TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO getActiveInviteLink(
 			Long memberId, Long teamId
 	) {
-		teamRepository.findById(teamId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
-
 		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
@@ -97,20 +89,21 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
 
-		if (caller.getRole() != TeamMemberRole.OWNER) {
-			throw new BusinessException(ErrorCode.INVITE003);
-		}
+		Team currentTeam = teamRepository.findById(teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+
 
 		TeamInvite invite = teamInviteRepository.findByTeamId(teamId)
 				.filter(TeamInvite::isActive)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE002));
 
-		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+		if (invite.isExpired()) {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
 
-		return TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO.builder()
+		return TeamInvitationResponseDTO.ActiveInviteLinkResponseDTO.builder()
 				.inviteToken(invite.getInviteToken())
+				.teamName(currentTeam.getName())
 				.expiresAt(invite.getExpiresAt())
 				.build();
 	}
@@ -119,13 +112,7 @@ public class TeamInvitationService {
 		TeamInvite invite = teamInviteRepository.findByInviteToken(token)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
 
-		if (!invite.isActive()) {
-			throw new BusinessException(ErrorCode.INVITE004);
-		}
-
-		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-			throw new BusinessException(ErrorCode.INVITE005);
-		}
+		validateInviteUsable(invite);
 
 		Team team = teamRepository.findTeamWithTeamMembersById(invite.getTeam().getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
@@ -154,15 +141,9 @@ public class TeamInvitationService {
 		TeamInvite invite = teamInviteRepository.findByInviteToken(token)
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
 
-		if (!invite.isActive()) {
-			throw new BusinessException(ErrorCode.INVITE004);
-		}
+		validateInviteUsable(invite);
 
-		if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-			throw new BusinessException(ErrorCode.INVITE005);
-		}
-
-		Team team = teamRepository.findById(invite.getTeam().getId())
+		Team team = teamRepository.findByIdForUpdate(invite.getTeam().getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.INVITE004));
 
 		if (team.getStatus() != TeamStatus.ACTIVE) {
@@ -171,6 +152,13 @@ public class TeamInvitationService {
 
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER001));
+
+		long activeCount = teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMemberStatus.ACTIVE);
+		if (activeCount >= TEAM_MEMBER_LIMIT) {
+			throw new BusinessException(ErrorCode.INVITE008);
+		}
+
+		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
 		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
 				.ifPresentOrElse(
@@ -181,24 +169,49 @@ public class TeamInvitationService {
 							if (existing.getStatus() == TeamMemberStatus.BANNED) {
 								throw new BusinessException(ErrorCode.INVITE007);
 							}
+							if (newProfileMedia != null && existing.getProfileMedia() != null) {
+								existing.getProfileMedia().markDeleted();
+							}
 							existing.rejoin();
-							existing.updateProfile(request.getNickname(), request.getProfileImgUrl());
+							existing.updateProfile(
+									request.getNickname(),
+									newProfileMedia != null ? newProfileMedia.getUrl() : null,
+									newProfileMedia
+							);
 						},
 						() -> teamMemberRepository.save(TeamMember.builder()
 								.team(team)
 								.member(member)
 								.nickname(request.getNickname())
-								.profileImgUrl(request.getProfileImgUrl())
+								.profileImgUrl(newProfileMedia != null ? newProfileMedia.getUrl() : null)
+								.profileMedia(newProfileMedia)
 								.role(TeamMemberRole.MEMBER)
 								.status(TeamMemberStatus.ACTIVE)
 								.build())
 				);
 
-		memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
+		member.changeActiveTeam(team.getId());
 
 		return TeamInvitationResponseDTO.JoinTeamResponseDTO.builder()
 				.teamId(team.getId())
 				.teamName(team.getName())
 				.build();
+	}
+
+	private void validateInviteUsable(TeamInvite invite) {
+		if (!invite.isActive()) {
+			throw new BusinessException(ErrorCode.INVITE004);
+		}
+		if (invite.isExpired()) {
+			throw new BusinessException(ErrorCode.INVITE005);
+		}
+	}
+
+	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
+		if (mediaPublicId == null) return null;
+		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
+		media.markUsed();
+		return media;
 	}
 }

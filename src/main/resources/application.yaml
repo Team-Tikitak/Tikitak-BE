@@ -10,7 +10,7 @@ spring:
       password: ${REDIS_PASSWORD:}
 
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,https://tikitak.space,https://tikitak-fe.vercel.app}
 
   flyway:
     enabled: true
@@ -73,6 +73,11 @@ r2:
   bucket-name: ${R2_BUCKET_NAME}
   endpoint: ${R2_ENDPOINT}
   public-base-url: ${R2_PUBLIC_BASE_URL:}
+
+image:
+  optimization:
+    enabled: ${IMAGE_OPTIMIZATION_ENABLED:true}
+    preset-query-param: ${IMAGE_OPTIMIZATION_PRESET_QUERY_PARAM:preset}
 
 kakao:
   map:

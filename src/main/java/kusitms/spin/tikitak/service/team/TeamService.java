@@ -1,5 +1,8 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
@@ -9,13 +12,16 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.team.dto.TeamRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamResponseDTO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -32,6 +39,8 @@ public class TeamService {
     private final MemberRepository memberRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamInviteRepository teamInviteRepository;
+    private final MediaRepository mediaRepository;
+    private final DefaultProfileImageResolver defaultProfileImageResolver;
 
     @Transactional
     public TeamResponseDTO.TeamCreateResponseDTO createTeam(Long memberId, TeamRequestDTO.TeamCreateRequestDTO request) {
@@ -47,19 +56,27 @@ public class TeamService {
                 .build();
 
         teamRepository.save(team);
+        member.changeActiveTeam(team.getId());
 
-        // TeamMember 생성
+        log.info("[createTeam] memberId={}, profileImagePublicId={}", memberId, request.getMediaPublicId());
+
+        Media profileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
+
+        log.info("[createTeam] profileMedia={}, url={}",
+                profileMedia != null ? profileMedia.getId() : null,
+                profileMedia != null ? profileMedia.getUrl() : null);
+
         TeamMember teamMember = TeamMember.builder()
                 .team(team)
                 .member(member)
                 .nickname(request.getNickName())
-                .profileImgUrl(request.getProfileImageUrl())
+                .profileImgUrl(profileMedia != null ? profileMedia.getUrl() : null)
+                .profileMedia(profileMedia)
                 .role(TeamMemberRole.OWNER)
                 .status(TeamMemberStatus.ACTIVE)
                 .build();
 
         teamMemberRepository.save(teamMember);
-        memberRepository.setActiveTeamIdIfNull(memberId, team.getId());
 
         // 팀 초대링크 생성
         teamInviteRepository.save(TeamInvite.builder()
@@ -99,29 +116,35 @@ public class TeamService {
     }
 
     public TeamResponseDTO.TeamDetailResponseDTO viewTeamDetail(Long memberId, Long teamId) {
-        // Team과 함께 TeamMember 들도 같이 가져옴
         Team team = teamRepository.findTeamWithTeamMembersById(teamId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
 
-        // 사용자가 해당 팀에 속해 있는지 확인
         TeamMember currentMember = team.getTeamMembers().stream()
                 .filter(tm -> tm.getMember().getId().equals(memberId)
                         && tm.getStatus() == TeamMemberStatus.ACTIVE)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
-        List<TeamResponseDTO.TeamMemberDTO> teamMemberDTOList = team.getTeamMembers().stream()
+        List<TeamResponseDTO.TeamMemberDTO> members = team.getTeamMembers().stream()
+                .filter(tm -> tm.getStatus() == TeamMemberStatus.ACTIVE
+                        && !tm.getId().equals(currentMember.getId()))
                 .map(tm -> TeamResponseDTO.TeamMemberDTO.builder()
+                        .teamMemberId(tm.getId())
                         .nickname(tm.getNickname())
                         .teamMemberRole(tm.getRole())
                         .email(tm.getMember().getEmail())
-                        .profileImgUrl(tm.getProfileImgUrl())
-                        .build()
-                ).toList();
+                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
+                        .build())
+                .toList();
 
         return TeamResponseDTO.TeamDetailResponseDTO.builder()
                 .teamName(team.getName())
-                .teamMemberDTOList(teamMemberDTOList)
+                .myProfile(TeamResponseDTO.MyProfileDTO.builder()
+                        .nickname(currentMember.getNickname())
+                        .teamMemberRole(currentMember.getRole())
+                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(currentMember))
+                        .build())
+                .teamMembers(members)
                 .build();
     }
 
@@ -173,5 +196,28 @@ public class TeamService {
 
         // 팀의 status를 ACTIVE로 변경
         team.recover();
+    }
+
+    private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
+        if (mediaPublicId == null) return null;
+        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+                .orElse(null);
+        if (media == null) {
+            log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
+            return null;
+        }
+        log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
+                media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
+        log.info("[resolveProfileMedia] filter check. memberIdMatch={}, purposeMatch={}, statusMatch={}",
+                media.getMemberId().equals(memberId),
+                media.getPurpose() == MediaPurpose.PROFILE_IMAGE,
+                media.getStatus() == MediaStatus.UPLOADED);
+        if (!media.getMemberId().equals(memberId)
+                || media.getPurpose() != MediaPurpose.PROFILE_IMAGE
+                || media.getStatus() != MediaStatus.UPLOADED) {
+            return null;
+        }
+        media.markUsed();
+        return media;
     }
 }

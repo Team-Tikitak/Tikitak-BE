@@ -7,6 +7,8 @@ import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import kusitms.spin.tikitak.service.map.dto.MapPinRow;
 import kusitms.spin.tikitak.service.map.dto.MapResponseDTO;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class MapService {
 	private final FeedRepository feedRepository;
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
+	private final ImageUrlResolver imageUrlResolver;
 
 	public MapResponseDTO.MapPinListResponseDTO getMapPins(Long memberId, Long teamId) {
 		validateActiveTeamMember(memberId, teamId);
@@ -34,7 +37,7 @@ public class MapService {
 						.latitude(row.getLatitude())
 						.longitude(row.getLongitude())
 						.address(row.getAddress())
-						.thumbnailUrl(row.getThumbnailUrl())
+						.thumbnailUrl(imageUrlResolver.resolve(row.getThumbnailUrl(), ImagePreset.FEED_THUMB))
 						.feedCount(row.getFeedCount())
 						.build())
 				.toList();

@@ -24,12 +24,16 @@ import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.feed.dto.FeedRequestDTO;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -51,7 +55,20 @@ public class FeedService {
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
-	private static final int MAX_TAG_COUNT = 11;
+	private static final int MAX_TAG_COUNT = 12;
+    private static final int MAX_CONTENT_LENGTH = 1000;
+	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
+	private static final int ALL_TAGGED_MIN_FEEDS = 3;
+	private static final int COMBINATION_MIN_FEEDS = 3;
+
+	public record CombinationItemsResult(
+			List<FeedResponseDTO.TaggedMemberDTO> combination,
+			List<FeedResponseDTO.FeedListItemDTO> feeds
+	) {
+		public static CombinationItemsResult empty() {
+			return new CombinationItemsResult(List.of(), List.of());
+		}
+	}
 
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
@@ -60,15 +77,32 @@ public class FeedService {
 	private final MediaRepository mediaRepository;
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final ImageUrlResolver imageUrlResolver;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId, Long teamId, String cursor, Integer size, String placeId
+			Long memberId,
+			Long teamId,
+			String cursor,
+			Integer size,
+			String placeId,
+      String region,
+			String type,
+			List<Long> taggedTeamMemberIds
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
+		FeedTypeFilter feedType = parseFeedType(type);
+		List<Long> normalizedTaggedTeamMemberIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
+		validateTaggedTeamMembers(teamId, normalizedTaggedTeamMemberIds);
+		String normalizedPlaceId = blankToNull(placeId);
+		String normalizedRegion = normalizedPlaceId == null ? blankToNull(region) : null;
 
-		List<Feed> feeds = findFeedPage(teamId, blankToNull(placeId), parsedCursor, pageSize);
+		List<Feed> feeds = findFeedPage(
+				teamId, normalizedPlaceId, normalizedRegion, feedType, normalizedTaggedTeamMemberIds, parsedCursor, pageSize);
+		long totalCount = countFeeds(
+				teamId, normalizedPlaceId, normalizedRegion, feedType, normalizedTaggedTeamMemberIds);
 
 		boolean hasNext = feeds.size() > pageSize;
 		List<Feed> items = hasNext ? feeds.subList(0, pageSize) : feeds;
@@ -99,6 +133,7 @@ public class FeedService {
 						.nextCursor(nextCursor)
 						.hasNext(hasNext)
 						.size(pageSize)
+						.totalCount(totalCount)
 						.build())
 				.build();
 	}
@@ -117,6 +152,113 @@ public class FeedService {
 		);
 	}
 
+	public List<FeedResponseDTO.FeedListItemDTO> getEveryonePickItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		YearMonth currentMonth = YearMonth.now();
+		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
+		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+
+		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
+		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
+			return List.of();
+		}
+
+		List<Long> rankedIds = feedRepository.findEveryonePickFeedIds(teamId, startOfMonth, startOfNextMonth);
+		if (rankedIds.isEmpty()) {
+			return List.of();
+		}
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, rankedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(rankedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(rankedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(rankedIds, viewer.getId());
+
+		return rankedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+	}
+
+	public List<FeedResponseDTO.FeedListItemDTO> getAllTaggedItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		List<Long> feedIds = feedRepository.findAllTaggedFeedIds(teamId);
+		if (feedIds.size() < ALL_TAGGED_MIN_FEEDS) {
+			return List.of();
+		}
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(feedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+
+		return feedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+	}
+
+	public CombinationItemsResult getCombinationItems(Long memberId, Long teamId) {
+		TeamMember viewer = getActiveTeamMember(memberId, teamId);
+
+		List<Object[]> topPair = feedRepository.findTopCombinationPair(teamId);
+		if (topPair.isEmpty()) {
+			return CombinationItemsResult.empty();
+		}
+
+		Long mA = ((Number) topPair.get(0)[0]).longValue();
+		Long mB = ((Number) topPair.get(0)[1]).longValue();
+
+		List<Long> feedIds = feedRepository.findCombinationFeedIds(teamId, mA, mB);
+		if (feedIds.size() < COMBINATION_MIN_FEEDS) {
+			return CombinationItemsResult.empty();
+		}
+
+		List<Long> memberIds = feedRepository.findAlwaysCoTaggedMemberIds(teamId, mA, mB);
+		List<FeedResponseDTO.TaggedMemberDTO> combination = teamMemberRepository
+				.findActiveByTeamIdAndIds(teamId, memberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
+				.stream()
+				.map(this::toTaggedMember)
+				.toList();
+
+		Map<Long, Feed> feedById = feedRepository.findActiveByIds(teamId, feedIds).stream()
+				.collect(Collectors.toMap(Feed::getId, Function.identity()));
+
+		Map<Long, Long> commentCountMap = commentCounts(feedIds);
+		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
+		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+
+		List<FeedResponseDTO.FeedListItemDTO> feeds = feedIds.stream()
+				.map(feedById::get)
+				.filter(Objects::nonNull)
+				.map(feed -> toListItem(
+						feed,
+						commentCountMap.getOrDefault(feed.getId(), 0L),
+						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
+						myReactionMap.get(feed.getId())
+				))
+				.toList();
+
+		return new CombinationItemsResult(combination, feeds);
+	}
+
 	@Transactional
 	public FeedResponseDTO.FeedMutationResponseDTO createFeed(
 			Long memberId, Long teamId, FeedRequestDTO.FeedCreateRequestDTO request
@@ -126,7 +268,8 @@ public class FeedService {
 		List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
 		List<Media> medias = validateCreateMedias(memberId, mediaPublicIds);
 		Place place = resolvePlace(request.getPlace());
-		List<TeamMember> taggedMembers = resolveTaggedMembers(teamId, request.getTaggedTeamMemberIds());
+		List<TeamMember> taggedMembers = resolveTaggedMembersIncludingAuthor(
+				teamId, author, request.getTaggedTeamMemberIds());
 
 		Feed feed = Feed.builder()
 				.team(author.getTeam())
@@ -163,41 +306,26 @@ public class FeedService {
 		if (!feed.getTeamMember().getId().equals(editor.getId())) {
 			throw new BusinessException(ErrorCode.FEED011);
 		}
+		if (feed.hasQuestion()) {
+			throw new BusinessException(ErrorCode.DAILY_QUESTION008);
+		}
 
 		String content = normalizeContent(request.getContent());
-		List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
-		List<Media> medias = validateUpdateMedias(memberId, feed, mediaPublicIds);
 		Place place = resolvePlace(request.getPlace());
-		List<TeamMember> taggedMembers = resolveTaggedMembers(teamId, request.getTaggedTeamMemberIds());
-
-		Set<Long> nextMediaIds = medias.stream().map(Media::getId).collect(Collectors.toSet());
-		feed.getImages().stream()
-				.map(FeedImage::getMedia)
-				.filter(Objects::nonNull)
-				.filter(media -> !nextMediaIds.contains(media.getId()))
-				.forEach(Media::markDeleted);
-
-		for (Media media : medias) {
-			media.markUsed();
-		}
-
-		List<FeedImage> images = new ArrayList<>();
-		for (int i = 0; i < medias.size(); i++) {
-			Media media = medias.get(i);
-			images.add(FeedImage.builder()
-					.media(media)
-					.imgUrl(media.getUrl())
-					.orderIndex(i)
-					.build());
-		}
-
-		List<FeedTag> tags = taggedMembers.stream()
-				.map(teamMember -> FeedTag.builder().teamMember(teamMember).build())
-				.toList();
 
 		feed.updateGeneralFeed(content, place);
-		feed.replaceImages(images);
-		feed.replaceTags(tags);
+		if (request.getMediaPublicIds() != null) {
+			List<UUID> mediaPublicIds = validateMediaPublicIds(request.getMediaPublicIds());
+			List<Media> medias = validateUpdateMedias(memberId, feed, mediaPublicIds);
+			syncImages(feed, medias);
+		}
+		if (request.getTaggedTeamMemberIds() == null) {
+			ensureAuthorTagged(feed, editor);
+		} else {
+			List<TeamMember> taggedMembers = resolveTaggedMembersIncludingAuthor(
+					teamId, editor, request.getTaggedTeamMemberIds());
+			feed.syncTags(taggedMembers);
+		}
 		return toMutation(feed);
 	}
 
@@ -266,6 +394,9 @@ public class FeedService {
 		if (content.isBlank()) {
 			throw new BusinessException(ErrorCode.FEED007);
 		}
+		if (content.length() > MAX_CONTENT_LENGTH) {
+			throw new BusinessException(ErrorCode.FEED007);
+		}
 		return content;
 	}
 
@@ -332,22 +463,64 @@ public class FeedService {
 		}
 	}
 
+	private void syncImages(Feed feed, List<Media> medias) {
+		Map<Long, FeedImage> currentImageByMediaId = feed.getImages().stream()
+				.filter(image -> image.getMedia() != null)
+				.collect(Collectors.toMap(
+						image -> image.getMedia().getId(),
+						Function.identity()
+				));
+		Set<Long> nextMediaIds = medias.stream()
+				.map(Media::getId)
+				.collect(Collectors.toSet());
+
+		feed.getImages().removeIf(image -> {
+			Media media = image.getMedia();
+			boolean removed = media == null || !nextMediaIds.contains(media.getId());
+			if (removed && media != null) {
+				media.markDeleted();
+			}
+			return removed;
+		});
+
+		for (int i = 0; i < medias.size(); i++) {
+			Media media = medias.get(i);
+			FeedImage existingImage = currentImageByMediaId.get(media.getId());
+			if (existingImage != null) {
+				existingImage.updateOrderIndex(i);
+				continue;
+			}
+			media.markUsed();
+			feed.addImage(FeedImage.builder()
+					.media(media)
+					.imgUrl(media.getUrl())
+					.orderIndex(i)
+					.build());
+		}
+	}
+
 	private Place resolvePlace(FeedRequestDTO.PlaceRequestDTO request) {
 		if (request == null) {
 			return null;
 		}
 		String externalPlaceId = blankToNull(request.getPlaceId());
+		String region = extractRegion(request.getAddress());
 		if (externalPlaceId != null) {
 			Optional<Place> existing = placeRepository.findByExternalPlaceId(externalPlaceId);
 			if (existing.isPresent()) {
-				return existing.get();
+				Place place = existing.get();
+				if (place.getRegion() == null && region != null) {
+					place.updateRegion(region);
+				}
+				return place;
 			}
 			placeRepository.insertIfAbsentByExternalPlaceId(
 					externalPlaceId,
 					request.getName(),
 					request.getLatitude(),
 					request.getLongitude(),
-					request.getAddress()
+					request.getAddress(),
+					region
 			);
 			return placeRepository.findByExternalPlaceId(externalPlaceId)
 					.orElseThrow(() -> new BusinessException(ErrorCode.COMMON001));
@@ -359,21 +532,43 @@ public class FeedService {
 				.latitude(request.getLatitude())
 				.longitude(request.getLongitude())
 				.address(request.getAddress())
+				.region(region)
 				.build());
 	}
 
+	private String extractRegion(String address) {
+		if (address == null || address.isBlank()) {
+			return null;
+		}
+		String[] tokens = address.split(" ");
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < tokens.length; i++) {
+			String token = tokens[i];
+			sb.append(token);
+			if (token.endsWith("구") || token.endsWith("군")) {
+				break;
+			}
+			if (token.endsWith("특별자치시")) {
+				break;
+			}
+			if (token.endsWith("도")) {
+				sb.append(" ");
+				continue;
+			}
+			if (token.endsWith("시")
+					&& !token.endsWith("특별시")
+					&& !token.endsWith("광역시")
+					&& !token.endsWith("자치시")) {
+				boolean nextIsGu = i + 1 < tokens.length && tokens[i + 1].endsWith("구");
+				if (!nextIsGu) break;
+			}
+			sb.append(" ");
+		}
+		return sb.toString().trim();
+	}
+
 	private List<TeamMember> resolveTaggedMembers(Long teamId, List<Long> taggedTeamMemberIds) {
-		if (taggedTeamMemberIds == null || taggedTeamMemberIds.isEmpty()) {
-			return List.of();
-		}
-		List<Long> distinctIds = taggedTeamMemberIds.stream()
-				.filter(Objects::nonNull)
-				.collect(Collectors.toCollection(LinkedHashSet::new))
-				.stream()
-				.toList();
-		if (distinctIds.size() > MAX_TAG_COUNT) {
-			throw new BusinessException(ErrorCode.FEED009);
-		}
+		List<Long> distinctIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
 		if (distinctIds.isEmpty()) {
 			return List.of();
 		}
@@ -390,6 +585,70 @@ public class FeedService {
 				.toList();
 	}
 
+	private List<TeamMember> resolveTaggedMembersIncludingAuthor(
+			Long teamId,
+			TeamMember author,
+			List<Long> taggedTeamMemberIds
+	) {
+		List<Long> distinctIds = normalizeTaggedTeamMemberIds(taggedTeamMemberIds);
+		List<Long> finalIds = new ArrayList<>();
+		finalIds.add(author.getId());
+		distinctIds.stream()
+				.filter(id -> !id.equals(author.getId()))
+				.forEach(finalIds::add);
+		if (finalIds.size() > MAX_TAG_COUNT) {
+			throw new BusinessException(ErrorCode.FEED009);
+		}
+
+		List<Long> idsToResolve = finalIds.stream()
+				.filter(id -> !id.equals(author.getId()))
+				.toList();
+		List<TeamMember> resolvedMembers = idsToResolve.isEmpty()
+				? List.of()
+				: resolveTaggedMembers(teamId, idsToResolve);
+		Map<Long, TeamMember> memberById = resolvedMembers.stream()
+				.collect(Collectors.toMap(TeamMember::getId, Function.identity()));
+		memberById.put(author.getId(), author);
+
+		return finalIds.stream()
+				.map(memberById::get)
+				.toList();
+	}
+
+	private void ensureAuthorTagged(Feed feed, TeamMember author) {
+		boolean authorTagged = feed.getTags().stream()
+				.anyMatch(tag -> tag.getTeamMember().getId().equals(author.getId()));
+		if (!authorTagged) {
+			feed.addTag(FeedTag.builder().teamMember(author).build());
+		}
+	}
+
+	private List<Long> normalizeTaggedTeamMemberIds(List<Long> taggedTeamMemberIds) {
+		if (taggedTeamMemberIds == null || taggedTeamMemberIds.isEmpty()) {
+			return List.of();
+		}
+		List<Long> distinctIds = taggedTeamMemberIds.stream()
+				.filter(Objects::nonNull)
+				.collect(Collectors.toCollection(LinkedHashSet::new))
+				.stream()
+				.toList();
+		if (distinctIds.size() > MAX_TAG_COUNT) {
+			throw new BusinessException(ErrorCode.FEED009);
+		}
+		return distinctIds;
+	}
+
+	private void validateTaggedTeamMembers(Long teamId, List<Long> taggedTeamMemberIds) {
+		if (taggedTeamMemberIds.isEmpty()) {
+			return;
+		}
+		List<TeamMember> members = teamMemberRepository.findActiveByTeamIdAndIds(
+				teamId, taggedTeamMemberIds, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		if (members.size() != taggedTeamMemberIds.size()) {
+			throw new BusinessException(ErrorCode.FEED008);
+		}
+	}
+
 	private FeedResponseDTO.FeedListItemDTO toListItem(
 			Feed feed,
 			long commentCount,
@@ -401,9 +660,15 @@ public class FeedService {
 				.type(feed.getType())
 				.content(feed.getContent())
 				.thumbnailImageUrl(thumbnailImageUrl(feed))
+				.heroPreviewUrl(heroPreviewUrl(feed))
 				.imageCount(feed.getImages().size())
 				.author(toAuthor(feed.getTeamMember()))
+				.taggedMembers(feed.getTags().stream()
+						.map(FeedTag::getTeamMember)
+						.map(this::toTaggedMember)
+						.toList())
 				.place(toPlace(feed.getPlace(), false))
+				.question(toQuestion(feed))
 				.commentCount(commentCount)
 				.reactionSummary(reactionSummary)
 				.myReaction(myReaction)
@@ -426,11 +691,14 @@ public class FeedService {
 				.images(sortedImages(feed).stream()
 						.map(image -> FeedResponseDTO.ImageDTO.builder()
 								.feedImageId(image.getId())
-								.imageUrl(image.getImgUrl())
+								.mediaPublicId(image.getMedia() == null ? null : image.getMedia().getPublicId())
+								.imageUrl(imageUrlResolver.resolve(image.getImgUrl(), ImagePreset.FEED_DETAIL))
+								.heroPreviewUrl(imageUrlResolver.resolve(image.getImgUrl(), ImagePreset.FEED_HERO_PREVIEW))
 								.orderIndex(image.getOrderIndex())
 								.build())
 						.toList())
 				.place(toPlace(feed.getPlace(), true))
+				.question(toQuestion(feed))
 				.taggedMembers(feed.getTags().stream()
 						.map(FeedTag::getTeamMember)
 						.map(this::toTaggedMember)
@@ -452,6 +720,7 @@ public class FeedService {
 				.thumbnailImageUrl(thumbnailImageUrl(feed))
 				.imageCount(feed.getImages().size())
 				.place(toPlace(feed.getPlace(), true))
+				.question(toQuestion(feed))
 				.taggedMembers(feed.getTags().stream()
 						.map(FeedTag::getTeamMember)
 						.map(this::toTaggedMember)
@@ -465,7 +734,7 @@ public class FeedService {
 		return FeedResponseDTO.AuthorDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(teamMember.getProfileImgUrl())
+				.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.isAnonymous(false)
 				.build();
 	}
@@ -474,7 +743,7 @@ public class FeedService {
 		return FeedResponseDTO.TaggedMemberDTO.builder()
 				.teamMemberId(teamMember.getId())
 				.nickname(teamMember.getNickname())
-				.profileImageUrl(teamMember.getProfileImgUrl())
+				.profileImageUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
 				.build();
 	}
 
@@ -491,11 +760,46 @@ public class FeedService {
 				.build();
 	}
 
+	private FeedResponseDTO.QuestionDTO toQuestion(Feed feed) {
+		if (!feed.hasQuestion()) {
+			return null;
+		}
+		return FeedResponseDTO.QuestionDTO.builder()
+				.questionId(feed.getQuestion().getId())
+				.content(feed.getQuestion().getContent())
+				.answerDate(feed.getQuestionAnswerDate())
+				.build();
+	}
+
 	private String thumbnailImageUrl(Feed feed) {
+		return firstImageUrl(feed, ImagePreset.FEED_THUMB);
+	}
+
+	private String heroPreviewUrl(Feed feed) {
+		return firstImageUrl(feed, ImagePreset.FEED_HERO_PREVIEW);
+	}
+
+	private String firstImageUrl(Feed feed, ImagePreset preset) {
 		return sortedImages(feed).stream()
 				.findFirst()
 				.map(FeedImage::getImgUrl)
+				.map(url -> imageUrlResolver.resolve(url, preset))
 				.orElse(null);
+	}
+
+	private long countFeeds(
+			Long teamId,
+			String placeId,
+			String region,
+			FeedTypeFilter feedType,
+			List<Long> taggedTeamMemberIds
+	) {
+		String feedTypeName = feedType.queryValue();
+		if (taggedTeamMemberIds.isEmpty()) {
+			return feedRepository.countActiveFeeds(teamId, placeId, region, feedTypeName);
+		}
+		return feedRepository.countActiveFeedsByTaggedTeamMemberIds(
+				teamId, placeId, region, feedTypeName, taggedTeamMemberIds, taggedTeamMemberIds.size());
 	}
 
 	private List<FeedImage> sortedImages(Feed feed) {
@@ -512,19 +816,67 @@ public class FeedService {
 				.collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
 	}
 
-	private List<Feed> findFeedPage(Long teamId, String placeId, Cursor cursor, int pageSize) {
+	private List<Feed> findFeedPage(
+			Long teamId,
+			String placeId,
+			String region,
+			FeedTypeFilter feedType,
+			List<Long> taggedTeamMemberIds,
+			Cursor cursor,
+			int pageSize
+	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
-		if (cursor.createdAt() == null) {
-			if (placeId == null) {
-				return feedRepository.findActiveFirstPage(teamId, pageRequest);
+		String feedTypeName = feedType.queryValue();
+  
+		if (!taggedTeamMemberIds.isEmpty()) {
+			if (cursor.createdAt() == null) {
+				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
+						teamId,
+						placeId,
+						region,
+						feedTypeName,
+						taggedTeamMemberIds,
+						(long) taggedTeamMemberIds.size(),
+						pageRequest
+				);
 			}
-			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, pageRequest);
+			return feedRepository.findActiveCursorPageByTaggedTeamMemberIds(
+					teamId, placeId, region, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
+					cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
-		if (placeId == null) {
-			return feedRepository.findActiveCursorPage(teamId, cursor.createdAt(), cursor.feedId(), pageRequest);
+
+    if (placeId != null) {
+        if (cursor.createdAt() == null) {
+            return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
+        }
+        return feedRepository.findActiveCursorPageByPlaceId(
+                teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+    }
+
+    if (region != null) {
+        if (cursor.createdAt() == null) {
+            return feedRepository.findActiveFirstPageByRegion(teamId, region, feedTypeName, pageRequest);
+        }
+        return feedRepository.findActiveCursorPageByRegion(
+                teamId, region, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+    }
+
+    if (cursor.createdAt() == null) {
+        return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
+    }
+    return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	}
+
+	private FeedTypeFilter parseFeedType(String type) {
+		String normalized = blankToNull(type);
+		if (normalized == null || "ALL".equalsIgnoreCase(normalized)) {
+			return FeedTypeFilter.ALL;
 		}
-		return feedRepository.findActiveCursorPageByPlaceId(
-				teamId, placeId, cursor.createdAt(), cursor.feedId(), pageRequest);
+		try {
+			return FeedTypeFilter.valueOf(normalized.toUpperCase());
+		} catch (RuntimeException e) {
+			throw new BusinessException(ErrorCode.FEED001, e);
+		}
 	}
 
 	private FeedResponseDTO.FeedReactionResponseDTO reactionResponse(Long feedId, FeedReactionType myReaction) {
@@ -631,5 +983,15 @@ public class FeedService {
 	}
 
 	private record Cursor(LocalDateTime createdAt, Long feedId) {
+	}
+
+	private enum FeedTypeFilter {
+		ALL,
+		GENERAL,
+		DAILY_QUESTION;
+
+		private String queryValue() {
+			return this == ALL ? null : name();
+		}
 	}
 }

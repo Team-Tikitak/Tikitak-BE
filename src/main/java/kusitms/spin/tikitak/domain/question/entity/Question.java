@@ -32,6 +32,33 @@ public class Question {
 
 	private LocalDate date;
 
+	@Column(name = "question_order")
+	private Integer sequence;
+
+	@Column(nullable = false)
+	private boolean active;
+
+	private LocalDate effectiveFrom;
+
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
+
+	@Column(nullable = false)
+	private LocalDateTime updatedAt;
+
+	@jakarta.persistence.PrePersist
+	protected void onCreate() {
+		LocalDateTime now = LocalDateTime.now();
+		if (createdAt == null) {
+			createdAt = now;
+		}
+		if (updatedAt == null) {
+			updatedAt = now;
+		}
+	}
+
+	@jakarta.persistence.PreUpdate
+	protected void onUpdate() {
+		updatedAt = LocalDateTime.now();
+	}
 }

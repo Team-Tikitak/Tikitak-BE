@@ -19,6 +19,10 @@ r2:
   bucket-name: test-bucket
   endpoint: https://example.com
 
+image:
+  optimization:
+    enabled: false
+
 kakao:
   map:
     rest-api-key: test-kakao-map-key

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kusitms.spin.tikitak.domain.auth.RefreshToken;
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
@@ -43,7 +44,7 @@ public class TokenService {
 		AuthProperties.Jwt jwt = authProperties.jwt();
 		String accessToken = createToken(memberId, "access", jwt.accessTokenExpiresIn());
 		String refreshToken = createToken(memberId, "refresh", jwt.refreshTokenExpiresIn());
-		Member member = memberRepository.findById(memberId)
+		Member member = memberRepository.findByIdAndStatus(memberId, MemberStatus.ACTIVE)
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH007));
 		refreshTokenRepository.save(RefreshToken.issue(
 				member,
@@ -122,7 +123,10 @@ public class TokenService {
 				throw new BusinessException(ErrorCode.AUTH007);
 			}
 
-			return Long.valueOf(String.valueOf(payload.get("sub")));
+			Long memberId = Long.valueOf(String.valueOf(payload.get("sub")));
+			memberRepository.findByIdAndStatus(memberId, MemberStatus.ACTIVE)
+					.orElseThrow(() -> new BusinessException(ErrorCode.AUTH007));
+			return memberId;
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {
@@ -161,7 +165,10 @@ public class TokenService {
 				throw new BusinessException(ErrorCode.AUTH009);
 			}
 
-			return Long.valueOf(String.valueOf(payload.get("sub")));
+			Long memberId = Long.valueOf(String.valueOf(payload.get("sub")));
+			memberRepository.findByIdAndStatus(memberId, MemberStatus.ACTIVE)
+					.orElseThrow(() -> new BusinessException(ErrorCode.AUTH009));
+			return memberId;
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {

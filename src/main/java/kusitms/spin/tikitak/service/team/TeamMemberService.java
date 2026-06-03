@@ -1,21 +1,29 @@
 package kusitms.spin.tikitak.service.team;
 
+import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamMemberResponseDTO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -23,6 +31,8 @@ public class TeamMemberService {
 
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final MediaRepository mediaRepository;
+    private final DefaultProfileImageResolver defaultProfileImageResolver;
 
     public TeamMemberResponseDTO.TeamMemberListResponseDTO listTeamMembers(Long memberId, Long teamId) {
         // TeamMember까지 같이 조회
@@ -42,7 +52,7 @@ public class TeamMemberService {
                         .teamMemberId(tm.getId())
                         .nickname(tm.getNickname())
                         .role(tm.getRole())
-                        .profileImgUrl(tm.getProfileImgUrl())
+                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
                         .build())
                 .toList();
 
@@ -62,11 +72,27 @@ public class TeamMemberService {
             throw new BusinessException(ErrorCode.TEAM003);
         }
 
-        teamMember.updateProfile(request.getNickname(), request.getProfileImgUrl());
+        log.info("[updateMyProfile] memberId={}, teamId={}, profileImagePublicId={}",
+                memberId, teamId, request.getMediaPublicId());
+
+        Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
+
+        log.info("[updateMyProfile] newProfileMedia={}, url={}",
+                newProfileMedia != null ? newProfileMedia.getId() : null,
+                newProfileMedia != null ? newProfileMedia.getUrl() : null);
+
+        if (newProfileMedia != null && teamMember.getProfileMedia() != null) {
+            teamMember.getProfileMedia().markDeleted();
+        }
+        teamMember.updateProfile(
+                request.getNickname(),
+                newProfileMedia != null ? newProfileMedia.getUrl() : null,
+                newProfileMedia
+        );
 
         return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
                 .nickname(teamMember.getNickname())
-                .profileImgUrl(teamMember.getProfileImgUrl())
+                .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
                 .build();
     }
 
@@ -119,5 +145,28 @@ public class TeamMemberService {
         }
 
         target.kickTeamMember();
+    }
+
+    private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
+        if (mediaPublicId == null) return null;
+        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+                .orElse(null);
+        if (media == null) {
+            log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
+            return null;
+        }
+        log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
+                media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
+        log.info("[resolveProfileMedia] filter check. memberIdMatch={}, purposeMatch={}, statusMatch={}",
+                media.getMemberId().equals(memberId),
+                media.getPurpose() == MediaPurpose.PROFILE_IMAGE,
+                media.getStatus() == MediaStatus.UPLOADED);
+        if (!media.getMemberId().equals(memberId)
+                || media.getPurpose() != MediaPurpose.PROFILE_IMAGE
+                || media.getStatus() != MediaStatus.UPLOADED) {
+            return null;
+        }
+        media.markUsed();
+        return media;
     }
 }

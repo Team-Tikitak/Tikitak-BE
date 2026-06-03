@@ -31,7 +31,10 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}")
-    @Operation(summary = "팀 상세 조회 API")
+    @Operation(
+            summary = "팀 상세 조회 API",
+            description = "팀 상세 조회시 모든 정보를 이 API에서 가져올 수 있습니다."
+    )
     public CommonResponse<TeamResponseDTO.TeamDetailResponseDTO> viewTeam(
             @Parameter(hidden = true) @CurrentMemberId Long memberId,
             @Valid @PathVariable Long teamId

@@ -4,9 +4,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.global.dto.CommonResponse;
 import kusitms.spin.tikitak.service.auth.AuthService;
+import kusitms.spin.tikitak.service.auth.dto.LoginCodeExchangeRequest;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.LogoutResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
@@ -34,12 +36,16 @@ import java.time.Duration;
 @Tag(name = "Auth", description = "OAuth 로그인, 토큰 재발급, 로그아웃 API")
 public class AuthController {
 
+	private static final String MOBILE_REDIRECT_URI = "tikitak://oauth/callback";
+
 	private final AuthService authService;
 	private final AuthProperties authProperties;
 
 	@Operation(
 			summary = "OAuth 로그인 시작",
-			description = "지원하는 OAuth Provider 인증 페이지로 리다이렉트합니다. Swagger에서 테스트할 때는 redirect=false로 호출하면 인증 URL을 JSON으로 확인할 수 있습니다."
+			description = "지원하는 OAuth Provider 인증 페이지로 리다이렉트합니다. "
+					+ "모바일 앱에서 호출할 때는 mode=app을 추가해주세요. "
+					+ "Swagger에서 테스트할 때는 redirect=false로 호출하면 인증 URL을 JSON으로 확인할 수 있습니다."
 	)
 	@GetMapping("/api/v1/auth/oauth/{provider}/start")
 	public ResponseEntity<?> startOAuthLogin(
@@ -49,24 +55,36 @@ public class AuthController {
 					description = "true면 302 Redirect, false면 Swagger 테스트용 JSON 응답",
 					schema = @Schema(defaultValue = "false")
 			)
-			@RequestParam(required = false) Boolean redirect
+			@RequestParam(required = false) Boolean redirect,
+			@Parameter(description = "app이면 모바일 딥링크 흐름으로 처리")
+			@RequestParam(required = false) String mode
 	) {
 		OAuthAuthorizeUrlResponse response = authService.getAuthorizeUrl(provider);
+		boolean isApp = "app".equals(mode);
+
 		if (Boolean.FALSE.equals(redirect)) {
-			return ResponseEntity.ok()
-					.header(HttpHeaders.SET_COOKIE, oauthStateCookie(response.state()).toString())
-					.body(CommonResponse.success(response));
+			ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+					.header(HttpHeaders.SET_COOKIE, oauthStateCookie(response.state()).toString());
+			if (isApp) {
+				builder.header(HttpHeaders.SET_COOKIE, oauthModeCookie().toString());
+			}
+			return builder.body(CommonResponse.success(response));
 		}
 
-		return ResponseEntity.status(HttpStatus.FOUND)
+		ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.FOUND)
 				.header(HttpHeaders.LOCATION, response.authorizeUrl().toString())
-				.header(HttpHeaders.SET_COOKIE, oauthStateCookie(response.state()).toString())
-				.build();
+				.header(HttpHeaders.SET_COOKIE, oauthStateCookie(response.state()).toString());
+		if (isApp) {
+			builder.header(HttpHeaders.SET_COOKIE, oauthModeCookie().toString());
+		}
+		return builder.build();
 	}
 
 	@Operation(
 			summary = "OAuth 콜백 처리 및 로그인 완료",
-			description = "Provider에서 전달한 인가 코드를 검증하고 로그인 또는 회원가입을 완료한 뒤 프론트 웹앱으로 리다이렉트합니다."
+			description = "Provider에서 전달한 인가 코드를 검증하고 로그인 또는 회원가입을 완료합니다. "
+					+ "웹 흐름: 프론트 웹앱으로 리다이렉트합니다. "
+					+ "앱 흐름(oauthMode=app 쿠키): tikitak://oauth/callback?loginCode={code} 딥링크로 리다이렉트합니다."
 	)
 	@GetMapping("/api/v1/auth/oauth/{provider}/callback")
 	public ResponseEntity<Void> handleOAuthCallback(
@@ -76,9 +94,23 @@ public class AuthController {
 			@RequestParam(required = false) String code,
 			@Parameter(description = "OAuth 요청 검증용 state")
 			@RequestParam(required = false) String state,
-			@CookieValue(name = "oauthState", required = false) String savedState
+			@CookieValue(name = "oauthState", required = false) String savedState,
+			@CookieValue(name = "oauthMode", required = false) String oauthMode
 	) {
-		LoginResponse loginResponse = authService.loginWithOAuth(provider, code, state, savedState, null);
+		if ("app".equals(oauthMode)) {
+			String loginCode = authService.issueAppLoginCode(provider, code, state, savedState);
+			URI redirectUri = UriComponentsBuilder.fromUriString(MOBILE_REDIRECT_URI)
+					.queryParam("loginCode", loginCode)
+					.build()
+					.toUri();
+			return ResponseEntity.status(HttpStatus.FOUND)
+					.header(HttpHeaders.LOCATION, redirectUri.toString())
+					.header(HttpHeaders.SET_COOKIE, expireOAuthStateCookie().toString())
+					.header(HttpHeaders.SET_COOKIE, expireOAuthModeCookie().toString())
+					.build();
+		}
+
+		LoginResponse loginResponse = authService.loginWithOAuth(provider, code, state, savedState);
 		URI redirectUri = UriComponentsBuilder.fromUriString(authProperties.oauth().frontendRedirectUri())
 				.queryParam("accessToken", loginResponse.accessToken())
 				.queryParam("isNewMember", loginResponse.isNewMember())
@@ -93,6 +125,21 @@ public class AuthController {
 				.header(HttpHeaders.SET_COOKIE, refreshTokenCookie(loginResponse.refreshToken()).toString())
 				.header(HttpHeaders.SET_COOKIE, expireOAuthStateCookie().toString())
 				.build();
+	}
+
+	@Operation(
+			summary = "loginCode 교환 (모바일 전용)",
+			description = "딥링크로 수신한 1회용 loginCode를 access token + refresh token으로 교환합니다. "
+					+ "loginCode는 발급 후 5분간 유효하며 1회만 사용 가능합니다."
+	)
+	@PostMapping("/api/v1/auth/oauth/login-code/exchange")
+	public ResponseEntity<CommonResponse<LoginResponse>> exchangeLoginCode(
+			@Valid @RequestBody LoginCodeExchangeRequest request
+	) {
+		LoginResponse response = authService.exchangeLoginCode(request.loginCode());
+		return ResponseEntity.ok()
+				.header(HttpHeaders.SET_COOKIE, refreshTokenCookie(response.refreshToken()).toString())
+				.body(CommonResponse.success(response));
 	}
 
 	@Operation(
@@ -126,8 +173,22 @@ public class AuthController {
 			@RequestParam(required = false) String state,
 			@Parameter(description = "Apple 사용자 식별 정보를 포함한 JWT")
 			@RequestParam(name = "id_token", required = false) String idToken,
-			@CookieValue(name = "oauthState", required = false) String savedState
+			@CookieValue(name = "oauthState", required = false) String savedState,
+			@CookieValue(name = "oauthMode", required = false) String oauthMode
 	) {
+		if ("app".equals(oauthMode)) {
+			String loginCode = authService.issueAppLoginCode("apple", code, state, savedState, idToken);
+			URI redirectUri = UriComponentsBuilder.fromUriString(MOBILE_REDIRECT_URI)
+					.queryParam("loginCode", loginCode)
+					.build()
+					.toUri();
+			return ResponseEntity.status(HttpStatus.FOUND)
+					.header(HttpHeaders.LOCATION, redirectUri.toString())
+					.header(HttpHeaders.SET_COOKIE, expireOAuthStateCookie().toString())
+					.header(HttpHeaders.SET_COOKIE, expireOAuthModeCookie().toString())
+					.build();
+		}
+
 		LoginResponse loginResponse = authService.loginWithOAuth("apple", code, state, savedState, idToken);
 		URI redirectUri = UriComponentsBuilder.fromUriString(authProperties.oauth().frontendRedirectUri())
 				.queryParam("accessToken", loginResponse.accessToken())
@@ -169,13 +230,13 @@ public class AuthController {
 				.build();
 	}
 
-	private ResponseCookie refreshTokenCookie(String refreshToken) {
-		return ResponseCookie.from("refreshToken", refreshToken)
+	private ResponseCookie oauthModeCookie() {
+		return ResponseCookie.from("oauthMode", "app")
 				.httpOnly(true)
-				.secure(true)
-				.path("/")
-				.sameSite("None")
-				.maxAge(Duration.ofSeconds(authProperties.jwt().refreshTokenExpiresIn()))
+				.secure(authProperties.jwt().cookieSecure())
+				.path("/api/v1/auth/oauth")
+				.sameSite("Lax")
+				.maxAge(Duration.ofMinutes(5))
 				.build();
 	}
 
@@ -191,6 +252,26 @@ public class AuthController {
 
 	private String oauthStateCookieSameSite() {
 		return authProperties.jwt().cookieSecure() ? "None" : "Lax";
+	}
+
+	private ResponseCookie expireOAuthModeCookie() {
+		return ResponseCookie.from("oauthMode", "")
+				.httpOnly(true)
+				.secure(authProperties.jwt().cookieSecure())
+				.path("/api/v1/auth/oauth")
+				.sameSite("Lax")
+				.maxAge(Duration.ZERO)
+				.build();
+	}
+
+	private ResponseCookie refreshTokenCookie(String refreshToken) {
+		return ResponseCookie.from("refreshToken", refreshToken)
+				.httpOnly(true)
+				.secure(true)
+				.path("/")
+				.sameSite("None")
+				.maxAge(Duration.ofSeconds(authProperties.jwt().refreshTokenExpiresIn()))
+				.build();
 	}
 
 	private ResponseCookie expireRefreshTokenCookie() {

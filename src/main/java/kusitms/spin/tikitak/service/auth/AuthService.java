@@ -1,9 +1,12 @@
 package kusitms.spin.tikitak.service.auth;
 
+import kusitms.spin.tikitak.domain.auth.LoginCode;
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.auth.LoginCodeRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
@@ -18,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Locale;
 
 @Service
@@ -32,6 +36,7 @@ public class AuthService {
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
 	private final ActiveTeamService activeTeamService;
+	private final LoginCodeRepository loginCodeRepository;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String provider) {
@@ -73,43 +78,14 @@ public class AuthService {
 
 	@Transactional
 	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState, String idToken) {
-		SocialProvider socialProvider = parseProvider(provider);
-		validateCallbackRequest(code, state);
-
 		try {
-			validateOAuthState(socialProvider, state, savedState);
-			OAuthUserInfo userInfo = switch (socialProvider) {
-				case GOOGLE -> googleOAuthService.getUserInfo(code);
-				case KAKAO -> kakaoOAuthService.getUserInfo(code);
-				case APPLE -> {
-					if (idToken == null || idToken.isBlank()) {
-						throw new BusinessException(ErrorCode.AUTH103);
-					}
-					yield appleOAuthService.getUserInfo(code, idToken);
-				}
-			};
-			boolean[] created = {false};
-			Member member = memberRepository
-					.findBySocialProviderAndProviderId(userInfo.provider(), userInfo.providerId())
-					.orElse(null);
-
-			if (member == null) {
-				created[0] = true;
-				member = memberRepository.save(Member.createSocialMember(
-						userInfo.email(),
-						userInfo.name(),
-						defaultNickname(userInfo),
-						userInfo.profileImageUrl(),
-						userInfo.provider(),
-						userInfo.providerId()
-				));
-			}
-
+			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState, idToken);
+			Member member = result.member();
 			TokenResponse token = tokenService.issueToken(member.getId());
 			return new LoginResponse(
 					token.accessToken(),
 					token.refreshToken(),
-					created[0],
+					result.newMember(),
 					member.isTermsAgreed() && member.isPrivacyAgreed(),
 					activeTeamService.resolveActiveTeamId(member)
 			);
@@ -121,6 +97,98 @@ public class AuthService {
 		} catch (Exception e) {
 			throw new BusinessException(ErrorCode.AUTH105);
 		}
+	}
+
+	@Transactional
+	public String issueAppLoginCode(String provider, String code, String state, String savedState) {
+		return issueAppLoginCode(provider, code, state, savedState, null);
+	}
+
+	@Transactional
+	public String issueAppLoginCode(String provider, String code, String state, String savedState, String idToken) {
+		try {
+			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState, idToken);
+			Member member = result.member();
+			String loginCode = generateLoginCode();
+			loginCodeRepository.save(LoginCode.issue(
+					loginCode,
+					member.getId(),
+					result.newMember(),
+					member.isTermsAgreed() && member.isPrivacyAgreed(),
+					activeTeamService.resolveActiveTeamId(member)
+			));
+			return loginCode;
+		} catch (OAuthAuthenticationException e) {
+			log.warn("OAuth authentication failed. provider={}, reason={}", provider, e.getMessage());
+			throw new BusinessException(ErrorCode.AUTH104);
+		} catch (BusinessException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new BusinessException(ErrorCode.AUTH105);
+		}
+	}
+
+	@Transactional
+	public LoginResponse exchangeLoginCode(String code) {
+		LoginCode loginCode = loginCodeRepository.findByCodeForUpdate(code)
+				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH106));
+		if (loginCode.isExpired()) {
+			throw new BusinessException(ErrorCode.AUTH107);
+		}
+		if (loginCode.isUsed()) {
+			throw new BusinessException(ErrorCode.AUTH108);
+		}
+		loginCode.markUsed();
+		TokenResponse token = tokenService.issueToken(loginCode.getMemberId());
+		return new LoginResponse(
+				token.accessToken(),
+				token.refreshToken(),
+				loginCode.isNewMember(),
+				loginCode.isAgreedRequiredTerms(),
+				loginCode.getActiveTeamId()
+		);
+	}
+
+	private OAuthLoginResult processOAuthLogin(String provider, String code, String state, String savedState, String idToken) {
+		SocialProvider socialProvider = parseProvider(provider);
+		validateCallbackRequest(code, state);
+		validateOAuthState(socialProvider, state, savedState);
+
+		OAuthUserInfo userInfo = switch (socialProvider) {
+			case GOOGLE -> googleOAuthService.getUserInfo(code);
+			case KAKAO -> kakaoOAuthService.getUserInfo(code);
+			case APPLE -> {
+				if (idToken == null || idToken.isBlank()) {
+					throw new BusinessException(ErrorCode.AUTH103);
+				}
+				yield appleOAuthService.getUserInfo(code, idToken);
+			}
+		};
+
+		boolean[] created = {false};
+		Member member = memberRepository
+				.findBySocialProviderAndProviderIdAndStatus(
+						userInfo.provider(),
+						userInfo.providerId(),
+						MemberStatus.ACTIVE
+				)
+				.map(existingMember -> {
+					existingMember.updateSocialProfile(userInfo.email(), userInfo.name(), userInfo.profileImageUrl());
+					return existingMember;
+				})
+				.orElseGet(() -> {
+					created[0] = true;
+					return memberRepository.save(Member.createSocialMember(
+							userInfo.email(),
+							userInfo.name(),
+							defaultNickname(userInfo),
+							userInfo.profileImageUrl(),
+							userInfo.provider(),
+							userInfo.providerId()
+					));
+				});
+
+		return new OAuthLoginResult(member, created[0]);
 	}
 
 	private SocialProvider parseProvider(String provider) {
@@ -173,5 +241,14 @@ public class AuthService {
 		byte[] bytes = new byte[24];
 		secureRandom.nextBytes(bytes);
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
+	private String generateLoginCode() {
+		byte[] bytes = new byte[32];
+		secureRandom.nextBytes(bytes);
+		return HexFormat.of().formatHex(bytes);
+	}
+
+	private record OAuthLoginResult(Member member, boolean newMember) {
 	}
 }

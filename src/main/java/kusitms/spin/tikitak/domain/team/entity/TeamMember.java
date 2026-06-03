@@ -11,7 +11,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -52,6 +54,10 @@ public class TeamMember {
 	@Column(columnDefinition = "text")
 	private String profileImgUrl;
 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "profile_media_id")
+	private Media profileMedia;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 50)
 	private TeamMemberRole role;
@@ -64,15 +70,26 @@ public class TeamMember {
 	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
+	@Column(nullable = false)
+	private LocalDateTime lastActivityCheckedAt;
+
 	private LocalDateTime deletedAt;
 
 	void setTeam(Team team) {
 		this.team = team;
 	}
 
-	public void updateProfile(String nickname, String profileImgUrl) {
+	public void updateProfile(String nickname, String profileImgUrl, Media profileMedia) {
 		if (nickname != null) this.nickname = nickname;
-		if (profileImgUrl != null) this.profileImgUrl = profileImgUrl;
+		if (profileImgUrl != null) {
+			this.profileImgUrl = profileImgUrl;
+			this.profileMedia = profileMedia;
+		}
+	}
+
+	public void clearProfileImage() {
+		this.profileImgUrl = null;
+		this.profileMedia = null;
 	}
 
 	public void leaveTeam() {
@@ -88,5 +105,17 @@ public class TeamMember {
 	public void rejoin() {
 		this.status = TeamMemberStatus.ACTIVE;
 		this.deletedAt = null;
+		this.lastActivityCheckedAt = LocalDateTime.now();
+	}
+
+	public void checkActivity() {
+		this.lastActivityCheckedAt = LocalDateTime.now();
+	}
+
+	@PrePersist
+	protected void onCreate() {
+		if (lastActivityCheckedAt == null) {
+			lastActivityCheckedAt = LocalDateTime.now();
+		}
 	}
 }

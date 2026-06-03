@@ -16,6 +16,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "feed")
@@ -49,6 +51,11 @@ public class Feed {
 	private String content;
 
 	private LocalDate meetingDate;
+
+	private LocalDate questionAnswerDate;
+
+	@Column(length = 100, unique = true)
+	private String dailyAnswerActiveKey;
 
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
@@ -98,6 +105,17 @@ public class Feed {
 		this.updatedAt = LocalDateTime.now();
 	}
 
+	public void updateDailyAnswerContent(String content) {
+		this.content = content;
+		this.updatedAt = LocalDateTime.now();
+	}
+
+	public void setDailyAnswer(Question question, LocalDate questionAnswerDate, String dailyAnswerActiveKey) {
+		this.question = question;
+		this.questionAnswerDate = questionAnswerDate;
+		this.dailyAnswerActiveKey = dailyAnswerActiveKey;
+	}
+
 	public void replaceImages(List<FeedImage> images) {
 		this.images.clear();
 		images.forEach(this::addImage);
@@ -110,9 +128,26 @@ public class Feed {
 		this.updatedAt = LocalDateTime.now();
 	}
 
+	public void syncTags(List<TeamMember> teamMembers) {
+		Set<Long> nextTeamMemberIds = teamMembers.stream()
+				.map(TeamMember::getId)
+				.collect(Collectors.toSet());
+		this.tags.removeIf(tag -> !nextTeamMemberIds.contains(tag.getTeamMember().getId()));
+
+		Set<Long> currentTeamMemberIds = this.tags.stream()
+				.map(tag -> tag.getTeamMember().getId())
+				.collect(Collectors.toSet());
+		teamMembers.stream()
+				.filter(teamMember -> !currentTeamMemberIds.contains(teamMember.getId()))
+				.map(teamMember -> FeedTag.builder().teamMember(teamMember).build())
+				.forEach(this::addTag);
+		this.updatedAt = LocalDateTime.now();
+	}
+
 	public void delete() {
 		LocalDateTime now = LocalDateTime.now();
 		this.deletedAt = now;
+		this.dailyAnswerActiveKey = null;
 		this.updatedAt = now;
 	}
 
