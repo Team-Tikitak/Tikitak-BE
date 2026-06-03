@@ -162,6 +162,51 @@ public class AuthController {
 	}
 
 	@Operation(
+			summary = "Apple OAuth 콜백 처리 및 로그인 완료",
+			description = "Apple에서 전달한 인가 코드와 id_token을 검증하고 로그인 또는 회원가입을 완료한 뒤 프론트 웹앱으로 리다이렉트합니다."
+	)
+	@PostMapping("/api/v1/auth/oauth/apple/callback")
+	public ResponseEntity<Void> handleAppleOAuthCallback(
+			@Parameter(description = "Apple에서 전달한 인가 코드")
+			@RequestParam(required = false) String code,
+			@Parameter(description = "OAuth 요청 검증용 state")
+			@RequestParam(required = false) String state,
+			@Parameter(description = "Apple 사용자 식별 정보를 포함한 JWT")
+			@RequestParam(name = "id_token", required = false) String idToken,
+			@CookieValue(name = "oauthState", required = false) String savedState,
+			@CookieValue(name = "oauthMode", required = false) String oauthMode
+	) {
+		if ("app".equals(oauthMode)) {
+			String loginCode = authService.issueAppLoginCode("apple", code, state, savedState, idToken);
+			URI redirectUri = UriComponentsBuilder.fromUriString(MOBILE_REDIRECT_URI)
+					.queryParam("loginCode", loginCode)
+					.build()
+					.toUri();
+			return ResponseEntity.status(HttpStatus.FOUND)
+					.header(HttpHeaders.LOCATION, redirectUri.toString())
+					.header(HttpHeaders.SET_COOKIE, expireOAuthStateCookie().toString())
+					.header(HttpHeaders.SET_COOKIE, expireOAuthModeCookie().toString())
+					.build();
+		}
+
+		LoginResponse loginResponse = authService.loginWithOAuth("apple", code, state, savedState, idToken);
+		URI redirectUri = UriComponentsBuilder.fromUriString(authProperties.oauth().frontendRedirectUri())
+				.queryParam("accessToken", loginResponse.accessToken())
+				.queryParam("isNewMember", loginResponse.isNewMember())
+				.queryParam("hasAgreedRequiredTerms", loginResponse.hasAgreedRequiredTerms())
+				.queryParam("activeTeamId", loginResponse.activeTeamId())
+				.build()
+				.encode()
+				.toUri();
+
+		return ResponseEntity.status(HttpStatus.FOUND)
+				.header(HttpHeaders.LOCATION, redirectUri.toString())
+				.header(HttpHeaders.SET_COOKIE, refreshTokenCookie(loginResponse.refreshToken()).toString())
+				.header(HttpHeaders.SET_COOKIE, expireOAuthStateCookie().toString())
+				.build();
+	}
+
+	@Operation(
 			summary = "로그아웃",
 			description = "브라우저의 refresh token 쿠키를 만료시켜 로그아웃 처리합니다."
 	)
@@ -180,7 +225,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ofMinutes(5))
 				.build();
 	}
@@ -190,7 +235,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ofMinutes(5))
 				.build();
 	}
@@ -200,9 +245,13 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ZERO)
 				.build();
+	}
+
+	private String oauthStateCookieSameSite() {
+		return authProperties.jwt().cookieSecure() ? "None" : "Lax";
 	}
 
 	private ResponseCookie expireOAuthModeCookie() {
@@ -210,7 +259,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ZERO)
 				.build();
 	}

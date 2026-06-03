@@ -5,8 +5,10 @@ import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.auth.LoginCodeRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.service.auth.AuthService;
+import kusitms.spin.tikitak.service.auth.AppleOAuthService;
 import kusitms.spin.tikitak.service.auth.GoogleOAuthService;
 import kusitms.spin.tikitak.service.auth.KakaoOAuthService;
+import kusitms.spin.tikitak.service.auth.OAuthStateStore;
 import kusitms.spin.tikitak.service.auth.TokenService;
 import kusitms.spin.tikitak.service.me.ActiveTeamService;
 import net.jqwik.api.Arbitraries;
@@ -25,6 +27,8 @@ class AuthServicePropertyTest {
 	private final AuthService authService = new AuthService(
 			mock(GoogleOAuthService.class),
 			mock(KakaoOAuthService.class),
+			mock(AppleOAuthService.class),
+			mock(OAuthStateStore.class),
 			mock(TokenService.class),
 			mock(MemberRepository.class),
 			mock(ActiveTeamService.class),
@@ -59,12 +63,13 @@ class AuthServicePropertyTest {
 				.ofMinLength(0)
 				.ofMaxLength(20)
 				.filter(provider -> !provider.equalsIgnoreCase("kakao"))
-				.filter(provider -> !provider.equalsIgnoreCase("google"));
+				.filter(provider -> !provider.equalsIgnoreCase("google"))
+				.filter(provider -> !provider.equalsIgnoreCase("apple"));
 	}
 
 	@Provide
 	Arbitrary<String> supportedProviders() {
-		return Arbitraries.of("kakao", "KAKAO", "google", "GOOGLE");
+		return Arbitraries.of("kakao", "KAKAO", "google", "GOOGLE", "apple", "APPLE");
 	}
 
 	@Provide

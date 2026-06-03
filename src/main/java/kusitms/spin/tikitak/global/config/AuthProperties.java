@@ -11,7 +11,8 @@ public record AuthProperties(
 	public record OAuth(
 			String frontendRedirectUri,
 			Google google,
-			Kakao kakao
+			Kakao kakao,
+			Apple apple
 	) {
 	}
 
@@ -25,6 +26,15 @@ public record AuthProperties(
 	public record Kakao(
 			String clientId,
 			String clientSecret,
+			String redirectUri
+	) {
+	}
+
+	public record Apple(
+			String clientId,
+			String teamId,
+			String keyId,
+			String privateKey,
 			String redirectUri
 	) {
 	}
