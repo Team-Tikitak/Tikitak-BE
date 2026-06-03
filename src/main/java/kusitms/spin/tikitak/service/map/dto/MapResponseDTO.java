@@ -34,6 +34,11 @@ public class MapResponseDTO {
 				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_thumb"
 		)
 		private String thumbnailUrl;
+		@Schema(
+				description = "Map pin detail transition preview image URL. Applies the feed_hero_preview preset when image optimization is enabled.",
+				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_hero_preview"
+		)
+		private String heroPreviewUrl;
 		private long feedCount;
 	}
 }
