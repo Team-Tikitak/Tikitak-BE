@@ -169,6 +169,14 @@ public class TeamService {
             throw new BusinessException(ErrorCode.TEAM005);
         }
 
+        // 팀원이 남아있는지 확인
+        long activeMemberCount = team.getTeamMembers().stream()
+                .filter(tm -> tm.getStatus() == TeamMemberStatus.ACTIVE)
+                .count();
+        if (activeMemberCount > 1) {
+            throw new BusinessException(ErrorCode.TEAM010);
+        }
+
         // 팀의 status를 INACTIVE로 변경
         team.inactive();
         memberRepository.clearActiveTeamIdByTeamId(teamId);
