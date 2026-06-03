@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.global.dto.CommonResponse;
 import kusitms.spin.tikitak.service.auth.AuthService;
@@ -133,7 +134,7 @@ public class AuthController {
 	)
 	@PostMapping("/api/v1/auth/oauth/login-code/exchange")
 	public ResponseEntity<CommonResponse<LoginResponse>> exchangeLoginCode(
-			@RequestBody LoginCodeExchangeRequest request
+			@Valid @RequestBody LoginCodeExchangeRequest request
 	) {
 		LoginResponse response = authService.exchangeLoginCode(request.loginCode());
 		return ResponseEntity.ok()
