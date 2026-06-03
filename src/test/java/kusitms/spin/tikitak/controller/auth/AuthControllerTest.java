@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.controller.auth;
 
 import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.service.auth.AuthService;
+import kusitms.spin.tikitak.service.auth.dto.LoginCodeExchangeRequest;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
@@ -74,6 +75,22 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
+	@DisplayName("OAuth 시작에 mode=app이면 oauthMode 쿠키도 함께 발급한다")
+	void startOAuthLoginSetsOAuthModeCookieWhenModeIsApp() throws Exception {
+		when(authService.getAuthorizeUrl("kakao")).thenReturn(new OAuthAuthorizeUrlResponse(
+				URI.create("https://kauth.kakao.com/oauth/authorize?state=state"),
+				"state"
+		));
+
+		mockMvc.perform(get("/api/v1/auth/oauth/kakao/start")
+						.param("mode", "app"))
+				.andExpect(status().isFound())
+				.andExpect(cookie().value("oauthState", "state"))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("oauthMode=app"))));
+	}
+
+	@Test
 	@DisplayName("OAuth callback은 로그인 결과를 프론트 redirect URI query parameter로 전달한다")
 	void handleOAuthCallbackRedirectsWithLoginResult() throws Exception {
 		when(authService.loginWithOAuth("kakao", "code", "state", "state"))
@@ -107,6 +124,67 @@ class AuthControllerTest extends ApiTest {
 		assertThat(location).contains("isNewMember=false");
 		assertThat(location).contains("hasAgreedRequiredTerms=true");
 		assertThat(location).contains("activeTeamId=10");
+	}
+
+	@Test
+	@DisplayName("OAuth callback에 oauthMode=app 쿠키가 있으면 딥링크로 리다이렉트한다")
+	void handleOAuthCallbackRedirectsToDeepLinkWhenModeIsApp() throws Exception {
+		when(authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.thenReturn("testlogincode1234567890abcdef");
+
+		String location = mockMvc.perform(get("/api/v1/auth/oauth/kakao/callback")
+						.param("code", "code")
+						.param("state", "state")
+						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state"))
+						.cookie(new jakarta.servlet.http.Cookie("oauthMode", "app")))
+				.andExpect(status().isFound())
+				.andExpect(header().exists("Location"))
+				.andReturn()
+				.getResponse()
+				.getHeader("Location");
+
+		assertThat(location).startsWith("tikitak://oauth/callback");
+		assertThat(location).contains("loginCode=testlogincode1234567890abcdef");
+	}
+
+	@Test
+	@DisplayName("앱 OAuth callback 처리 후 oauthMode 쿠키를 만료한다")
+	void handleAppOAuthCallbackExpiresOAuthModeCookie() throws Exception {
+		when(authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.thenReturn("testlogincode");
+
+		mockMvc.perform(get("/api/v1/auth/oauth/kakao/callback")
+						.param("code", "code")
+						.param("state", "state")
+						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state"))
+						.cookie(new jakarta.servlet.http.Cookie("oauthMode", "app")))
+				.andExpect(status().isFound())
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("oauthMode=;"))));
+	}
+
+	@Test
+	@DisplayName("loginCode 교환은 access token과 refresh token을 반환한다")
+	void exchangeLoginCodeReturnsTokens() throws Exception {
+		when(authService.exchangeLoginCode("validlogincode"))
+				.thenReturn(new LoginResponse("access-token", "refresh-token", true, false, null));
+
+		mockMvc.perform(post("/api/v1/auth/oauth/login-code/exchange")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"loginCode": "validlogincode"}
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(cookie().value("refreshToken", "refresh-token"))
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("SameSite=None"))))
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.accessToken").value("access-token"))
+				.andExpect(jsonPath("$.data.refreshToken").value("refresh-token"))
+				.andExpect(jsonPath("$.data.isNewMember").value(true))
+				.andExpect(jsonPath("$.data.hasAgreedRequiredTerms").value(false));
+
+		verify(authService).exchangeLoginCode(eq("validlogincode"));
 	}
 
 	@Test
