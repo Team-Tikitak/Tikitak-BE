@@ -235,7 +235,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ofMinutes(5))
 				.build();
 	}
@@ -259,7 +259,7 @@ public class AuthController {
 				.httpOnly(true)
 				.secure(authProperties.jwt().cookieSecure())
 				.path("/api/v1/auth/oauth")
-				.sameSite("Lax")
+				.sameSite(oauthStateCookieSameSite())
 				.maxAge(Duration.ZERO)
 				.build();
 	}

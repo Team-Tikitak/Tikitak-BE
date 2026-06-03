@@ -155,6 +155,31 @@ class AuthControllerTest extends ApiTest {
 	}
 
 	@Test
+	@DisplayName("Apple OAuth callback redirects to deep link when oauthMode is app")
+	void handleAppleOAuthCallbackRedirectsToDeepLinkWhenModeIsApp() throws Exception {
+		when(authService.issueAppLoginCode("apple", "code", "state", "state", "id-token"))
+				.thenReturn("applelogincode1234567890abcdef");
+
+		String location = mockMvc.perform(post("/api/v1/auth/oauth/apple/callback")
+						.param("code", "code")
+						.param("state", "state")
+						.param("id_token", "id-token")
+						.cookie(new jakarta.servlet.http.Cookie("oauthState", "state"))
+						.cookie(new jakarta.servlet.http.Cookie("oauthMode", "app")))
+				.andExpect(status().isFound())
+				.andExpect(header().stringValues("Set-Cookie",
+						hasItem(containsString("oauthMode=;"))))
+				.andExpect(header().exists("Location"))
+				.andReturn()
+				.getResponse()
+				.getHeader("Location");
+
+		assertThat(location).startsWith("tikitak://oauth/callback");
+		assertThat(location).contains("loginCode=applelogincode1234567890abcdef");
+		verify(authService).issueAppLoginCode("apple", "code", "state", "state", "id-token");
+	}
+
+	@Test
 	@DisplayName("OAuth callback redirects to deep link when oauthMode is app")
 	void handleOAuthCallbackRedirectsToDeepLinkWhenModeIsApp() throws Exception {
 		when(authService.issueAppLoginCode("kakao", "code", "state", "state"))
