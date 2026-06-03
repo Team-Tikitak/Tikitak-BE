@@ -205,7 +205,7 @@ class AuthServiceTest extends UnitTest {
 				.createdAt(LocalDateTime.now())
 				.build();
 		TokenResponse token = tokenResponse();
-		when(loginCodeRepository.findByCode("validcode")).thenReturn(Optional.of(loginCode));
+		when(loginCodeRepository.findByCodeForUpdate("validcode")).thenReturn(Optional.of(loginCode));
 		when(tokenService.issueToken(1L)).thenReturn(token);
 
 		LoginResponse response = authService.exchangeLoginCode("validcode");
@@ -221,7 +221,7 @@ class AuthServiceTest extends UnitTest {
 	@Test
 	@DisplayName("존재하지 않는 loginCode 교환은 AUTH106 예외가 발생한다")
 	void exchangeLoginCodeThrowsWhenCodeNotFound() {
-		when(loginCodeRepository.findByCode("unknown")).thenReturn(Optional.empty());
+		when(loginCodeRepository.findByCodeForUpdate("unknown")).thenReturn(Optional.empty());
 
 		assertThatThrownBy(() -> authService.exchangeLoginCode("unknown"))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -241,7 +241,7 @@ class AuthServiceTest extends UnitTest {
 				.used(false)
 				.createdAt(LocalDateTime.now().minusMinutes(10))
 				.build();
-		when(loginCodeRepository.findByCode("expiredcode")).thenReturn(Optional.of(expiredLoginCode));
+		when(loginCodeRepository.findByCodeForUpdate("expiredcode")).thenReturn(Optional.of(expiredLoginCode));
 
 		assertThatThrownBy(() -> authService.exchangeLoginCode("expiredcode"))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -261,7 +261,7 @@ class AuthServiceTest extends UnitTest {
 				.used(true)
 				.createdAt(LocalDateTime.now())
 				.build();
-		when(loginCodeRepository.findByCode("usedcode")).thenReturn(Optional.of(usedLoginCode));
+		when(loginCodeRepository.findByCodeForUpdate("usedcode")).thenReturn(Optional.of(usedLoginCode));
 
 		assertThatThrownBy(() -> authService.exchangeLoginCode("usedcode"))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
