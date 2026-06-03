@@ -40,6 +40,12 @@ class AuthServiceTest extends UnitTest {
 	private KakaoOAuthService kakaoOAuthService;
 
 	@Mock
+	private AppleOAuthService appleOAuthService;
+
+	@Mock
+	private OAuthStateStore oauthStateStore;
+
+	@Mock
 	private TokenService tokenService;
 
 	@Mock
@@ -95,6 +101,7 @@ class AuthServiceTest extends UnitTest {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		Member member = activeMemberWithActiveTeam(1L, 10L);
 		TokenResponse token = tokenResponse();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
 		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
 				SocialProvider.KAKAO,
@@ -111,6 +118,9 @@ class AuthServiceTest extends UnitTest {
 		assertThat(response.refreshToken()).isEqualTo("refresh-token");
 		assertThat(response.isNewMember()).isFalse();
 		assertThat(response.activeTeamId()).isEqualTo(10L);
+		assertThat(member.getEmail()).isEqualTo("user@example.com");
+		assertThat(member.getName()).isEqualTo("Kakao User");
+		assertThat(member.getProfileImgUrl()).isEqualTo("https://example.com/profile.png");
 	}
 
 	@Test
@@ -118,6 +128,7 @@ class AuthServiceTest extends UnitTest {
 	void loginWithOAuthCreatesNewMember() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		TokenResponse token = tokenResponse();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
 		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
 				SocialProvider.KAKAO,
@@ -176,6 +187,7 @@ class AuthServiceTest extends UnitTest {
 	void issueAppLoginCodeSavesLoginCodeAndReturnsCode() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		Member member = activeMemberWithActiveTeam(1L, 10L);
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
 		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
 				SocialProvider.KAKAO,

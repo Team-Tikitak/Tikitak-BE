@@ -22,6 +22,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 @Service
 @RequiredArgsConstructor
@@ -31,10 +32,14 @@ public class GoogleOAuthService {
 	private static final String AUTHORIZATION_URI = "https://accounts.google.com/o/oauth2/v2/auth";
 	private static final String TOKEN_URI = "https://oauth2.googleapis.com/token";
 	private static final String USER_INFO_URI = "https://www.googleapis.com/oauth2/v3/userinfo";
+	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
+	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
 
 	private final AuthProperties authProperties;
 	private final ObjectMapper objectMapper;
-	private final HttpClient httpClient = HttpClient.newHttpClient();
+	private final HttpClient httpClient = HttpClient.newBuilder()
+			.connectTimeout(CONNECT_TIMEOUT)
+			.build();
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String state) {
 		AuthProperties.Google google = authProperties.oauth().google();
@@ -45,7 +50,6 @@ public class GoogleOAuthService {
 				.queryParam("response_type", "code")
 				.queryParam("scope", "openid email profile")
 				.queryParam("state", state)
-				.queryParam("access_type", "offline")
 				.queryParam("prompt", "select_account")
 				.build()
 				.encode()
@@ -85,6 +89,7 @@ public class GoogleOAuthService {
 
 		HttpRequest request = HttpRequest.newBuilder(URI.create(TOKEN_URI))
 				.header(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded;charset=UTF-8")
+				.timeout(REQUEST_TIMEOUT)
 				.POST(HttpRequest.BodyPublishers.ofString(body))
 				.build();
 
@@ -94,6 +99,7 @@ public class GoogleOAuthService {
 	private GoogleUserInfoResponse requestGoogleUserInfo(String accessToken) {
 		HttpRequest request = HttpRequest.newBuilder(URI.create(USER_INFO_URI))
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+				.timeout(REQUEST_TIMEOUT)
 				.GET()
 				.build();
 
@@ -117,8 +123,8 @@ public class GoogleOAuthService {
 			Thread.currentThread().interrupt();
 			throw new OAuthAuthenticationException("Google OAuth request interrupted.", e);
 		} catch (IOException e) {
-			log.warn("Google OAuth response parsing failed. uri={}, reason={}", request.uri(), e.getMessage());
-			throw new OAuthAuthenticationException("Google OAuth response parsing failed.", e);
+			log.warn("Google OAuth request failed. uri={}, reason={}", request.uri(), e.getMessage());
+			throw new OAuthAuthenticationException("Google OAuth request failed.", e);
 		}
 	}
 

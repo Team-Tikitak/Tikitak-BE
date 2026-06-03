@@ -34,6 +34,11 @@ public class MapResponseDTO {
 				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_thumb"
 		)
 		private String thumbnailUrl;
+		@Schema(
+				description = "지도 핀 상세 전환 애니메이션용 저용량 이미지 URL. 이미지 최적화가 활성화된 R2 이미지인 경우 feed_hero_preview preset이 적용됩니다.",
+				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_hero_preview"
+		)
+		private String heroPreviewUrl;
 		private long feedCount;
 	}
 }

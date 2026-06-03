@@ -237,6 +237,7 @@ class FeedServiceTest extends UnitTest {
 		assertThat(response.getImages()).hasSize(1);
 		assertThat(response.getImages().get(0).getFeedImageId()).isEqualTo(FEED_IMAGE_ID);
 		assertThat(response.getImages().get(0).getMediaPublicId()).isEqualTo(MEDIA_PUBLIC_ID);
+		assertThat(response.getImages().get(0).getHeroPreviewUrl()).isEqualTo(media.getUrl());
 	}
 
 	@Test
@@ -577,6 +578,28 @@ class FeedServiceTest extends UnitTest {
 
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).getAuthor().getProfileImageUrl()).isEqualTo(defaultImgUrl);
+	}
+
+	@Test
+	@DisplayName("피드 목록 조회 시 첫 번째 이미지로 heroPreviewUrl을 반환한다")
+	void listFeedsIncludesHeroPreviewUrlFromFirstImage() {
+		Media media = media(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.FEED_IMAGE, MediaStatus.USED);
+		Feed feed = generalFeedWithImages(media);
+
+		stubActiveAuthor();
+		when(feedRepository.findActiveFirstPage(eq(TEAM_ID), eq(null), any(Pageable.class)))
+				.thenReturn(List.of(feed));
+		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
+		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
+		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
+
+		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
+				MEMBER_ID, TEAM_ID, null, null, null, null, null, null);
+
+		assertThat(response.getItems()).hasSize(1);
+		assertThat(response.getItems().get(0).getThumbnailImageUrl()).isEqualTo(media.getUrl());
+		assertThat(response.getItems().get(0).getHeroPreviewUrl()).isEqualTo(media.getUrl());
 	}
 
 	@Test

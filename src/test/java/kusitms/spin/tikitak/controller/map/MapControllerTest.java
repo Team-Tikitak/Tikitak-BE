@@ -47,6 +47,7 @@ class MapControllerTest extends ApiTest {
 										.longitude(new BigDecimal("127.000000"))
 										.address("서울시 성동구")
 										.thumbnailUrl("https://example.com/thumb1.jpg")
+										.heroPreviewUrl("https://example.com/hero-preview1.jpg")
 										.feedCount(3)
 										.build(),
 								MapResponseDTO.MapPinDTO.builder()
@@ -56,6 +57,7 @@ class MapControllerTest extends ApiTest {
 										.longitude(new BigDecimal("127.010000"))
 										.address("서울시 마포구")
 										.thumbnailUrl("https://example.com/thumb2.jpg")
+										.heroPreviewUrl("https://example.com/hero-preview2.jpg")
 										.feedCount(1)
 										.build()
 						))
@@ -70,8 +72,10 @@ class MapControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.data.pins[0].placeId").value("kakao-001"))
 				.andExpect(jsonPath("$.data.pins[0].name").value("카페A"))
 				.andExpect(jsonPath("$.data.pins[0].thumbnailUrl").value("https://example.com/thumb1.jpg"))
+				.andExpect(jsonPath("$.data.pins[0].heroPreviewUrl").value("https://example.com/hero-preview1.jpg"))
 				.andExpect(jsonPath("$.data.pins[0].feedCount").value(3))
 				.andExpect(jsonPath("$.data.pins[1].placeId").value("kakao-002"))
+				.andExpect(jsonPath("$.data.pins[1].heroPreviewUrl").value("https://example.com/hero-preview2.jpg"))
 				.andExpect(jsonPath("$.data.pins[1].feedCount").value(1));
 
 		verify(mapService).getMapPins(TEST_MEMBER_ID, TEAM_ID);

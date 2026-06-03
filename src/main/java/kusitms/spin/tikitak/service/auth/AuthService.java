@@ -31,6 +31,8 @@ public class AuthService {
 
 	private final GoogleOAuthService googleOAuthService;
 	private final KakaoOAuthService kakaoOAuthService;
+	private final AppleOAuthService appleOAuthService;
+	private final OAuthStateStore oauthStateStore;
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
 	private final ActiveTeamService activeTeamService;
@@ -41,9 +43,11 @@ public class AuthService {
 		SocialProvider socialProvider = parseProvider(provider);
 		try {
 			String state = createState();
+			oauthStateStore.save(state, socialProvider.name());
 			return switch (socialProvider) {
 				case GOOGLE -> googleOAuthService.getAuthorizeUrl(state);
 				case KAKAO -> kakaoOAuthService.getAuthorizeUrl(state);
+				case APPLE -> appleOAuthService.getAuthorizeUrl(state);
 			};
 		} catch (BusinessException e) {
 			throw e;
@@ -69,8 +73,13 @@ public class AuthService {
 
 	@Transactional
 	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState) {
+		return loginWithOAuth(provider, code, state, savedState, null);
+	}
+
+	@Transactional
+	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState, String idToken) {
 		try {
-			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState);
+			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState, idToken);
 			Member member = result.member();
 			TokenResponse token = tokenService.issueToken(member.getId());
 			return new LoginResponse(
@@ -92,8 +101,13 @@ public class AuthService {
 
 	@Transactional
 	public String issueAppLoginCode(String provider, String code, String state, String savedState) {
+		return issueAppLoginCode(provider, code, state, savedState, null);
+	}
+
+	@Transactional
+	public String issueAppLoginCode(String provider, String code, String state, String savedState, String idToken) {
 		try {
-			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState);
+			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState, idToken);
 			Member member = result.member();
 			String loginCode = generateLoginCode();
 			loginCodeRepository.save(LoginCode.issue(
@@ -135,13 +149,20 @@ public class AuthService {
 		);
 	}
 
-	private OAuthLoginResult processOAuthLogin(String provider, String code, String state, String savedState) {
+	private OAuthLoginResult processOAuthLogin(String provider, String code, String state, String savedState, String idToken) {
 		SocialProvider socialProvider = parseProvider(provider);
-		validateCallbackRequest(code, state, savedState);
+		validateCallbackRequest(code, state);
+		validateOAuthState(socialProvider, state, savedState);
 
 		OAuthUserInfo userInfo = switch (socialProvider) {
 			case GOOGLE -> googleOAuthService.getUserInfo(code);
 			case KAKAO -> kakaoOAuthService.getUserInfo(code);
+			case APPLE -> {
+				if (idToken == null || idToken.isBlank()) {
+					throw new BusinessException(ErrorCode.AUTH103);
+				}
+				yield appleOAuthService.getUserInfo(code, idToken);
+			}
 		};
 
 		boolean[] created = {false};
@@ -181,13 +202,20 @@ public class AuthService {
 		}
 	}
 
-	private void validateCallbackRequest(String code, String state, String savedState) {
+	private void validateCallbackRequest(String code, String state) {
 		if (code == null || code.isBlank()) {
 			throw new BusinessException(ErrorCode.AUTH103);
 		}
-		if (state == null || state.isBlank() || savedState == null || savedState.isBlank() || !state.equals(savedState)) {
+		if (state == null || state.isBlank()) {
 			throw new BusinessException(ErrorCode.AUTH103);
 		}
+	}
+
+	private void validateOAuthState(SocialProvider provider, String state, String savedState) {
+		if (oauthStateStore.consume(state, provider.name())) {
+			return;
+		}
+		throw new BusinessException(ErrorCode.AUTH103);
 	}
 
 	private String defaultNickname(OAuthUserInfo userInfo) {
@@ -198,7 +226,7 @@ public class AuthService {
 		if (email != null && email.contains("@")) {
 			return truncate(email.substring(0, email.indexOf('@')));
 		}
-		return "Google User";
+		return "Tikitak User";
 	}
 
 	private String truncate(String value) {
