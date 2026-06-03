@@ -51,15 +51,16 @@ public class LoginCode {
 	private LocalDateTime createdAt;
 
 	public static LoginCode issue(String code, Long memberId, boolean newMember, boolean agreedRequiredTerms, Long activeTeamId) {
+		LocalDateTime now = LocalDateTime.now();
 		return LoginCode.builder()
 				.code(code)
 				.memberId(memberId)
 				.newMember(newMember)
 				.agreedRequiredTerms(agreedRequiredTerms)
 				.activeTeamId(activeTeamId)
-				.expiresAt(LocalDateTime.now().plusMinutes(5))
+				.expiresAt(now.plusMinutes(5))
 				.used(false)
-				.createdAt(LocalDateTime.now())
+				.createdAt(now)
 				.build();
 	}
 
