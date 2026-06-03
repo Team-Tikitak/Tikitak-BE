@@ -215,10 +215,6 @@ public class AuthService {
 		if (oauthStateStore.consume(state, provider.name())) {
 			return;
 		}
-		if (savedState != null && !savedState.isBlank() && state.equals(savedState)) {
-			log.info("OAuth callback accepted by cookie fallback. provider={}", provider);
-			return;
-		}
 		throw new BusinessException(ErrorCode.AUTH103);
 	}
 

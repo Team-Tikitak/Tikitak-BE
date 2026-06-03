@@ -101,6 +101,7 @@ class AuthServiceTest extends UnitTest {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		Member member = activeMemberWithActiveTeam(1L, 10L);
 		TokenResponse token = tokenResponse();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
 		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
 				SocialProvider.KAKAO,
@@ -127,6 +128,7 @@ class AuthServiceTest extends UnitTest {
 	void loginWithOAuthCreatesNewMember() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		TokenResponse token = tokenResponse();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
 		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
 				SocialProvider.KAKAO,
@@ -185,6 +187,7 @@ class AuthServiceTest extends UnitTest {
 	void issueAppLoginCodeSavesLoginCodeAndReturnsCode() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
 		Member member = activeMemberWithActiveTeam(1L, 10L);
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
 		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
 				SocialProvider.KAKAO,
