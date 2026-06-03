@@ -38,6 +38,7 @@ public class MapService {
 						.longitude(row.getLongitude())
 						.address(row.getAddress())
 						.thumbnailUrl(imageUrlResolver.resolve(row.getThumbnailUrl(), ImagePreset.FEED_THUMB))
+						.heroPreviewUrl(imageUrlResolver.resolve(row.getThumbnailUrl(), ImagePreset.FEED_HERO_PREVIEW))
 						.feedCount(row.getFeedCount())
 						.build())
 				.toList();
