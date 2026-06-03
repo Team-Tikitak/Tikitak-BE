@@ -23,6 +23,19 @@ class ImageUrlResolverTest {
 	}
 
 	@Test
+	void appendsFeedHeroPreviewPresetQueryToR2PublicUrl() {
+		ImageUrlResolver resolver = resolver(true, "https://media.tikitak.space/");
+
+		String result = resolver.resolve(
+				"https://media.tikitak.space/media/feed-image/test.jpg",
+				ImagePreset.FEED_HERO_PREVIEW
+		);
+
+		assertThat(result).isEqualTo(
+				"https://media.tikitak.space/media/feed-image/test.jpg?preset=feed_hero_preview");
+	}
+
+	@Test
 	void appendsPresetWithAmpersandWhenUrlAlreadyHasQuery() {
 		ImageUrlResolver resolver = resolver(true, "https://media.tikitak.space");
 

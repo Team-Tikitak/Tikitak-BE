@@ -70,6 +70,7 @@ class FeedControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.status").value(200))
 				.andExpect(jsonPath("$.data.items[0].feedId").value(FEED_ID))
 				.andExpect(jsonPath("$.data.items[0].type").value("GENERAL"))
+				.andExpect(jsonPath("$.data.items[0].heroPreviewUrl").value("https://example.com/feed-hero-preview.png"))
 				.andExpect(jsonPath("$.data.items[0].reactionSummary.totalCount").value(1))
 				.andExpect(jsonPath("$.data.pageInfo.nextCursor").value("2026-03-04T20:30:00_25"))
 				.andExpect(jsonPath("$.data.pageInfo.totalCount").value(42));
@@ -165,6 +166,7 @@ class FeedControllerTest extends ApiTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.feedId").value(FEED_ID))
 				.andExpect(jsonPath("$.data.images[0].imageUrl").value("https://example.com/feed.png"))
+				.andExpect(jsonPath("$.data.images[0].heroPreviewUrl").value("https://example.com/feed-hero-preview.png"))
 				.andExpect(jsonPath("$.data.place.placeId").value("kakao_12345"))
 				.andExpect(jsonPath("$.data.taggedMembers[0].teamMemberId").value(101L))
 				.andExpect(jsonPath("$.data.myReaction").value("TAK_LEADER"));
@@ -291,6 +293,7 @@ class FeedControllerTest extends ApiTest {
 				.type(FeedType.GENERAL)
 				.content("오늘 카페 좋았다")
 				.thumbnailImageUrl("https://example.com/feed.png")
+				.heroPreviewUrl("https://example.com/feed-hero-preview.png")
 				.imageCount(1)
 				.author(author())
 				.place(place())
@@ -310,6 +313,7 @@ class FeedControllerTest extends ApiTest {
 				.images(List.of(FeedResponseDTO.ImageDTO.builder()
 						.feedImageId(1L)
 						.imageUrl("https://example.com/feed.png")
+						.heroPreviewUrl("https://example.com/feed-hero-preview.png")
 						.orderIndex(0)
 						.build()))
 				.place(place())
