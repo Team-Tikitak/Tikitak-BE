@@ -116,7 +116,7 @@ public class AuthService {
 
 	@Transactional
 	public LoginResponse exchangeLoginCode(String code) {
-		LoginCode loginCode = loginCodeRepository.findByCode(code)
+		LoginCode loginCode = loginCodeRepository.findByCodeForUpdate(code)
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH106));
 		if (loginCode.isExpired()) {
 			throw new BusinessException(ErrorCode.AUTH107);
