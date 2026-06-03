@@ -4,6 +4,7 @@ public enum ImagePreset {
 	PROFILE_AVATAR("profile_avatar"),
 	FEED_THUMB("feed_thumb"),
 	FEED_DETAIL("feed_detail"),
+	FEED_HERO_PREVIEW("feed_hero_preview"),
 	PLACE_CARD("place_card"),
 	ORIGINAL(null);
 

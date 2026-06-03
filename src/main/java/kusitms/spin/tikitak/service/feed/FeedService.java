@@ -660,6 +660,7 @@ public class FeedService {
 				.type(feed.getType())
 				.content(feed.getContent())
 				.thumbnailImageUrl(thumbnailImageUrl(feed))
+				.heroPreviewUrl(heroPreviewUrl(feed))
 				.imageCount(feed.getImages().size())
 				.author(toAuthor(feed.getTeamMember()))
 				.taggedMembers(feed.getTags().stream()
@@ -692,6 +693,7 @@ public class FeedService {
 								.feedImageId(image.getId())
 								.mediaPublicId(image.getMedia() == null ? null : image.getMedia().getPublicId())
 								.imageUrl(imageUrlResolver.resolve(image.getImgUrl(), ImagePreset.FEED_DETAIL))
+								.heroPreviewUrl(imageUrlResolver.resolve(image.getImgUrl(), ImagePreset.FEED_HERO_PREVIEW))
 								.orderIndex(image.getOrderIndex())
 								.build())
 						.toList())
@@ -770,10 +772,18 @@ public class FeedService {
 	}
 
 	private String thumbnailImageUrl(Feed feed) {
+		return firstImageUrl(feed, ImagePreset.FEED_THUMB);
+	}
+
+	private String heroPreviewUrl(Feed feed) {
+		return firstImageUrl(feed, ImagePreset.FEED_HERO_PREVIEW);
+	}
+
+	private String firstImageUrl(Feed feed, ImagePreset preset) {
 		return sortedImages(feed).stream()
 				.findFirst()
 				.map(FeedImage::getImgUrl)
-				.map(url -> imageUrlResolver.resolve(url, ImagePreset.FEED_THUMB))
+				.map(url -> imageUrlResolver.resolve(url, preset))
 				.orElse(null);
 	}
 
