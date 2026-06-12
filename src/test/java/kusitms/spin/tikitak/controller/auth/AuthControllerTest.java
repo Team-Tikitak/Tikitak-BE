@@ -320,7 +320,8 @@ class AuthControllerTest extends ApiTest {
 						"test-secret",
 						3600L,
 						604800L,
-						false
+						false,
+						null
 				)
 		);
 	}

@@ -43,7 +43,8 @@ public record AuthProperties(
 			String secret,
 			long accessTokenExpiresIn,
 			long refreshTokenExpiresIn,
-			boolean cookieSecure
+			boolean cookieSecure,
+			String cookieDomain
 	) {
 	}
 }

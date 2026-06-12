@@ -37,7 +37,8 @@ class GoogleOAuthServiceTest extends UnitTest {
 							"test-secret",
 							3600L,
 							604800L,
-							false
+							false,
+							null
 					)
 			),
 			new ObjectMapper()
