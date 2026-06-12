@@ -270,22 +270,31 @@ public class AuthController {
 	}
 
 	private ResponseCookie refreshTokenCookie(String refreshToken) {
-		return ResponseCookie.from("refreshToken", refreshToken)
+		ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from("refreshToken", refreshToken)
 				.httpOnly(true)
 				.secure(true)
 				.path("/")
 				.sameSite("None")
-				.maxAge(Duration.ofSeconds(authProperties.jwt().refreshTokenExpiresIn()))
-				.build();
+				.maxAge(Duration.ofSeconds(authProperties.jwt().refreshTokenExpiresIn()));
+		applyCookieDomain(builder);
+		return builder.build();
 	}
 
 	private ResponseCookie expireRefreshTokenCookie() {
-		return ResponseCookie.from("refreshToken", "")
+		ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from("refreshToken", "")
 				.httpOnly(true)
 				.secure(true)
 				.path("/")
 				.sameSite("None")
-				.maxAge(Duration.ZERO)
-				.build();
+				.maxAge(Duration.ZERO);
+		applyCookieDomain(builder);
+		return builder.build();
+	}
+
+	private void applyCookieDomain(ResponseCookie.ResponseCookieBuilder builder) {
+		String cookieDomain = authProperties.jwt().cookieDomain();
+		if (cookieDomain != null && !cookieDomain.isBlank()) {
+			builder.domain(cookieDomain);
+		}
 	}
 }
