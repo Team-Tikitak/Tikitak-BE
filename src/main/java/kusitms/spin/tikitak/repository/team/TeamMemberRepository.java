@@ -178,4 +178,20 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long>, D
 			@Param("teamId") Long teamId,
 			@Param("memberStatus") TeamMemberStatus memberStatus
 	);
+
+	@Query("""
+			select tm.member.id
+			from TeamMember tm
+			join tm.team t
+			where t.id = :teamId
+				and tm.id <> :excludeTeamMemberId
+				and tm.status = :memberStatus
+				and t.status = :teamStatus
+			""")
+	List<Long> findActiveMemberIdsByTeamIdExcludingTeamMember(
+			@Param("teamId") Long teamId,
+			@Param("excludeTeamMemberId") Long excludeTeamMemberId,
+			@Param("memberStatus") TeamMemberStatus memberStatus,
+			@Param("teamStatus") TeamStatus teamStatus
+	);
 }
