@@ -22,6 +22,7 @@ import java.util.Optional;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -95,6 +96,74 @@ class NotificationServiceTest extends UnitTest {
 		BatchResponse batchResponse = mock(BatchResponse.class);
 		when(batchResponse.getResponses()).thenReturn(List.of(successResponse));
 		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
+
+		notificationService.send(1L, somePayload());
+
+		verify(deviceTokenRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("전송 결과가 UNREGISTERED, INVALID_ARGUMENT 이외의 오류이면 디바이스 토큰을 삭제하지 않는다")
+	void doesNotDeleteDeviceTokenOnOtherErrorCodes() throws Exception {
+		NotificationService notificationService =
+				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		MemberDeviceToken deviceToken = deviceToken("token-1");
+		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
+
+		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
+		when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNAVAILABLE);
+		SendResponse failedResponse = mock(SendResponse.class);
+		when(failedResponse.isSuccessful()).thenReturn(false);
+		when(failedResponse.getException()).thenReturn(exception);
+
+		BatchResponse batchResponse = mock(BatchResponse.class);
+		when(batchResponse.getResponses()).thenReturn(List.of(failedResponse));
+		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
+
+		notificationService.send(1L, somePayload());
+
+		verify(deviceTokenRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("등록된 모든 디바이스 토큰으로 전송하고 실패한 토큰만 삭제한다")
+	void sendsToAllDeviceTokensAndDeletesOnlyFailedOnes() throws Exception {
+		NotificationService notificationService =
+				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		MemberDeviceToken validToken = deviceToken("token-valid");
+		MemberDeviceToken invalidToken = deviceToken("token-invalid");
+		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(validToken, invalidToken));
+
+		SendResponse successResponse = mock(SendResponse.class);
+		when(successResponse.isSuccessful()).thenReturn(true);
+
+		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
+		when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
+		SendResponse failedResponse = mock(SendResponse.class);
+		when(failedResponse.isSuccessful()).thenReturn(false);
+		when(failedResponse.getException()).thenReturn(exception);
+
+		BatchResponse batchResponse = mock(BatchResponse.class);
+		when(batchResponse.getResponses()).thenReturn(List.of(successResponse, failedResponse));
+		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
+
+		notificationService.send(1L, somePayload());
+
+		verify(firebaseMessaging).sendEach(argThat(messages -> messages.size() == 2));
+		verify(deviceTokenRepository).delete(invalidToken);
+		verify(deviceTokenRepository, never()).delete(validToken);
+	}
+
+	@Test
+	@DisplayName("FCM 전송 중 예외가 발생해도 호출자에게 전파하지 않는다")
+	void doesNotPropagateExceptionWhenFcmCallFails() throws Exception {
+		NotificationService notificationService =
+				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		MemberDeviceToken deviceToken = deviceToken("token-1");
+		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
+
+		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
+		when(firebaseMessaging.sendEach(anyList())).thenThrow(exception);
 
 		notificationService.send(1L, somePayload());
 
