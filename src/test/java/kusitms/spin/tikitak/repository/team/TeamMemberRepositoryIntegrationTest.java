@@ -111,6 +111,31 @@ class TeamMemberRepositoryIntegrationTest extends IntegrationTest {
 	}
 
 	@Test
+	@DisplayName("팀의 활성 멤버 중 특정 팀원을 제외한 회원 id 목록을 조회한다")
+	void findActiveMemberIdsByTeamIdExcludingTeamMemberExcludesGivenTeamMember() {
+		Member author = persist(member("author"));
+		Member teammate = persist(member("teammate"));
+		Member leftMember = persist(member("left"));
+		Team activeTeam = persist(team("active"));
+		Team inactiveTeam = persist(team("inactive", TeamStatus.INACTIVE, BASE_TIME.minusDays(1)));
+
+		TeamMember authorMembership = persist(teamMember(author, activeTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(teammate, activeTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(leftMember, activeTeam, TeamMemberRole.MEMBER, TeamMemberStatus.LEFT));
+		persist(teamMember(author, inactiveTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+		flushAndClear();
+
+		List<Long> recipientMemberIds = teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
+				activeTeam.getId(),
+				authorMembership.getId(),
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		);
+
+		assertThat(recipientMemberIds).containsExactly(teammate.getId());
+	}
+
+	@Test
 	@DisplayName("counts new feed activities by inactive selected teams excluding my feeds and deleted feeds")
 	void countNewActivitiesByMemberTeams() {
 		Member member = persist(member("activity-member", kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE, null));
