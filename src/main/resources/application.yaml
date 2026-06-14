@@ -83,3 +83,6 @@ image:
 kakao:
   map:
     rest-api-key: ${KAKAO_MAP_REST_API_KEY}
+
+firebase:
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
