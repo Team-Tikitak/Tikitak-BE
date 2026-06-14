@@ -3,6 +3,7 @@ package kusitms.spin.tikitak.service.feed;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedComment;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
+import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -18,6 +19,7 @@ import kusitms.spin.tikitak.service.feed.dto.FeedCommentRequestDTO;
 import kusitms.spin.tikitak.service.feed.dto.FeedCommentResponseDTO;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +38,7 @@ public class FeedCommentService {
 	private final TeamRepository teamRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public FeedCommentResponseDTO.CommentListResponseDTO listComments(
 			Long memberId, Long teamId, Long feedId, Long feedImageId, String cursor, Integer size
@@ -99,6 +102,13 @@ public class FeedCommentService {
 				.build();
 
 		FeedComment savedComment = feedCommentRepository.save(comment);
+
+		Long feedOwnerMemberId = feed.getTeamMember().getMember().getId();
+		if (!feedOwnerMemberId.equals(memberId)) {
+			eventPublisher.publishEvent(
+					new FeedCommentCreatedEvent(feedOwnerMemberId, author.getNickname(), feed.getId(), teamId));
+		}
+
 		return toCommentItem(savedComment, author.getId());
 	}
 
