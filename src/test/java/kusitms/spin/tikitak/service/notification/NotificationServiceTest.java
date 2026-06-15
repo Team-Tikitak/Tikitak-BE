@@ -103,7 +103,7 @@ class NotificationServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("전송 결과가 UNREGISTERED, INVALID_ARGUMENT 이외의 오류이면 디바이스 토큰을 삭제하지 않는다")
+	@DisplayName("전송 결과가 UNREGISTERED 이외의 오류이면 디바이스 토큰을 삭제하지 않는다")
 	void doesNotDeleteDeviceTokenOnOtherErrorCodes() throws Exception {
 		NotificationService notificationService =
 				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
