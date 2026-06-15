@@ -13,7 +13,6 @@ import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,7 +25,6 @@ public class NotificationService {
 	private final MemberDeviceTokenRepository deviceTokenRepository;
 	private final Optional<FirebaseMessaging> firebaseMessaging;
 
-	@Transactional
 	public void send(Long memberId, NotificationPayload payload) {
 		if (firebaseMessaging.isEmpty()) {
 			log.warn("FCM이 설정되지 않아 알림을 전송하지 않습니다. memberId={}, type={}", memberId, payload.getType());
