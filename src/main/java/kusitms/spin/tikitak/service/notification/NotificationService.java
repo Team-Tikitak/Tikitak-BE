@@ -17,17 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
-
-	private static final Set<MessagingErrorCode> INVALID_TOKEN_ERROR_CODES = Set.of(
-			MessagingErrorCode.UNREGISTERED,
-			MessagingErrorCode.INVALID_ARGUMENT
-	);
 
 	private final MemberDeviceTokenRepository deviceTokenRepository;
 	private final Optional<FirebaseMessaging> firebaseMessaging;
@@ -79,7 +73,7 @@ public class NotificationService {
 
 	private void handleFailure(MemberDeviceToken deviceToken, FirebaseMessagingException exception) {
 		MessagingErrorCode errorCode = exception.getMessagingErrorCode();
-		if (INVALID_TOKEN_ERROR_CODES.contains(errorCode)) {
+		if (errorCode == MessagingErrorCode.UNREGISTERED) {
 			log.info("유효하지 않은 디바이스 토큰을 삭제합니다. fcmToken={}, errorCode={}", deviceToken.getFcmToken(), errorCode);
 			deviceTokenRepository.delete(deviceToken);
 			return;
