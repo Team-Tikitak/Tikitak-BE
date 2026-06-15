@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -12,6 +13,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class NotificationEventListener {
@@ -47,6 +49,12 @@ public class NotificationEventListener {
 				))
 				.build();
 
-		event.recipientMemberIds().forEach(memberId -> notificationService.send(memberId, payload));
+		event.recipientMemberIds().forEach(memberId -> {
+			try {
+				notificationService.send(memberId, payload);
+			} catch (Exception e) {
+				log.error("알림 전송 중 예외가 발생했습니다. memberId={}, type={}", memberId, payload.getType(), e);
+			}
+		});
 	}
 }
