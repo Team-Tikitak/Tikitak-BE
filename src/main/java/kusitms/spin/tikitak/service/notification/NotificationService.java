@@ -72,10 +72,10 @@ public class NotificationService {
 	private void handleFailure(MemberDeviceToken deviceToken, FirebaseMessagingException exception) {
 		MessagingErrorCode errorCode = exception.getMessagingErrorCode();
 		if (errorCode == MessagingErrorCode.UNREGISTERED) {
-			log.info("유효하지 않은 디바이스 토큰을 삭제합니다. fcmToken={}, errorCode={}", deviceToken.getFcmToken(), errorCode);
+			log.info("유효하지 않은 디바이스 토큰을 삭제합니다. deviceTokenId={}, errorCode={}", deviceToken.getId(), errorCode);
 			deviceTokenRepository.delete(deviceToken);
 			return;
 		}
-		log.warn("FCM 알림 전송에 실패했습니다. fcmToken={}, errorCode={}", deviceToken.getFcmToken(), errorCode, exception);
+		log.warn("FCM 알림 전송에 실패했습니다. deviceTokenId={}, errorCode={}", deviceToken.getId(), errorCode, exception);
 	}
 }
