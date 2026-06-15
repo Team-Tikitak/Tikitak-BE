@@ -12,7 +12,6 @@ import org.springframework.context.annotation.Configuration;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Base64;
-import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
@@ -28,11 +27,10 @@ public class FirebaseConfig {
 				.setCredentials(GoogleCredentials.fromStream(new ByteArrayInputStream(decoded)))
 				.build();
 
-		List<FirebaseApp> apps = FirebaseApp.getApps();
-		if (!apps.isEmpty()) {
-			return apps.get(0);
-		}
-		return FirebaseApp.initializeApp(options);
+		return FirebaseApp.getApps().stream()
+				.filter(app -> FirebaseApp.DEFAULT_APP_NAME.equals(app.getName()))
+				.findFirst()
+				.orElseGet(() -> FirebaseApp.initializeApp(options));
 	}
 
 	@Bean
