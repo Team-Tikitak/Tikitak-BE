@@ -6,6 +6,7 @@ import kusitms.spin.tikitak.domain.feed.entity.FeedTag;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.question.entity.Question;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
@@ -25,6 +26,7 @@ import kusitms.spin.tikitak.service.dailyquestion.dto.DailyQuestionResponseDTO;
 import kusitms.spin.tikitak.service.media.ImagePreset;
 import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,7 @@ public class DailyQuestionService {
 	private final DailyQuestionMediaRepository mediaRepository;
 	private final KstDateProvider dateProvider;
 	private final ImageUrlResolver imageUrlResolver;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public DailyQuestionResponseDTO.TodayQuestionResponseDTO getTodayQuestion(Long memberId, Long teamId) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
@@ -107,14 +110,24 @@ public class DailyQuestionService {
 				.teamMember(author)
 				.build());
 
+		Feed savedFeed;
 		try {
-			return toMutation(feedRepository.saveDailyQuestionFeed(feed));
+			savedFeed = feedRepository.saveDailyQuestionFeed(feed);
 		} catch (DataIntegrityViolationException e) {
 			if (!isDailyAnswerDuplicate(e)) {
 				throw e;
 			}
 			throw new BusinessException(ErrorCode.DAILY_QUESTION003, e);
 		}
+
+		List<Long> recipientMemberIds = teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
+				teamId, author.getId(), TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		if (!recipientMemberIds.isEmpty()) {
+			eventPublisher.publishEvent(
+					new DailyAnswerPostedEvent(recipientMemberIds, author.getNickname(), savedFeed.getId(), teamId));
+		}
+
+		return toMutation(savedFeed);
 	}
 
 	@Transactional

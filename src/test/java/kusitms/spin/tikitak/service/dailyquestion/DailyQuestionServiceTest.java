@@ -6,6 +6,7 @@ import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.question.entity.Question;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
@@ -21,6 +22,7 @@ import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionMediaRep
 import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionQuestionRepository;
 import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionTeamMemberRepository;
 import kusitms.spin.tikitak.support.fake.dailyquestion.FakeDailyQuestionTeamRepository;
+import kusitms.spin.tikitak.support.fake.notification.FakeApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +46,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class DailyQuestionServiceTest extends UnitTest {
 
 	private static final Long MEMBER_ID = 1L;
+	private static final Long OTHER_MEMBER_ID = 2L;
 	private static final Long TEAM_ID = 10L;
 	private static final Long TEAM_MEMBER_ID = 100L;
+	private static final Long OTHER_TEAM_MEMBER_ID = 101L;
 	private static final Long QUESTION_ID = 1L;
 	private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 	private static final UUID NEXT_MEDIA_PUBLIC_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -56,10 +60,12 @@ class DailyQuestionServiceTest extends UnitTest {
 	private FakeDailyQuestionQuestionRepository questionRepository;
 	private FakeDailyQuestionFeedRepository feedRepository;
 	private FakeDailyQuestionMediaRepository mediaRepository;
+	private FakeApplicationEventPublisher eventPublisher;
 
 	private DailyQuestionService dailyQuestionService;
 	private Team team;
 	private TeamMember author;
+	private TeamMember otherTeamMember;
 	private Question question;
 
 	@BeforeEach
@@ -69,6 +75,7 @@ class DailyQuestionServiceTest extends UnitTest {
 		questionRepository = new FakeDailyQuestionQuestionRepository();
 		feedRepository = new FakeDailyQuestionFeedRepository();
 		mediaRepository = new FakeDailyQuestionMediaRepository();
+		eventPublisher = new FakeApplicationEventPublisher();
 		dailyQuestionService = new DailyQuestionService(
 				teamRepository,
 				teamMemberRepository,
@@ -76,17 +83,20 @@ class DailyQuestionServiceTest extends UnitTest {
 				feedRepository,
 				mediaRepository,
 				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul"))),
-				disabledImageUrlResolver()
+				disabledImageUrlResolver(),
+				eventPublisher
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
+		Member otherMember = activeMember(OTHER_MEMBER_ID);
 		author = activeMember(TEAM_MEMBER_ID, member, team);
+		otherTeamMember = activeMember(OTHER_TEAM_MEMBER_ID, otherMember, team);
 		question = question(QUESTION_ID, 1, "Today question");
 		seedDailyQuestionBaseData();
 	}
 
 	@Test
-	@DisplayName("Gets today's question and unanswered status")
+	@DisplayName("오늘의 질문과 답변 여부를 조회한다")
 	void getTodayQuestion() {
 		DailyQuestionResponseDTO.TodayQuestionResponseDTO response =
 				dailyQuestionService.getTodayQuestion(MEMBER_ID, TEAM_ID);
@@ -97,7 +107,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Creates today's answer with a daily question image")
+	@DisplayName("오늘의 질문 이미지로 답변을 작성한다")
 	void createMyAnswer() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
@@ -115,10 +125,46 @@ class DailyQuestionServiceTest extends UnitTest {
 		assertThat(response.getAnswer().getContent()).isEqualTo("answer");
 		assertThat(media.getStatus()).isEqualTo(MediaStatus.USED);
 		assertThat(feedRepository.findActiveDailyAnswer(TEAM_ID, TEAM_MEMBER_ID, QUESTION_ID, TODAY)).isPresent();
+
+		assertThat(eventPublisher.getPublishedEvents()).hasSize(1);
+		DailyAnswerPostedEvent event = (DailyAnswerPostedEvent) eventPublisher.getPublishedEvents().get(0);
+		assertThat(event.recipientMemberIds()).containsExactly(OTHER_MEMBER_ID);
+		assertThat(event.actorNickname()).isEqualTo(author.getNickname());
+		assertThat(event.feedId()).isEqualTo(response.getFeedId());
+		assertThat(event.teamId()).isEqualTo(TEAM_ID);
 	}
 
 	@Test
-	@DisplayName("Shares fake repository state across create, get, and update")
+	@DisplayName("활성 팀원이 본인뿐이면 알림 이벤트를 발행하지 않는다")
+	void createMyAnswerDoesNotPublishEventWhenNoOtherMembers() {
+		teamMemberRepository = new FakeDailyQuestionTeamMemberRepository();
+		teamMemberRepository.save(author);
+		dailyQuestionService = new DailyQuestionService(
+				teamRepository,
+				teamMemberRepository,
+				questionRepository,
+				feedRepository,
+				mediaRepository,
+				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul"))),
+				disabledImageUrlResolver(),
+				eventPublisher
+		);
+		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
+				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
+		mediaRepository.save(media);
+
+		dailyQuestionService.createMyAnswer(
+				MEMBER_ID,
+				TEAM_ID,
+				QUESTION_ID,
+				new DailyQuestionRequestDTO.AnswerCreateRequestDTO("answer", MEDIA_PUBLIC_ID)
+		);
+
+		assertThat(eventPublisher.getPublishedEvents()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("생성, 조회, 수정 전반에서 fake repository 상태를 공유한다")
 	void createThenGetThenUpdateAnswerWithFakeRepositories() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
@@ -160,7 +206,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Throws when today's answer already exists")
+	@DisplayName("오늘의 답변이 이미 존재하면 예외가 발생한다")
 	void createMyAnswerThrowsWhenDuplicated() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
@@ -179,7 +225,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Maps daily answer unique constraint violation to duplicated answer error")
+	@DisplayName("오늘의 답변 unique 제약 조건 위반을 중복 답변 예외로 변환한다")
 	void createMyAnswerThrowsWhenDailyAnswerConstraintViolated() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
@@ -196,7 +242,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Does not hide unrelated data integrity violations")
+	@DisplayName("관련 없는 데이터 무결성 예외는 그대로 전파한다")
 	void createMyAnswerRethrowsUnrelatedDataIntegrityViolation() {
 		Media media = media(1L, MEMBER_ID, MEDIA_PUBLIC_ID,
 				MediaPurpose.DAILY_QUESTION_IMAGE, MediaStatus.UPLOADED);
@@ -214,7 +260,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Keeps existing image when media public id is omitted")
+	@DisplayName("media public id가 없으면 기존 이미지를 유지한다")
 	void updateMyAnswerKeepsImageWhenMediaPublicIdOmitted() {
 		Feed feed = answerFeed();
 		feedRepository.saveDailyQuestionFeed(feed);
@@ -232,7 +278,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Throws when update request is empty")
+	@DisplayName("수정 요청이 비어있으면 예외가 발생한다")
 	void updateMyAnswerThrowsWhenEmpty() {
 		assertThatThrownBy(() -> dailyQuestionService.updateMyAnswer(
 				MEMBER_ID,
@@ -244,7 +290,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("Replaces today's answer image with an uploaded image")
+	@DisplayName("업로드된 이미지로 오늘의 답변 이미지를 교체한다")
 	void updateMyAnswerReplacesImage() {
 		Feed feed = answerFeed();
 		Media newMedia = media(2L, MEMBER_ID, NEXT_MEDIA_PUBLIC_ID,
@@ -267,6 +313,7 @@ class DailyQuestionServiceTest extends UnitTest {
 	private void seedDailyQuestionBaseData() {
 		teamRepository.save(team);
 		teamMemberRepository.save(author);
+		teamMemberRepository.save(otherTeamMember);
 		questionRepository.save(question);
 	}
 

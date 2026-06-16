@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.auth.TokenService;
 import kusitms.spin.tikitak.service.me.dto.MeRequestDTO;
@@ -30,6 +31,7 @@ public class MeService {
 
 	private final MemberRepository memberRepository;
 	private final TeamMemberRepository teamMemberRepository;
+	private final MemberDeviceTokenRepository deviceTokenRepository;
 	private final TokenService tokenService;
 	private final ActiveTeamService activeTeamService;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
@@ -196,6 +198,7 @@ public class MeService {
 
 			member.withdraw();
 			tokenService.revokeAllRefreshTokens(memberId);
+			deviceTokenRepository.deleteAllByMemberId(memberId);
 		} catch (BusinessException e) {
 			throw e;
 		} catch (Exception e) {

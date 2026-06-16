@@ -4,6 +4,7 @@ import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedComment;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
@@ -40,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class FeedCommentServiceTest extends UnitTest {
@@ -70,6 +73,9 @@ class FeedCommentServiceTest extends UnitTest {
 	@Mock
 	private DefaultProfileImageResolver defaultProfileImageResolver;
 
+	@Mock
+	private ApplicationEventPublisher eventPublisher;
+
 	private FeedCommentService feedCommentService;
 	private Team team;
 	private TeamMember viewer;
@@ -85,7 +91,8 @@ class FeedCommentServiceTest extends UnitTest {
 				feedCommentRepository,
 				teamRepository,
 				teamMemberRepository,
-				defaultProfileImageResolver
+				defaultProfileImageResolver,
+				eventPublisher
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember(MEMBER_ID);
@@ -123,6 +130,38 @@ class FeedCommentServiceTest extends UnitTest {
 		assertThat(captor.getValue().getFeedImage()).isEqualTo(feedImage);
 		assertThat(response.isMine()).isTrue();
 		assertThat(response.getContent()).isEqualTo("좋다!");
+		verifyNoInteractions(eventPublisher);
+	}
+
+	@Test
+	@DisplayName("다른 사람의 피드에 댓글을 작성하면 피드 작성자에게 알림 이벤트가 발행된다")
+	void createCommentPublishesNotificationEventToFeedOwner() {
+		Feed otherFeed = feed(FEED_ID, otherTeamMember);
+		FeedImage otherFeedImage = feedImage(FEED_IMAGE_ID, otherFeed);
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(otherFeed));
+		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(otherFeedImage));
+		when(feedCommentRepository.save(any(FeedComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		feedCommentService.createComment(
+				MEMBER_ID,
+				TEAM_ID,
+				FEED_ID,
+				new FeedCommentRequestDTO.CommentCreateRequestDTO(
+						FEED_IMAGE_ID,
+						"좋다!",
+						new BigDecimal("0.420000"),
+						new BigDecimal("0.680000")
+				)
+		);
+
+		ArgumentCaptor<FeedCommentCreatedEvent> captor = ArgumentCaptor.forClass(FeedCommentCreatedEvent.class);
+		verify(eventPublisher).publishEvent(captor.capture());
+		FeedCommentCreatedEvent event = captor.getValue();
+		assertThat(event.recipientMemberId()).isEqualTo(OTHER_MEMBER_ID);
+		assertThat(event.actorNickname()).isEqualTo(viewer.getNickname());
+		assertThat(event.feedId()).isEqualTo(FEED_ID);
+		assertThat(event.teamId()).isEqualTo(TEAM_ID);
 	}
 
 	@Test
