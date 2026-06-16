@@ -39,6 +39,18 @@ public class HomeController {
 		return CommonResponse.success(homeService.getEveryonePick(memberId, teamId));
 	}
 
+	@GetMapping("/everyone-pick/thumbnail")
+	@Operation(
+			summary = "모두의 PICK 썸네일 조회 API",
+			description = "홈화면용. 이달의 1위 피드 썸네일 하나만 반환합니다. 피드가 3개 미만이면 feedId와 thumbnailImageUrl이 null입니다."
+	)
+	public CommonResponse<HomeResponseDTO.EveryonePickThumbnailResponse> getEveryonePickThumbnail(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		return CommonResponse.success(homeService.getEveryonePickThumbnail(memberId, teamId));
+	}
+
 	@GetMapping("/all-tagged")
 	@Operation(
 			summary = "다함께 쎄쎄쎄 API",
