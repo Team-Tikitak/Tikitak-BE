@@ -188,6 +188,31 @@ public class FeedService {
 				.toList();
 	}
 
+	public Optional<FeedResponseDTO.FeedThumbnailItemDTO> getEveryonePickThumbnailItem(Long memberId, Long teamId) {
+		getActiveTeamMember(memberId, teamId);
+
+		YearMonth currentMonth = YearMonth.now();
+		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
+		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+
+		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
+		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
+			return Optional.empty();
+		}
+
+		List<Long> rankedIds = feedRepository.findEveryonePickFeedIds(teamId, startOfMonth, startOfNextMonth);
+		if (rankedIds.isEmpty()) {
+			return Optional.empty();
+		}
+
+		return feedRepository.findActiveByIds(teamId, List.of(rankedIds.get(0))).stream()
+				.findFirst()
+				.map(feed -> FeedResponseDTO.FeedThumbnailItemDTO.builder()
+						.feedId(feed.getId())
+						.thumbnailImageUrl(thumbnailImageUrl(feed))
+						.build());
+	}
+
 	public List<FeedResponseDTO.FeedListItemDTO> getAllTaggedItems(Long memberId, Long teamId) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 

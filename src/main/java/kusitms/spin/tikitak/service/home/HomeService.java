@@ -80,6 +80,20 @@ public class HomeService {
 				.build();
 	}
 
+	public HomeResponseDTO.EveryonePickThumbnailResponse getEveryonePickThumbnail(Long memberId, Long teamId) {
+		return feedService.getEveryonePickThumbnailItem(memberId, teamId)
+				.map(item -> HomeResponseDTO.EveryonePickThumbnailResponse.builder()
+						.month(YearMonth.now().getMonthValue())
+						.feedId(item.getFeedId())
+						.thumbnailImageUrl(item.getThumbnailImageUrl())
+						.build())
+				.orElse(HomeResponseDTO.EveryonePickThumbnailResponse.builder()
+						.month(YearMonth.now().getMonthValue())
+						.feedId(null)
+						.thumbnailImageUrl(null)
+						.build());
+	}
+
 	public HomeResponseDTO.AllTaggedResponse getAllTaggedFeeds(Long memberId, Long teamId) {
 		return HomeResponseDTO.AllTaggedResponse.builder()
 				.month(YearMonth.now().getMonthValue())

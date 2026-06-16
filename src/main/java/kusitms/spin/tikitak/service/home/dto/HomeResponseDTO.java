@@ -49,6 +49,20 @@ public class HomeResponseDTO {
 	@Builder
 	@NoArgsConstructor
 	@AllArgsConstructor
+	public static class EveryonePickThumbnailResponse {
+		private int month;
+		private Long feedId;
+		@Schema(
+				description = "모두의 PICK 1위 피드 썸네일 이미지 URL. 피드가 3개 미만이면 null입니다. feed_thumb preset이 적용됩니다.",
+				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_thumb"
+		)
+		private String thumbnailImageUrl;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
 	public static class AllTaggedResponse {
 		private int month;
 		private List<FeedResponseDTO.FeedListItemDTO> feeds;
