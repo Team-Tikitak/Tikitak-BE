@@ -38,6 +38,28 @@ public final class MemberFixture {
 		return member(id, MemberStatus.ACTIVE, activeTeamId);
 	}
 
+	public static Member activeMemberWithActiveTeamAndCharacterType(
+			Long id, Long activeTeamId, ProfileCharacterType characterType
+	) {
+		LocalDateTime now = LocalDateTime.of(2026, 3, 4, 20, 30);
+		return Member.builder()
+				.id(id)
+				.email("user" + id + "@example.com")
+				.name("User " + id)
+				.nickname("user" + id)
+				.profileImgUrl("https://example.com/profile" + id + ".png")
+				.profileCharacterType(characterType)
+				.socialProvider(SocialProvider.KAKAO)
+				.providerId("provider-" + id)
+				.status(MemberStatus.ACTIVE)
+				.termsAgreed(false)
+				.privacyAgreed(false)
+				.activeTeamId(activeTeamId)
+				.createdAt(now)
+				.updatedAt(now)
+				.build();
+	}
+
 	public static Member inactiveMember(Long id) {
 		return member(id, MemberStatus.INACTIVE, null);
 	}

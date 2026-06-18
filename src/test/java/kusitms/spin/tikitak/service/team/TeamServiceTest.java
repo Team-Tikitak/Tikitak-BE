@@ -32,6 +32,7 @@ import java.util.UUID;
 
 import static kusitms.spin.tikitak.support.fixture.MediaFixture.media;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeamAndCharacterType;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.inactiveTeam;
@@ -87,7 +88,7 @@ class TeamServiceTest extends UnitTest {
 	@Test
 	@DisplayName("팀 생성 시 활성 팀이 생성된 팀으로 변경됨")
 	void createTeamChangesActiveTeamToCreatedTeam() {
-		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		Member member = activeMemberWithActiveTeamAndCharacterType(MEMBER_ID, 99L, ProfileCharacterType.TAK_LEADER);
 		TeamRequestDTO.TeamCreateRequestDTO request =
 				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
 
@@ -103,6 +104,20 @@ class TeamServiceTest extends UnitTest {
 		teamService.createTeam(MEMBER_ID, request);
 
 		assertThat(member.getActiveTeamId()).isEqualTo(TEAM_ID);
+	}
+
+	@Test
+	@DisplayName("기본 캐릭터가 없는 멤버가 팀을 생성하면 MEMBER002 예외가 발생한다")
+	void createTeamThrowsWhenMemberHasNoProfileCharacterType() {
+		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", null, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+
+		assertThatThrownBy(() -> teamService.createTeam(MEMBER_ID, request))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEMBER002));
 	}
 
 	@Test
