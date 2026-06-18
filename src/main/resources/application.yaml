@@ -10,7 +10,7 @@ spring:
       password: ${REDIS_PASSWORD:}
 
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,https://tikitak.space,https://app.tikitak.space,https://tikitak-fe.vercel.app,https://capacitor://tikitak.space}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,https://tikitak.space,https://app.tikitak.space,https://tikitak-fe.vercel.app,capacitor://tikitak.space}
 
   flyway:
     enabled: true
