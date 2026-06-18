@@ -21,6 +21,19 @@ public class FeedResponseDTO {
 	@Builder
 	@NoArgsConstructor
 	@AllArgsConstructor
+	public static class FeedThumbnailItemDTO {
+		private Long feedId;
+		@Schema(
+				description = "피드 썸네일 이미지 URL. feed_thumb preset이 적용됩니다.",
+				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_thumb"
+		)
+		private String thumbnailImageUrl;
+	}
+
+	@Getter
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
 	public static class FeedListResponseDTO {
 		private List<FeedListItemDTO> items;
 		private PageInfoDTO pageInfo;

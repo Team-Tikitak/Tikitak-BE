@@ -4,6 +4,7 @@ import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.auth.TokenService;
 import kusitms.spin.tikitak.service.me.ActiveTeamService;
@@ -55,6 +56,7 @@ class AgreementPropertyTest {
 		return new MeService(
 				memberRepository,
 				mock(TeamMemberRepository.class),
+				mock(MemberDeviceTokenRepository.class),
 				mock(TokenService.class),
 				mock(ActiveTeamService.class),
 				mock(DefaultProfileImageResolver.class)

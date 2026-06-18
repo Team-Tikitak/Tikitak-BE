@@ -10,7 +10,7 @@ spring:
       password: ${REDIS_PASSWORD:}
 
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,https://tikitak.space,https://app.tikitak.space,https://tikitak-fe.vercel.app}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,https://tikitak.space,https://app.tikitak.space,https://tikitak-fe.vercel.app,https://capacitor://tikitak.space}
 
   flyway:
     enabled: true
@@ -83,3 +83,6 @@ image:
 kakao:
   map:
     rest-api-key: ${KAKAO_MAP_REST_API_KEY}
+
+firebase:
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}

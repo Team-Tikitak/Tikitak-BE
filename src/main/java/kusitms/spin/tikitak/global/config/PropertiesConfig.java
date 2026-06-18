@@ -8,7 +8,8 @@ import org.springframework.context.annotation.Configuration;
 		AuthProperties.class,
 		R2Properties.class,
 		KakaoMapProperties.class,
-		ImageOptimizationProperties.class
+		ImageOptimizationProperties.class,
+		FirebaseProperties.class
 })
 public class PropertiesConfig {
 }

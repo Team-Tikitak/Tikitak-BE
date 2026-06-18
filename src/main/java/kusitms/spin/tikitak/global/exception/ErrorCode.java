@@ -42,6 +42,9 @@ public enum ErrorCode {
     ME010("ME010", "회원탈퇴 처리에 실패했습니다.", 500),
     ME011("ME011", "온보딩 프로필 저장에 실패했습니다.", 500),
 
+    // Device Token
+    DEVICE_TOKEN001("DEVICE_TOKEN001", "디바이스 토큰 등록에 실패했습니다.", 500),
+
     // Agreement
     AGREEMENT001("AGREEMENT001", "약관 동의 현황 조회에 실패했습니다.", 500),
     AGREEMENT002("AGREEMENT002", "필수 약관에 동의해야 합니다.", 400),

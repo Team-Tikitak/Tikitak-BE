@@ -4,6 +4,7 @@ import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface DailyQuestionTeamMemberRepository {
@@ -11,6 +12,13 @@ public interface DailyQuestionTeamMemberRepository {
 	Optional<TeamMember> findActiveByMemberIdAndTeamId(
 			Long memberId,
 			Long teamId,
+			TeamMemberStatus memberStatus,
+			TeamStatus teamStatus
+	);
+
+	List<Long> findActiveMemberIdsByTeamIdExcludingTeamMember(
+			Long teamId,
+			Long excludeTeamMemberId,
 			TeamMemberStatus memberStatus,
 			TeamStatus teamStatus
 	);

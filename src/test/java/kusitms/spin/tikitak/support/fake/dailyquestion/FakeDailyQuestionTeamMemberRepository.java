@@ -31,4 +31,20 @@ public class FakeDailyQuestionTeamMemberRepository implements DailyQuestionTeamM
 				.filter(teamMember -> teamMember.getTeam().getStatus() == teamStatus)
 				.findFirst();
 	}
+
+	@Override
+	public List<Long> findActiveMemberIdsByTeamIdExcludingTeamMember(
+			Long teamId,
+			Long excludeTeamMemberId,
+			TeamMemberStatus memberStatus,
+			TeamStatus teamStatus
+	) {
+		return store.stream()
+				.filter(teamMember -> teamMember.getTeam().getId().equals(teamId))
+				.filter(teamMember -> !teamMember.getId().equals(excludeTeamMemberId))
+				.filter(teamMember -> teamMember.getStatus() == memberStatus)
+				.filter(teamMember -> teamMember.getTeam().getStatus() == teamStatus)
+				.map(teamMember -> teamMember.getMember().getId())
+				.toList();
+	}
 }

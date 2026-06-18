@@ -9,6 +9,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.auth.TokenService;
 import kusitms.spin.tikitak.service.me.dto.MeRequestDTO;
@@ -40,6 +41,9 @@ class MeServiceTest extends UnitTest {
 
 	@Mock
 	private TeamMemberRepository teamMemberRepository;
+
+	@Mock
+	private MemberDeviceTokenRepository deviceTokenRepository;
 
 	@Mock
 	private TokenService tokenService;
@@ -246,5 +250,6 @@ class MeServiceTest extends UnitTest {
 		assertThat(member.getProviderId()).startsWith("WITHDRAWN:1:");
 		assertThat(member.getProviderId()).isNotEqualTo("provider-1");
 		verify(tokenService).revokeAllRefreshTokens(1L);
+		verify(deviceTokenRepository).deleteAllByMemberId(1L);
 	}
 }
