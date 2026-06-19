@@ -254,4 +254,22 @@ class AuthServiceTest extends UnitTest {
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH106));
 	}
+
+	@Test
+	@DisplayName("토큰 발급이 실패하면 소비했던 loginCode를 복구해 재시도할 수 있게 한다")
+	void exchangeLoginCodeRestoresCodeWhenTokenIssuanceFails() {
+		LoginCodePayload payload = LoginCodePayload.builder()
+				.memberId(1L)
+				.newMember(true)
+				.agreedRequiredTerms(false)
+				.activeTeamId(10L)
+				.build();
+		when(loginCodeStore.consume("validcode")).thenReturn(Optional.of(payload));
+		when(tokenService.issueToken(1L)).thenThrow(new RuntimeException("token issuance failed"));
+
+		assertThatThrownBy(() -> authService.exchangeLoginCode("validcode"))
+				.isInstanceOf(RuntimeException.class);
+
+		verify(loginCodeStore).save("validcode", payload);
+	}
 }
