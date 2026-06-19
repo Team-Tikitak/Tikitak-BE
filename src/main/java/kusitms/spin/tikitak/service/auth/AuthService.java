@@ -129,14 +129,19 @@ public class AuthService {
 	public LoginResponse exchangeLoginCode(String code) {
 		LoginCodePayload payload = loginCodeStore.consume(code)
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH106));
-		TokenResponse token = tokenService.issueToken(payload.getMemberId());
-		return new LoginResponse(
-				token.accessToken(),
-				token.refreshToken(),
-				payload.isNewMember(),
-				payload.isAgreedRequiredTerms(),
-				payload.getActiveTeamId()
-		);
+		try {
+			TokenResponse token = tokenService.issueToken(payload.getMemberId());
+			return new LoginResponse(
+					token.accessToken(),
+					token.refreshToken(),
+					payload.isNewMember(),
+					payload.isAgreedRequiredTerms(),
+					payload.getActiveTeamId()
+			);
+		} catch (Exception e) {
+			loginCodeStore.save(code, payload);
+			throw e;
+		}
 	}
 
 	private OAuthLoginResult processOAuthLogin(String provider, String code, String state, String savedState, String idToken) {
