@@ -48,6 +48,10 @@ public class TeamService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER001));
 
+        if (member.getProfileCharacterType() == null) {
+            throw new BusinessException(ErrorCode.MEMBER002);
+        }
+
         // Team 생성
         Team team = Team.builder()
                 .name(request.getTeamName())

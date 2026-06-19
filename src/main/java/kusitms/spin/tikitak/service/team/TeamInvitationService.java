@@ -153,6 +153,10 @@ public class TeamInvitationService {
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER001));
 
+		if (member.getProfileCharacterType() == null) {
+			throw new BusinessException(ErrorCode.MEMBER002);
+		}
+
 		long activeCount = teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMemberStatus.ACTIVE);
 		if (activeCount >= TEAM_MEMBER_LIMIT) {
 			throw new BusinessException(ErrorCode.INVITE008);

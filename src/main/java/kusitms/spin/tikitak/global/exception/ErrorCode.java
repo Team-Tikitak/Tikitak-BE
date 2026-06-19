@@ -72,6 +72,7 @@ public enum ErrorCode {
 
     // Member
     MEMBER001("MEMBER001", "존재하지 않는 사용자입니다.", 404),
+    MEMBER002("MEMBER002", "온보딩이 완료되지 않아 기본 캐릭터가 설정되지 않았습니다.", 400),
 
     // Team
     TEAM001("TEAM001", "존재하지 않는 팀입니다", 404),
