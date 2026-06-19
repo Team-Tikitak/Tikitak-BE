@@ -1,1 +1,1 @@
-DROP TABLE login_code;
+DROP TABLE IF EXISTS login_code;
