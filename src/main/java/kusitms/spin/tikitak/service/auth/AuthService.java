@@ -1,13 +1,12 @@
 package kusitms.spin.tikitak.service.auth;
 
-import kusitms.spin.tikitak.domain.auth.LoginCode;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.auth.LoginCodeRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.service.auth.dto.LoginCodePayload;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
@@ -36,7 +35,7 @@ public class AuthService {
 	private final TokenService tokenService;
 	private final MemberRepository memberRepository;
 	private final ActiveTeamService activeTeamService;
-	private final LoginCodeRepository loginCodeRepository;
+	private final LoginCodeStore loginCodeStore;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String provider) {
@@ -110,13 +109,12 @@ public class AuthService {
 			OAuthLoginResult result = processOAuthLogin(provider, code, state, savedState, idToken);
 			Member member = result.member();
 			String loginCode = generateLoginCode();
-			loginCodeRepository.save(LoginCode.issue(
-					loginCode,
-					member.getId(),
-					result.newMember(),
-					member.isTermsAgreed() && member.isPrivacyAgreed(),
-					activeTeamService.resolveActiveTeamId(member)
-			));
+			loginCodeStore.save(loginCode, LoginCodePayload.builder()
+					.memberId(member.getId())
+					.newMember(result.newMember())
+					.agreedRequiredTerms(member.isTermsAgreed() && member.isPrivacyAgreed())
+					.activeTeamId(activeTeamService.resolveActiveTeamId(member))
+					.build());
 			return loginCode;
 		} catch (OAuthAuthenticationException e) {
 			log.warn("OAuth authentication failed. provider={}, reason={}", provider, e.getMessage());
@@ -128,24 +126,16 @@ public class AuthService {
 		}
 	}
 
-	@Transactional
 	public LoginResponse exchangeLoginCode(String code) {
-		LoginCode loginCode = loginCodeRepository.findByCodeForUpdate(code)
+		LoginCodePayload payload = loginCodeStore.consume(code)
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH106));
-		if (loginCode.isExpired()) {
-			throw new BusinessException(ErrorCode.AUTH107);
-		}
-		if (loginCode.isUsed()) {
-			throw new BusinessException(ErrorCode.AUTH108);
-		}
-		loginCode.markUsed();
-		TokenResponse token = tokenService.issueToken(loginCode.getMemberId());
+		TokenResponse token = tokenService.issueToken(payload.getMemberId());
 		return new LoginResponse(
 				token.accessToken(),
 				token.refreshToken(),
-				loginCode.isNewMember(),
-				loginCode.isAgreedRequiredTerms(),
-				loginCode.getActiveTeamId()
+				payload.isNewMember(),
+				payload.isAgreedRequiredTerms(),
+				payload.getActiveTeamId()
 		);
 	}
 
