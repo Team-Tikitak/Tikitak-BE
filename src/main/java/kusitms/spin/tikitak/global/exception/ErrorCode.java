@@ -29,8 +29,6 @@ public enum ErrorCode {
     AUTH104("AUTH104", "OAuth 인증에 실패했습니다.", 401),
     AUTH105("AUTH105", "OAuth 콜백 처리에 실패했습니다.", 500),
     AUTH106("AUTH106", "유효하지 않은 loginCode입니다.", 400),
-    AUTH107("AUTH107", "만료된 loginCode입니다.", 401),
-    AUTH108("AUTH108", "이미 사용된 loginCode입니다.", 401),
 
     // Me
     ME001("ME001", "회원 정보를 찾을 수 없습니다.", 404),
