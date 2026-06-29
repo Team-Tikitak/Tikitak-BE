@@ -29,8 +29,6 @@ public enum ErrorCode {
     AUTH104("AUTH104", "OAuth 인증에 실패했습니다.", 401),
     AUTH105("AUTH105", "OAuth 콜백 처리에 실패했습니다.", 500),
     AUTH106("AUTH106", "유효하지 않은 loginCode입니다.", 400),
-    AUTH107("AUTH107", "만료된 loginCode입니다.", 401),
-    AUTH108("AUTH108", "이미 사용된 loginCode입니다.", 401),
 
     // Me
     ME001("ME001", "회원 정보를 찾을 수 없습니다.", 404),
@@ -72,6 +70,7 @@ public enum ErrorCode {
 
     // Member
     MEMBER001("MEMBER001", "존재하지 않는 사용자입니다.", 404),
+    MEMBER002("MEMBER002", "온보딩이 완료되지 않아 기본 캐릭터가 설정되지 않았습니다.", 400),
 
     // Team
     TEAM001("TEAM001", "존재하지 않는 팀입니다", 404),

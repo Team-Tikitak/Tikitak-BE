@@ -1,10 +1,13 @@
 package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
+import kusitms.spin.tikitak.global.exception.BusinessException;
+import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -21,8 +24,10 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeamAndCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -50,7 +55,7 @@ class TeamInvitationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("초대 링크 참여 후 참여한 팀을 활성 팀으로 선택한다")
 	void acceptInviteLinkChangesActiveTeamToJoinedTeam() {
-		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		Member member = activeMemberWithActiveTeamAndCharacterType(MEMBER_ID, 99L, ProfileCharacterType.TAK_LEADER);
 		Team team = activeTeam(TEAM_ID);
 		TeamInvite invite = TeamInvite.builder()
 				.team(team)
@@ -74,5 +79,30 @@ class TeamInvitationServiceTest extends UnitTest {
 
 		assertThat(response.getTeamId()).isEqualTo(TEAM_ID);
 		assertThat(member.getActiveTeamId()).isEqualTo(TEAM_ID);
+	}
+
+	@Test
+	@DisplayName("기본 캐릭터가 없는 멤버가 초대 링크로 참여하면 MEMBER002 예외가 발생한다")
+	void acceptInviteLinkThrowsWhenMemberHasNoProfileCharacterType() {
+		Member member = activeMemberWithActiveTeam(MEMBER_ID, 99L);
+		Team team = activeTeam(TEAM_ID);
+		TeamInvite invite = TeamInvite.builder()
+				.team(team)
+				.inviteToken(TOKEN)
+				.expiresAt(LocalDateTime.now().plusDays(1))
+				.active(true)
+				.build();
+
+		when(teamInviteRepository.findByInviteToken(TOKEN)).thenReturn(Optional.of(invite));
+		when(teamRepository.findByIdForUpdate(TEAM_ID)).thenReturn(Optional.of(team));
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+
+		assertThatThrownBy(() -> teamInvitationService.acceptInviteLink(
+				MEMBER_ID,
+				TOKEN,
+				new TeamInvitationRequestDTO.JoinTeamRequestDTO("닉네임", null)
+		))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEMBER002));
 	}
 }

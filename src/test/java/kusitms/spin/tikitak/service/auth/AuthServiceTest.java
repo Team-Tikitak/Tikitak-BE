@@ -1,12 +1,11 @@
 package kusitms.spin.tikitak.service.auth;
 
-import kusitms.spin.tikitak.domain.auth.LoginCode;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.auth.LoginCodeRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
+import kusitms.spin.tikitak.service.auth.dto.LoginCodePayload;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
@@ -18,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 import java.net.URI;
 
@@ -28,6 +26,7 @@ import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWit
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,7 +54,7 @@ class AuthServiceTest extends UnitTest {
 	private ActiveTeamService activeTeamService;
 
 	@Mock
-	private LoginCodeRepository loginCodeRepository;
+	private LoginCodeStore loginCodeStore;
 
 	@InjectMocks
 	private AuthService authService;
@@ -195,29 +194,24 @@ class AuthServiceTest extends UnitTest {
 				kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE
 		)).thenReturn(Optional.of(member));
 		when(activeTeamService.resolveActiveTeamId(member)).thenReturn(10L);
-		when(loginCodeRepository.save(any(LoginCode.class))).thenAnswer(i -> i.getArgument(0));
 
 		String loginCode = authService.issueAppLoginCode("kakao", "code", "state", "state");
 
 		assertThat(loginCode).isNotBlank().hasSize(64);
-		verify(loginCodeRepository).save(any(LoginCode.class));
+		verify(loginCodeStore).save(eq(loginCode), any(LoginCodePayload.class));
 	}
 
 	@Test
 	@DisplayName("유효한 loginCode 교환은 access token과 refresh token을 반환한다")
 	void exchangeLoginCodeReturnsTokensForValidCode() {
-		LoginCode loginCode = LoginCode.builder()
-				.code("validcode")
+		LoginCodePayload payload = LoginCodePayload.builder()
 				.memberId(1L)
 				.newMember(true)
 				.agreedRequiredTerms(false)
 				.activeTeamId(null)
-				.expiresAt(LocalDateTime.now().plusMinutes(5))
-				.used(false)
-				.createdAt(LocalDateTime.now())
 				.build();
 		TokenResponse token = tokenResponse();
-		when(loginCodeRepository.findByCodeForUpdate("validcode")).thenReturn(Optional.of(loginCode));
+		when(loginCodeStore.consume("validcode")).thenReturn(Optional.of(payload));
 		when(tokenService.issueToken(1L)).thenReturn(token);
 
 		LoginResponse response = authService.exchangeLoginCode("validcode");
@@ -227,13 +221,13 @@ class AuthServiceTest extends UnitTest {
 		assertThat(response.isNewMember()).isTrue();
 		assertThat(response.hasAgreedRequiredTerms()).isFalse();
 		assertThat(response.activeTeamId()).isNull();
-		assertThat(loginCode.isUsed()).isTrue();
+		verify(loginCodeStore).consume("validcode");
 	}
 
 	@Test
 	@DisplayName("존재하지 않는 loginCode 교환은 AUTH106 예외가 발생한다")
 	void exchangeLoginCodeThrowsWhenCodeNotFound() {
-		when(loginCodeRepository.findByCodeForUpdate("unknown")).thenReturn(Optional.empty());
+		when(loginCodeStore.consume("unknown")).thenReturn(Optional.empty());
 
 		assertThatThrownBy(() -> authService.exchangeLoginCode("unknown"))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -241,42 +235,41 @@ class AuthServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("만료된 loginCode 교환은 AUTH107 예외가 발생한다")
-	void exchangeLoginCodeThrowsWhenCodeExpired() {
-		LoginCode expiredLoginCode = LoginCode.builder()
-				.code("expiredcode")
+	@DisplayName("이미 소비된 loginCode 재교환은 AUTH106 예외가 발생한다")
+	void exchangeLoginCodeThrowsWhenCodeAlreadyConsumed() {
+		LoginCodePayload payload = LoginCodePayload.builder()
 				.memberId(1L)
 				.newMember(false)
 				.agreedRequiredTerms(true)
 				.activeTeamId(null)
-				.expiresAt(LocalDateTime.now().minusMinutes(1))
-				.used(false)
-				.createdAt(LocalDateTime.now().minusMinutes(10))
 				.build();
-		when(loginCodeRepository.findByCodeForUpdate("expiredcode")).thenReturn(Optional.of(expiredLoginCode));
+		when(loginCodeStore.consume("usedcode"))
+				.thenReturn(Optional.of(payload))
+				.thenReturn(Optional.empty());
+		when(tokenService.issueToken(1L)).thenReturn(tokenResponse());
 
-		assertThatThrownBy(() -> authService.exchangeLoginCode("expiredcode"))
-				.isInstanceOfSatisfying(BusinessException.class, exception ->
-						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH107));
-	}
-
-	@Test
-	@DisplayName("이미 사용된 loginCode 교환은 AUTH108 예외가 발생한다")
-	void exchangeLoginCodeThrowsWhenCodeAlreadyUsed() {
-		LoginCode usedLoginCode = LoginCode.builder()
-				.code("usedcode")
-				.memberId(1L)
-				.newMember(false)
-				.agreedRequiredTerms(true)
-				.activeTeamId(null)
-				.expiresAt(LocalDateTime.now().plusMinutes(5))
-				.used(true)
-				.createdAt(LocalDateTime.now())
-				.build();
-		when(loginCodeRepository.findByCodeForUpdate("usedcode")).thenReturn(Optional.of(usedLoginCode));
+		authService.exchangeLoginCode("usedcode");
 
 		assertThatThrownBy(() -> authService.exchangeLoginCode("usedcode"))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
-						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH108));
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH106));
+	}
+
+	@Test
+	@DisplayName("토큰 발급이 실패하면 소비했던 loginCode를 복구해 재시도할 수 있게 한다")
+	void exchangeLoginCodeRestoresCodeWhenTokenIssuanceFails() {
+		LoginCodePayload payload = LoginCodePayload.builder()
+				.memberId(1L)
+				.newMember(true)
+				.agreedRequiredTerms(false)
+				.activeTeamId(10L)
+				.build();
+		when(loginCodeStore.consume("validcode")).thenReturn(Optional.of(payload));
+		when(tokenService.issueToken(1L)).thenThrow(new RuntimeException("token issuance failed"));
+
+		assertThatThrownBy(() -> authService.exchangeLoginCode("validcode"))
+				.isInstanceOf(RuntimeException.class);
+
+		verify(loginCodeStore).save("validcode", payload);
 	}
 }

@@ -34,10 +34,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 auth:
   oauth:
@@ -59,6 +62,9 @@ auth:
       key-id: ${APPLE_KEY_ID}
       private-key: ${APPLE_PRIVATE_KEY}
       redirect-uri: ${APPLE_REDIRECT_URI}
+  login-code:
+    redis-key-prefix: "${LOGIN_CODE_REDIS_KEY_PREFIX:tikitak:${spring.profiles.active:local}:auth:login-code:}"
+    ttl: ${LOGIN_CODE_TTL:PT5M}
   jwt:
     secret: ${JWT_SECRET:}
     access-token-expires-in: ${JWT_ACCESS_TOKEN_EXPIRES_IN:3600}
