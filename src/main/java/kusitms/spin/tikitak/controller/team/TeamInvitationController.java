@@ -27,7 +27,7 @@ public class TeamInvitationController {
 	private final TeamInvitationService teamInvitationService;
 
 	@PutMapping("/teams/{teamId}/invitation-link")
-	@Operation(summary = "초대 링크 생성/재발급 API", description = "팀장만 사용할 수 있습니다.")
+	@Operation(summary = "초대 링크 생성/재발급 API", description = "팀장 및 팀원 모두 사용할 수 있습니다.")
 	public CommonResponse<TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO> generateOrReissueInviteLink(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,
 			@PathVariable Long teamId

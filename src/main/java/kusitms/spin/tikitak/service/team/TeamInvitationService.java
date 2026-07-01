@@ -52,10 +52,6 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
 		}
 
-		if (caller.getRole() != TeamMemberRole.OWNER) {
-			throw new BusinessException(ErrorCode.INVITE001);
-		}
-
 		String newToken = UUID.randomUUID().toString().replace("-", "");
 		LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(INVITE_EXPIRE_DAYS);
 
