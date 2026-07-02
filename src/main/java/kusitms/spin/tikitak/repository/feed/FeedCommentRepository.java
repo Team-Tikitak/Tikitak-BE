@@ -32,6 +32,7 @@ public interface FeedCommentRepository extends JpaRepository<FeedComment, Long> 
 			where fc.feedImage.id = :feedImageId
 				and fc.positionX = :positionX
 				and fc.positionY = :positionY
+				and fc.teamMember.status = 'ACTIVE'
 				and fc.deleted = false
 			""")
 	List<Long> findDistinctMemberIdsByPosition(
