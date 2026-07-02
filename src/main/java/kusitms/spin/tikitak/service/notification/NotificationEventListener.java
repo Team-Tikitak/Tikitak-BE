@@ -3,6 +3,7 @@ package kusitms.spin.tikitak.service.notification;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
 import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,22 @@ public class NotificationEventListener {
 				.type(NotificationType.FEED_COMMENT)
 				.title("새 댓글이 도착했어요")
 				.body(event.actorNickname() + "님이 댓글을 남겼어요.")
+				.data(Map.of(
+						"feedId", String.valueOf(event.feedId()),
+						"teamId", String.valueOf(event.teamId())
+				))
+				.build();
+
+		notificationService.send(event.recipientMemberId(), payload);
+	}
+
+	@Async("notificationExecutor")
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	public void handleFeedCommentReplied(FeedCommentRepliedEvent event) {
+		NotificationPayload payload = NotificationPayload.builder()
+				.type(NotificationType.FEED_COMMENT_REPLIED)
+				.title("새 댓글이 도착했어요")
+				.body(event.actorNickname() + "님이 회원님의 댓글에 답글을 남겼어요.")
 				.data(Map.of(
 						"feedId", String.valueOf(event.feedId()),
 						"teamId", String.valueOf(event.teamId())
