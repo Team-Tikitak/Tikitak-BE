@@ -4,6 +4,7 @@ import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedComment;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -108,6 +109,13 @@ public class FeedCommentService {
 			eventPublisher.publishEvent(
 					new FeedCommentCreatedEvent(feedOwnerMemberId, author.getNickname(), feed.getId(), teamId));
 		}
+
+		feedCommentRepository.findDistinctMemberIdsByPosition(
+						feedImage.getId(), savedComment.getPositionX(), savedComment.getPositionY())
+				.stream()
+				.filter(id -> !id.equals(memberId) && !id.equals(feedOwnerMemberId))
+				.forEach(recipientId -> eventPublisher.publishEvent(
+						new FeedCommentRepliedEvent(recipientId, author.getNickname(), feed.getId(), teamId)));
 
 		return toCommentItem(savedComment, author.getId());
 	}

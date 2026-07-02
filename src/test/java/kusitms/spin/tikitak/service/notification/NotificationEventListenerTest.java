@@ -3,6 +3,7 @@ package kusitms.spin.tikitak.service.notification;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
 import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,24 @@ class NotificationEventListenerTest extends UnitTest {
 
 		NotificationPayload payload = captor.getValue();
 		assertThat(payload.getType()).isEqualTo(NotificationType.FEED_COMMENT);
+		assertThat(payload.getTitle()).isNotBlank();
+		assertThat(payload.getBody()).contains("현우");
+		assertThat(payload.getData()).containsEntry("feedId", "10");
+		assertThat(payload.getData()).containsEntry("teamId", "100");
+	}
+
+	@Test
+	@DisplayName("대댓글 이벤트를 받으면 수신자에게 FEED_COMMENT_REPLIED 알림을 전송한다")
+	void handleFeedCommentRepliedSendsNotificationToRecipient() {
+		FeedCommentRepliedEvent event = new FeedCommentRepliedEvent(5L, "현우", 10L, 100L);
+
+		notificationEventListener.handleFeedCommentReplied(event);
+
+		ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
+		verify(notificationService).send(eq(5L), captor.capture());
+
+		NotificationPayload payload = captor.getValue();
+		assertThat(payload.getType()).isEqualTo(NotificationType.FEED_COMMENT_REPLIED);
 		assertThat(payload.getTitle()).isNotBlank();
 		assertThat(payload.getBody()).contains("현우");
 		assertThat(payload.getData()).containsEntry("feedId", "10");
