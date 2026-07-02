@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.notification.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import lombok.AllArgsConstructor;
@@ -32,6 +33,7 @@ public class NotificationResponseDTO {
 		private String body;
 		private Long teamId;
 		private Long feedId;
+		@JsonProperty("isRead")
 		private boolean isRead;
 		private LocalDateTime createdAt;
 	}
