@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -24,6 +25,21 @@ public interface FeedCommentRepository extends JpaRepository<FeedComment, Long> 
 			group by fc.feed.id
 			""")
 	List<Object[]> countByFeedIds(@Param("feedIds") Collection<Long> feedIds);
+
+	@Query("""
+			select distinct fc.teamMember.member.id
+			from FeedComment fc
+			where fc.feedImage.id = :feedImageId
+				and fc.positionX = :positionX
+				and fc.positionY = :positionY
+				and fc.teamMember.status = 'ACTIVE'
+				and fc.deleted = false
+			""")
+	List<Long> findDistinctMemberIdsByPosition(
+			@Param("feedImageId") Long feedImageId,
+			@Param("positionX") BigDecimal positionX,
+			@Param("positionY") BigDecimal positionY
+	);
 
 	@EntityGraph(attributePaths = { "teamMember", "feedImage" })
 	@Query("""
