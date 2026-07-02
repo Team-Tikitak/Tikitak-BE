@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.feed.entity.FeedComment;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
@@ -49,11 +50,13 @@ class FeedCommentServiceTest extends UnitTest {
 
 	private static final Long MEMBER_ID = 1L;
 	private static final Long OTHER_MEMBER_ID = 2L;
+	private static final Long THIRD_MEMBER_ID = 3L;
 	private static final Long TEAM_ID = 10L;
 	private static final Long FEED_ID = 25L;
 	private static final Long FEED_IMAGE_ID = 33L;
 	private static final Long TEAM_MEMBER_ID = 101L;
 	private static final Long OTHER_TEAM_MEMBER_ID = 102L;
+	private static final Long THIRD_TEAM_MEMBER_ID = 103L;
 
 	@Mock
 	private FeedRepository feedRepository;
@@ -80,6 +83,7 @@ class FeedCommentServiceTest extends UnitTest {
 	private Team team;
 	private TeamMember viewer;
 	private TeamMember otherTeamMember;
+	private TeamMember thirdTeamMember;
 	private Feed feed;
 	private FeedImage feedImage;
 
@@ -97,9 +101,12 @@ class FeedCommentServiceTest extends UnitTest {
 		team = activeTeam(TEAM_ID);
 		Member member = kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember(MEMBER_ID);
 		Member otherMember = kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember(OTHER_MEMBER_ID);
+		Member thirdMember = kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember(THIRD_MEMBER_ID);
 		viewer = kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember(TEAM_MEMBER_ID, member, team);
 		otherTeamMember = kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember(
 				OTHER_TEAM_MEMBER_ID, otherMember, team);
+		thirdTeamMember = kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember(
+				THIRD_TEAM_MEMBER_ID, thirdMember, team);
 		feed = feed(FEED_ID, viewer);
 		feedImage = feedImage(FEED_IMAGE_ID, feed);
 	}
@@ -162,6 +169,68 @@ class FeedCommentServiceTest extends UnitTest {
 		assertThat(event.actorNickname()).isEqualTo(viewer.getNickname());
 		assertThat(event.feedId()).isEqualTo(FEED_ID);
 		assertThat(event.teamId()).isEqualTo(TEAM_ID);
+	}
+
+	@Test
+	@DisplayName("같은 위치에 이미 댓글을 단 사람에게 대댓글 알림 이벤트가 발행된다")
+	void createCommentPublishesRepliedEventToPreviousCommenters() {
+		Feed otherFeed = feed(FEED_ID, otherTeamMember);
+		FeedImage otherFeedImage = feedImage(FEED_IMAGE_ID, otherFeed);
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(otherFeed));
+		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(otherFeedImage));
+		when(feedCommentRepository.save(any(FeedComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(feedCommentRepository.findDistinctMemberIdsByPosition(
+				eq(FEED_IMAGE_ID), any(), any())).thenReturn(List.of(THIRD_MEMBER_ID));
+
+		feedCommentService.createComment(MEMBER_ID, TEAM_ID, FEED_ID, validCreateRequest());
+
+		ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+		verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(captor.capture());
+		List<Object> events = captor.getAllValues();
+		assertThat(events).anyMatch(e -> e instanceof FeedCommentCreatedEvent ce
+				&& ce.recipientMemberId().equals(OTHER_MEMBER_ID));
+		assertThat(events).anyMatch(e -> e instanceof FeedCommentRepliedEvent re
+				&& re.recipientMemberId().equals(THIRD_MEMBER_ID)
+				&& re.actorNickname().equals(viewer.getNickname()));
+	}
+
+	@Test
+	@DisplayName("같은 위치 기존 댓글 작성자가 피드 작성자이면 대댓글 알림 이벤트를 발행하지 않는다")
+	void createCommentDoesNotPublishRepliedEventToFeedOwner() {
+		Feed otherFeed = feed(FEED_ID, otherTeamMember);
+		FeedImage otherFeedImage = feedImage(FEED_IMAGE_ID, otherFeed);
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(otherFeed));
+		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(otherFeedImage));
+		when(feedCommentRepository.save(any(FeedComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(feedCommentRepository.findDistinctMemberIdsByPosition(
+				eq(FEED_IMAGE_ID), any(), any())).thenReturn(List.of(OTHER_MEMBER_ID));
+
+		feedCommentService.createComment(MEMBER_ID, TEAM_ID, FEED_ID, validCreateRequest());
+
+		ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+		verify(eventPublisher).publishEvent(captor.capture());
+		assertThat(captor.getValue()).isInstanceOf(FeedCommentCreatedEvent.class);
+	}
+
+	@Test
+	@DisplayName("같은 위치 기존 댓글 작성자가 본인이면 대댓글 알림 이벤트를 발행하지 않는다")
+	void createCommentDoesNotPublishRepliedEventToSelf() {
+		Feed otherFeed = feed(FEED_ID, otherTeamMember);
+		FeedImage otherFeedImage = feedImage(FEED_IMAGE_ID, otherFeed);
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(otherFeed));
+		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(otherFeedImage));
+		when(feedCommentRepository.save(any(FeedComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(feedCommentRepository.findDistinctMemberIdsByPosition(
+				eq(FEED_IMAGE_ID), any(), any())).thenReturn(List.of(MEMBER_ID));
+
+		feedCommentService.createComment(MEMBER_ID, TEAM_ID, FEED_ID, validCreateRequest());
+
+		ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+		verify(eventPublisher).publishEvent(captor.capture());
+		assertThat(captor.getValue()).isInstanceOf(FeedCommentCreatedEvent.class);
 	}
 
 	@Test
