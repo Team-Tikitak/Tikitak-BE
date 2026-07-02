@@ -34,7 +34,11 @@ public class NotificationEventListener {
 				))
 				.build();
 
-		notificationService.send(event.recipientMemberId(), payload);
+		try {
+			notificationService.send(event.recipientMemberId(), payload);
+		} catch (Exception e) {
+			log.error("알림 전송 중 예외가 발생했습니다. memberId={}, type={}", event.recipientMemberId(), payload.getType(), e);
+		}
 	}
 
 	@Async("notificationExecutor")
@@ -50,7 +54,11 @@ public class NotificationEventListener {
 				))
 				.build();
 
-		notificationService.send(event.recipientMemberId(), payload);
+		try {
+			notificationService.send(event.recipientMemberId(), payload);
+		} catch (Exception e) {
+			log.error("알림 전송 중 예외가 발생했습니다. memberId={}, type={}", event.recipientMemberId(), payload.getType(), e);
+		}
 	}
 
 	@Async("notificationExecutor")
