@@ -6,10 +6,15 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.SendResponse;
 import kusitms.spin.tikitak.domain.notification.entity.MemberDeviceToken;
+import kusitms.spin.tikitak.domain.notification.entity.Notification;
 import kusitms.spin.tikitak.domain.notification.enums.DevicePlatform;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
+import kusitms.spin.tikitak.global.exception.BusinessException;
+import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
+import kusitms.spin.tikitak.repository.notification.NotificationRepository;
 import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
+import kusitms.spin.tikitak.service.notification.dto.NotificationResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,9 +25,13 @@ import java.util.List;
 import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
+import static kusitms.spin.tikitak.support.fixture.MemberFixture.inactiveMember;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,26 +41,46 @@ import static org.mockito.Mockito.when;
 class NotificationServiceTest extends UnitTest {
 
 	@Mock
+	private MemberRepository memberRepository;
+
+	@Mock
 	private MemberDeviceTokenRepository deviceTokenRepository;
+
+	@Mock
+	private NotificationRepository notificationRepository;
 
 	@Mock
 	private FirebaseMessaging firebaseMessaging;
 
 	@Test
-	@DisplayName("FCM이 설정되지 않은 경우 알림을 전송하지 않는다")
-	void doesNotSendWhenFirebaseMessagingIsNotConfigured() {
-		NotificationService notificationService = new NotificationService(deviceTokenRepository, Optional.empty());
+	@DisplayName("존재하지 않거나 탈퇴한 회원에게는 알림을 저장/전송하지 않는다")
+	void doesNotSaveOrSendWhenMemberIsNotActive() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(inactiveMember(1L)));
 
 		notificationService.send(1L, somePayload());
 
+		verify(notificationRepository, never()).save(any());
+		verifyNoInteractions(deviceTokenRepository);
+	}
+
+	@Test
+	@DisplayName("FCM이 설정되지 않은 경우에도 알림은 저장하되 전송하지 않는다")
+	void doesNotSendWhenFirebaseMessagingIsNotConfigured() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
+
+		notificationService.send(1L, somePayload());
+
+		verify(notificationRepository).save(any(Notification.class));
 		verifyNoInteractions(deviceTokenRepository);
 	}
 
 	@Test
 	@DisplayName("등록된 디바이스 토큰이 없으면 FCM을 호출하지 않는다")
 	void doesNotCallFcmWhenNoDeviceTokens() {
-		NotificationService notificationService =
-				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
 		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of());
 
 		notificationService.send(1L, somePayload());
@@ -62,8 +91,8 @@ class NotificationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("전송 결과가 UNREGISTERED 오류이면 해당 디바이스 토큰을 삭제한다")
 	void deletesDeviceTokenWhenUnregistered() throws Exception {
-		NotificationService notificationService =
-				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
 		MemberDeviceToken deviceToken = deviceToken("token-1");
 		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
 
@@ -85,8 +114,8 @@ class NotificationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("전송에 성공하면 디바이스 토큰을 삭제하지 않는다")
 	void doesNotDeleteDeviceTokenOnSuccess() throws Exception {
-		NotificationService notificationService =
-				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
 		MemberDeviceToken deviceToken = deviceToken("token-1");
 		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
 
@@ -105,8 +134,8 @@ class NotificationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("전송 결과가 UNREGISTERED 이외의 오류이면 디바이스 토큰을 삭제하지 않는다")
 	void doesNotDeleteDeviceTokenOnOtherErrorCodes() throws Exception {
-		NotificationService notificationService =
-				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
 		MemberDeviceToken deviceToken = deviceToken("token-1");
 		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
 
@@ -128,8 +157,8 @@ class NotificationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("등록된 모든 디바이스 토큰으로 전송하고 실패한 토큰만 삭제한다")
 	void sendsToAllDeviceTokensAndDeletesOnlyFailedOnes() throws Exception {
-		NotificationService notificationService =
-				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
 		MemberDeviceToken validToken = deviceToken("token-valid");
 		MemberDeviceToken invalidToken = deviceToken("token-invalid");
 		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(validToken, invalidToken));
@@ -157,8 +186,8 @@ class NotificationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("FCM 전송 중 예외가 발생해도 호출자에게 전파하지 않는다")
 	void doesNotPropagateExceptionWhenFcmCallFails() throws Exception {
-		NotificationService notificationService =
-				new NotificationService(deviceTokenRepository, Optional.of(firebaseMessaging));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
 		MemberDeviceToken deviceToken = deviceToken("token-1");
 		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
 
@@ -168,6 +197,84 @@ class NotificationServiceTest extends UnitTest {
 		notificationService.send(1L, somePayload());
 
 		verify(deviceTokenRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("커서 없이 알림 목록을 조회하면 최신순 첫 페이지를 반환한다")
+	void listsFirstPageWhenCursorIsAbsent() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		Notification notification = notification(1L, false);
+		when(notificationRepository.findFirstPage(eq(1L), any())).thenReturn(List.of(notification));
+		when(notificationRepository.countByMemberId(1L)).thenReturn(1L);
+
+		NotificationResponseDTO.NotificationListResponseDTO response =
+				notificationService.listNotifications(1L, null, null);
+
+		assertThat(response.getItems()).hasSize(1);
+		assertThat(response.getItems().get(0).getNotificationId()).isEqualTo(1L);
+		assertThat(response.getPageInfo().isHasNext()).isFalse();
+		assertThat(response.getPageInfo().getTotalCount()).isEqualTo(1L);
+	}
+
+	@Test
+	@DisplayName("안읽은 알림 개수를 조회한다")
+	void returnsUnreadCount() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		when(notificationRepository.countByMemberIdAndIsReadFalse(1L)).thenReturn(3L);
+
+		NotificationResponseDTO.UnreadCountResponseDTO response = notificationService.getUnreadCount(1L);
+
+		assertThat(response.getUnreadCount()).isEqualTo(3L);
+	}
+
+	@Test
+	@DisplayName("본인 소유의 알림을 읽음 처리한다")
+	void marksOwnNotificationAsRead() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		Notification notification = notification(1L, false);
+		when(notificationRepository.findByIdAndMemberId(1L, 1L)).thenReturn(Optional.of(notification));
+
+		notificationService.markAsRead(1L, 1L);
+
+		assertThat(notification.isRead()).isTrue();
+	}
+
+	@Test
+	@DisplayName("존재하지 않거나 본인 소유가 아닌 알림을 읽음 처리하면 예외가 발생한다")
+	void throwsWhenMarkingNotOwnedNotificationAsRead() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		when(notificationRepository.findByIdAndMemberId(1L, 1L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> notificationService.markAsRead(1L, 1L))
+				.isInstanceOf(BusinessException.class);
+	}
+
+	@Test
+	@DisplayName("전체 알림을 읽음 처리하면 벌크 업데이트를 호출한다")
+	void marksAllNotificationsAsRead() {
+		NotificationService notificationService = notificationService(Optional.empty());
+
+		notificationService.markAllAsRead(1L);
+
+		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), any(LocalDateTime.class));
+	}
+
+	private NotificationService notificationService(Optional<FirebaseMessaging> firebaseMessaging) {
+		return new NotificationService(memberRepository, deviceTokenRepository, notificationRepository, firebaseMessaging);
+	}
+
+	private Notification notification(Long id, boolean isRead) {
+		return Notification.builder()
+				.id(id)
+				.member(activeMember(1L))
+				.type(NotificationType.FEED_COMMENT)
+				.title("title")
+				.body("body")
+				.teamId(10L)
+				.feedId(20L)
+				.isRead(isRead)
+				.createdAt(LocalDateTime.now())
+				.build();
 	}
 
 	private MemberDeviceToken deviceToken(String fcmToken) {
