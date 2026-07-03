@@ -28,16 +28,18 @@ public class NotificationController {
 	@GetMapping
 	@Operation(
 			summary = "알림 목록 조회",
-			description = "현재 로그인한 사용자의 알림 목록을 생성일시 내림차순으로 조회합니다."
+			description = "현재 로그인한 사용자의 알림 목록을 생성일시 내림차순으로 조회합니다. teamId를 전달하면 해당 팀에서 발생한 알림만 조회합니다."
 	)
 	public CommonResponse<NotificationResponseDTO.NotificationListResponseDTO> listNotifications(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@Parameter(description = "조회할 팀 ID. 전달 시 해당 팀 알림만 조회합니다.")
+			@RequestParam(required = false) Long teamId,
 			@Parameter(description = "다음 페이지 조회용 커서. 형식: createdAt_notificationId")
 			@RequestParam(required = false) String cursor,
 			@Parameter(description = "조회 개수. 기본값 20, 최대 50")
 			@RequestParam(required = false) Integer size
 	) {
-		return CommonResponse.success(notificationService.listNotifications(memberId, cursor, size));
+		return CommonResponse.success(notificationService.listNotifications(memberId, teamId, cursor, size));
 	}
 
 	@GetMapping("/unread-count")

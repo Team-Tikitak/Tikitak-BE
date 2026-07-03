@@ -17,14 +17,16 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 			select n
 			from Notification n
 			where n.member.id = :memberId
+				and (:teamId is null or n.teamId = :teamId)
 			order by n.createdAt desc, n.id desc
 			""")
-	List<Notification> findFirstPage(@Param("memberId") Long memberId, Pageable pageable);
+	List<Notification> findFirstPage(@Param("memberId") Long memberId, @Param("teamId") Long teamId, Pageable pageable);
 
 	@Query("""
 			select n
 			from Notification n
 			where n.member.id = :memberId
+				and (:teamId is null or n.teamId = :teamId)
 				and (
 					n.createdAt < :cursorCreatedAt
 					or (n.createdAt = :cursorCreatedAt and n.id < :cursorId)
@@ -33,12 +35,19 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 			""")
 	List<Notification> findCursorPage(
 			@Param("memberId") Long memberId,
+			@Param("teamId") Long teamId,
 			@Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
 			@Param("cursorId") Long cursorId,
 			Pageable pageable
 	);
 
-	long countByMemberId(Long memberId);
+	@Query("""
+			select count(n)
+			from Notification n
+			where n.member.id = :memberId
+				and (:teamId is null or n.teamId = :teamId)
+			""")
+	long countByMemberIdAndTeamId(@Param("memberId") Long memberId, @Param("teamId") Long teamId);
 
 	long countByMemberIdAndIsReadFalse(Long memberId);
 
