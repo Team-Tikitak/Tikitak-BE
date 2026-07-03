@@ -58,7 +58,7 @@ class NotificationControllerTest extends ApiTest {
 						.totalCount(1L)
 						.build())
 				.build();
-		when(notificationService.listNotifications(eq(TEST_MEMBER_ID), isNull(), isNull())).thenReturn(response);
+		when(notificationService.listNotifications(eq(TEST_MEMBER_ID), isNull(), isNull(), isNull())).thenReturn(response);
 
 		mockMvc.perform(get("/api/v1/me/notifications"))
 				.andExpect(status().isOk())
