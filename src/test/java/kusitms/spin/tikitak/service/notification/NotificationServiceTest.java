@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -204,11 +205,11 @@ class NotificationServiceTest extends UnitTest {
 	void listsFirstPageWhenCursorIsAbsent() {
 		NotificationService notificationService = notificationService(Optional.empty());
 		Notification notification = notification(1L, false);
-		when(notificationRepository.findFirstPage(eq(1L), any())).thenReturn(List.of(notification));
-		when(notificationRepository.countByMemberId(1L)).thenReturn(1L);
+		when(notificationRepository.findFirstPage(eq(1L), isNull(), any())).thenReturn(List.of(notification));
+		when(notificationRepository.countByMemberIdAndTeamId(1L, null)).thenReturn(1L);
 
 		NotificationResponseDTO.NotificationListResponseDTO response =
-				notificationService.listNotifications(1L, null, null);
+				notificationService.listNotifications(1L, null, null, null);
 
 		assertThat(response.getItems()).hasSize(1);
 		assertThat(response.getItems().get(0).getNotificationId()).isEqualTo(1L);

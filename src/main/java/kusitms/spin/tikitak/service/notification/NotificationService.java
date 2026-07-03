@@ -85,15 +85,15 @@ public class NotificationService {
 				.build();
 	}
 
-	public NotificationResponseDTO.NotificationListResponseDTO listNotifications(Long memberId, String cursor, Integer size) {
+	public NotificationResponseDTO.NotificationListResponseDTO listNotifications(Long memberId, Long teamId, String cursor, Integer size) {
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
 
 		List<Notification> notifications = parsedCursor.createdAt() == null
-				? notificationRepository.findFirstPage(memberId, PageRequest.of(0, pageSize + 1))
+				? notificationRepository.findFirstPage(memberId, teamId, PageRequest.of(0, pageSize + 1))
 				: notificationRepository.findCursorPage(
-						memberId, parsedCursor.createdAt(), parsedCursor.id(), PageRequest.of(0, pageSize + 1));
-		long totalCount = notificationRepository.countByMemberId(memberId);
+						memberId, teamId, parsedCursor.createdAt(), parsedCursor.id(), PageRequest.of(0, pageSize + 1));
+		long totalCount = notificationRepository.countByMemberIdAndTeamId(memberId, teamId);
 
 		boolean hasNext = notifications.size() > pageSize;
 		List<Notification> items = hasNext ? notifications.subList(0, pageSize) : notifications;
