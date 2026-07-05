@@ -47,6 +47,9 @@ class NotificationControllerTest extends ApiTest {
 				.body("body")
 				.teamId(10L)
 				.feedId(20L)
+				.profileImageUrl("https://example.com/profile.png")
+				.thumbnailImageUrl("https://example.com/feed-thumb.png")
+				.heroPreviewUrl("https://example.com/feed-hero.png")
 				.isRead(false)
 				.createdAt(LocalDateTime.of(2026, 3, 4, 20, 30))
 				.build();
@@ -64,6 +67,9 @@ class NotificationControllerTest extends ApiTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.items[0].notificationId").value(1L))
+				.andExpect(jsonPath("$.data.items[0].profileImageUrl").value("https://example.com/profile.png"))
+				.andExpect(jsonPath("$.data.items[0].thumbnailImageUrl").value("https://example.com/feed-thumb.png"))
+				.andExpect(jsonPath("$.data.items[0].heroPreviewUrl").value("https://example.com/feed-hero.png"))
 				.andExpect(jsonPath("$.data.pageInfo.totalCount").value(1L));
 	}
 

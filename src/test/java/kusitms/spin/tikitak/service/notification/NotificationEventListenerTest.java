@@ -27,9 +27,9 @@ class NotificationEventListenerTest extends UnitTest {
 	private NotificationEventListener notificationEventListener;
 
 	@Test
-	@DisplayName("피드 댓글 생성 이벤트를 받으면 피드 작성자에게 알림을 전송한다")
+	@DisplayName("FeedCommentCreatedEvent sends notification with actor team member id")
 	void handleFeedCommentCreatedSendsNotificationToRecipient() {
-		FeedCommentCreatedEvent event = new FeedCommentCreatedEvent(1L, "현우", 10L, 100L);
+		FeedCommentCreatedEvent event = new FeedCommentCreatedEvent(1L, 7L, "actor", 10L, 100L);
 
 		notificationEventListener.handleFeedCommentCreated(event);
 
@@ -38,16 +38,17 @@ class NotificationEventListenerTest extends UnitTest {
 
 		NotificationPayload payload = captor.getValue();
 		assertThat(payload.getType()).isEqualTo(NotificationType.FEED_COMMENT);
+		assertThat(payload.getActorTeamMemberId()).isEqualTo(7L);
 		assertThat(payload.getTitle()).isNotBlank();
-		assertThat(payload.getBody()).contains("현우");
+		assertThat(payload.getBody()).contains("actor");
 		assertThat(payload.getData()).containsEntry("feedId", "10");
 		assertThat(payload.getData()).containsEntry("teamId", "100");
 	}
 
 	@Test
-	@DisplayName("대댓글 이벤트를 받으면 수신자에게 FEED_COMMENT_REPLIED 알림을 전송한다")
+	@DisplayName("FeedCommentRepliedEvent sends notification with actor team member id")
 	void handleFeedCommentRepliedSendsNotificationToRecipient() {
-		FeedCommentRepliedEvent event = new FeedCommentRepliedEvent(5L, "현우", 10L, 100L);
+		FeedCommentRepliedEvent event = new FeedCommentRepliedEvent(5L, 7L, "actor", 10L, 100L);
 
 		notificationEventListener.handleFeedCommentReplied(event);
 
@@ -56,16 +57,17 @@ class NotificationEventListenerTest extends UnitTest {
 
 		NotificationPayload payload = captor.getValue();
 		assertThat(payload.getType()).isEqualTo(NotificationType.FEED_COMMENT_REPLIED);
+		assertThat(payload.getActorTeamMemberId()).isEqualTo(7L);
 		assertThat(payload.getTitle()).isNotBlank();
-		assertThat(payload.getBody()).contains("현우");
+		assertThat(payload.getBody()).contains("actor");
 		assertThat(payload.getData()).containsEntry("feedId", "10");
 		assertThat(payload.getData()).containsEntry("teamId", "100");
 	}
 
 	@Test
-	@DisplayName("오늘의 질문 답변 업로드 이벤트를 받으면 수신자 목록 전원에게 알림을 전송한다")
+	@DisplayName("DailyAnswerPostedEvent sends notification with actor team member id")
 	void handleDailyAnswerPostedSendsNotificationToAllRecipients() {
-		DailyAnswerPostedEvent event = new DailyAnswerPostedEvent(List.of(2L, 3L), "현우", 20L, 200L);
+		DailyAnswerPostedEvent event = new DailyAnswerPostedEvent(List.of(2L, 3L), 7L, "actor", 20L, 200L);
 
 		notificationEventListener.handleDailyAnswerPosted(event);
 
@@ -75,7 +77,8 @@ class NotificationEventListenerTest extends UnitTest {
 
 		NotificationPayload payload = captor.getValue();
 		assertThat(payload.getType()).isEqualTo(NotificationType.DAILY_QUESTION_UPLOADED);
-		assertThat(payload.getBody()).contains("현우");
+		assertThat(payload.getActorTeamMemberId()).isEqualTo(7L);
+		assertThat(payload.getBody()).contains("actor");
 		assertThat(payload.getData()).containsEntry("feedId", "20");
 		assertThat(payload.getData()).containsEntry("teamId", "200");
 	}

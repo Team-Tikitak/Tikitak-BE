@@ -5,14 +5,22 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.SendResponse;
+import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.notification.entity.MemberDeviceToken;
 import kusitms.spin.tikitak.domain.notification.entity.Notification;
 import kusitms.spin.tikitak.domain.notification.enums.DevicePlatform;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
+import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.exception.BusinessException;
+import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.notification.NotificationRepository;
+import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.service.notification.dto.NotificationResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
@@ -26,6 +34,8 @@ import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.inactiveMember;
+import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,6 +59,18 @@ class NotificationServiceTest extends UnitTest {
 
 	@Mock
 	private NotificationRepository notificationRepository;
+
+	@Mock
+	private TeamMemberRepository teamMemberRepository;
+
+	@Mock
+	private FeedImageRepository feedImageRepository;
+
+	@Mock
+	private DefaultProfileImageResolver defaultProfileImageResolver;
+
+	@Mock
+	private ImageUrlResolver imageUrlResolver;
 
 	@Mock
 	private FirebaseMessaging firebaseMessaging;
@@ -218,6 +240,37 @@ class NotificationServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("알림 목록 조회 시 작성자 프로필과 피드 이미지를 함께 반환한다")
+	void listNotificationsIncludesActorProfileAndFeedImages() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		Notification notification = notification(1L, false);
+		TeamMember actor = activeMemberWithoutProfileImg(30L, activeMember(3L), activeTeam(10L));
+		FeedImage firstImage = FeedImage.builder()
+				.id(40L)
+				.feed(Feed.builder().id(20L).build())
+				.imgUrl("https://example.com/feed.png")
+				.orderIndex(0)
+				.build();
+		when(notificationRepository.findFirstPage(eq(1L), isNull(), any())).thenReturn(List.of(notification));
+		when(notificationRepository.countByMemberIdAndTeamId(1L, null)).thenReturn(1L);
+		when(teamMemberRepository.findByIdsWithMember(List.of(30L))).thenReturn(List.of(actor));
+		when(feedImageRepository.findFirstActiveByFeedIds(List.of(20L))).thenReturn(List.of(firstImage));
+		when(defaultProfileImageResolver.resolveForTeamMember(actor)).thenReturn("https://example.com/profile.png");
+		when(imageUrlResolver.resolve("https://example.com/feed.png", ImagePreset.FEED_THUMB))
+				.thenReturn("https://example.com/feed.png?preset=feed_thumb");
+		when(imageUrlResolver.resolve("https://example.com/feed.png", ImagePreset.FEED_HERO_PREVIEW))
+				.thenReturn("https://example.com/feed.png?preset=feed_hero_preview");
+
+		NotificationResponseDTO.NotificationListResponseDTO response =
+				notificationService.listNotifications(1L, null, null, null);
+
+		NotificationResponseDTO.NotificationListItemDTO item = response.getItems().get(0);
+		assertThat(item.getProfileImageUrl()).isEqualTo("https://example.com/profile.png");
+		assertThat(item.getThumbnailImageUrl()).isEqualTo("https://example.com/feed.png?preset=feed_thumb");
+		assertThat(item.getHeroPreviewUrl()).isEqualTo("https://example.com/feed.png?preset=feed_hero_preview");
+	}
+
+	@Test
 	@DisplayName("안읽은 알림 개수를 조회한다")
 	void returnsUnreadCount() {
 		NotificationService notificationService = notificationService(Optional.empty());
@@ -261,7 +314,16 @@ class NotificationServiceTest extends UnitTest {
 	}
 
 	private NotificationService notificationService(Optional<FirebaseMessaging> firebaseMessaging) {
-		return new NotificationService(memberRepository, deviceTokenRepository, notificationRepository, firebaseMessaging);
+		return new NotificationService(
+				memberRepository,
+				deviceTokenRepository,
+				notificationRepository,
+				teamMemberRepository,
+				feedImageRepository,
+				defaultProfileImageResolver,
+				imageUrlResolver,
+				firebaseMessaging
+		);
 	}
 
 	private Notification notification(Long id, boolean isRead) {
@@ -273,6 +335,7 @@ class NotificationServiceTest extends UnitTest {
 				.body("body")
 				.teamId(10L)
 				.feedId(20L)
+				.actorTeamMemberId(30L)
 				.isRead(isRead)
 				.createdAt(LocalDateTime.now())
 				.build();
