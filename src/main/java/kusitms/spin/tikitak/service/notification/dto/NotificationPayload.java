@@ -13,6 +13,7 @@ public class NotificationPayload {
 	private final NotificationType type;
 	private final String title;
 	private final String body;
+	private final Long actorTeamMemberId;
 
 	@Builder.Default
 	private final Map<String, String> data = Map.of();

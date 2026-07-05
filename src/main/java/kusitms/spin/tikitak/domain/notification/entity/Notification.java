@@ -54,6 +54,9 @@ public class Notification {
 	@Column(name = "feed_id")
 	private Long feedId;
 
+	@Column(name = "actor_team_member_id")
+	private Long actorTeamMemberId;
+
 	@Column(nullable = false)
 	private boolean isRead;
 
@@ -70,6 +73,7 @@ public class Notification {
 				.body(payload.getBody())
 				.teamId(parseLong(payload.getData().get("teamId")))
 				.feedId(parseLong(payload.getData().get("feedId")))
+				.actorTeamMemberId(payload.getActorTeamMemberId())
 				.isRead(false)
 				.createdAt(LocalDateTime.now())
 				.build();

@@ -107,7 +107,7 @@ public class FeedCommentService {
 		Long feedOwnerMemberId = feed.getTeamMember().getMember().getId();
 		if (!feedOwnerMemberId.equals(memberId)) {
 			eventPublisher.publishEvent(
-					new FeedCommentCreatedEvent(feedOwnerMemberId, author.getNickname(), feed.getId(), teamId));
+					new FeedCommentCreatedEvent(feedOwnerMemberId, author.getId(), author.getNickname(), feed.getId(), teamId));
 		}
 
 		feedCommentRepository.findDistinctMemberIdsByPosition(
@@ -115,7 +115,7 @@ public class FeedCommentService {
 				.stream()
 				.filter(id -> !id.equals(memberId) && !id.equals(feedOwnerMemberId))
 				.forEach(recipientId -> eventPublisher.publishEvent(
-						new FeedCommentRepliedEvent(recipientId, author.getNickname(), feed.getId(), teamId)));
+						new FeedCommentRepliedEvent(recipientId, author.getId(), author.getNickname(), feed.getId(), teamId)));
 
 		return toCommentItem(savedComment, author.getId());
 	}

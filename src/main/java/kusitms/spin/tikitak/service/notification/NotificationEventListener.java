@@ -28,6 +28,7 @@ public class NotificationEventListener {
 				.type(NotificationType.FEED_COMMENT)
 				.title("새 댓글이 도착했어요")
 				.body(event.actorNickname() + "님이 댓글을 남겼어요.")
+				.actorTeamMemberId(event.actorTeamMemberId())
 				.data(Map.of(
 						"feedId", String.valueOf(event.feedId()),
 						"teamId", String.valueOf(event.teamId())
@@ -48,6 +49,7 @@ public class NotificationEventListener {
 				.type(NotificationType.FEED_COMMENT_REPLIED)
 				.title("새 댓글이 도착했어요")
 				.body(event.actorNickname() + "님이 회원님의 댓글에 답글을 남겼어요.")
+				.actorTeamMemberId(event.actorTeamMemberId())
 				.data(Map.of(
 						"feedId", String.valueOf(event.feedId()),
 						"teamId", String.valueOf(event.teamId())
@@ -68,6 +70,7 @@ public class NotificationEventListener {
 				.type(NotificationType.DAILY_QUESTION_UPLOADED)
 				.title("오늘의 질문 답변이 올라왔어요")
 				.body(event.actorNickname() + "님이 오늘의 질문에 답변했어요.")
+				.actorTeamMemberId(event.actorTeamMemberId())
 				.data(Map.of(
 						"feedId", String.valueOf(event.feedId()),
 						"teamId", String.valueOf(event.teamId())
