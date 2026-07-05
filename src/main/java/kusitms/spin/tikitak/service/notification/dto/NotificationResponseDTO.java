@@ -33,6 +33,9 @@ public class NotificationResponseDTO {
 		private String body;
 		private Long teamId;
 		private Long feedId;
+		private String profileImageUrl;
+		private String thumbnailImageUrl;
+		private String heroPreviewUrl;
 		@JsonProperty("isRead")
 		private boolean isRead;
 		private LocalDateTime createdAt;
