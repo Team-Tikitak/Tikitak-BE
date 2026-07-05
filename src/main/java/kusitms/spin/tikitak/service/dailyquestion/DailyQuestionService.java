@@ -124,7 +124,7 @@ public class DailyQuestionService {
 				teamId, author.getId(), TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
 		if (!recipientMemberIds.isEmpty()) {
 			eventPublisher.publishEvent(
-					new DailyAnswerPostedEvent(recipientMemberIds, author.getNickname(), savedFeed.getId(), teamId));
+					new DailyAnswerPostedEvent(recipientMemberIds, author.getId(), author.getNickname(), savedFeed.getId(), teamId));
 		}
 
 		return toMutation(savedFeed);
