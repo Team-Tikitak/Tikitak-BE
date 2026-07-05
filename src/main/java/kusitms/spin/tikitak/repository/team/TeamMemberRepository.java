@@ -108,6 +108,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long>, D
 	@Query("""
 			select tm
 			from TeamMember tm
+			join fetch tm.member m
+			where tm.id in :teamMemberIds
+			""")
+	List<TeamMember> findByIdsWithMember(@Param("teamMemberIds") Collection<Long> teamMemberIds);
+
+	@Query("""
+			select tm
+			from TeamMember tm
 			join fetch tm.team t
 			where tm.member.id = :memberId
 				and tm.status = :memberStatus

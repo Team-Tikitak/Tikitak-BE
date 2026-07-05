@@ -6,15 +6,22 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.SendResponse;
+import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.notification.entity.MemberDeviceToken;
 import kusitms.spin.tikitak.domain.notification.entity.Notification;
+import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.notification.NotificationRepository;
+import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
+import kusitms.spin.tikitak.service.media.ImagePreset;
+import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.service.notification.dto.NotificationResponseDTO;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,6 +48,10 @@ public class NotificationService {
 	private final MemberRepository memberRepository;
 	private final MemberDeviceTokenRepository deviceTokenRepository;
 	private final NotificationRepository notificationRepository;
+	private final TeamMemberRepository teamMemberRepository;
+	private final FeedImageRepository feedImageRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final ImageUrlResolver imageUrlResolver;
 	private final Optional<FirebaseMessaging> firebaseMessaging;
 
 	@Transactional
@@ -49,7 +62,8 @@ public class NotificationService {
 			log.warn("존재하지 않거나 탈퇴한 회원에게는 알림을 저장/전송하지 않습니다. memberId={}, type={}", memberId, payload.getType());
 			return;
 		}
-		notificationRepository.save(Notification.create(activeMember.get(), payload));
+		Notification notification = Notification.create(activeMember.get(), payload);
+		Notification savedNotification = notificationRepository.save(notification);
 
 		if (firebaseMessaging.isEmpty()) {
 			log.warn("FCM이 설정되지 않아 알림을 전송하지 않습니다. memberId={}, type={}", memberId, payload.getType());
@@ -62,7 +76,7 @@ public class NotificationService {
 		}
 
 		List<Message> messages = deviceTokens.stream()
-				.map(deviceToken -> toMessage(deviceToken, payload))
+				.map(deviceToken -> toMessage(deviceToken, payload, savedNotification == null ? null : savedNotification.getId()))
 				.toList();
 
 		try {
@@ -73,16 +87,19 @@ public class NotificationService {
 		}
 	}
 
-	private Message toMessage(MemberDeviceToken deviceToken, NotificationPayload payload) {
-		return Message.builder()
+	private Message toMessage(MemberDeviceToken deviceToken, NotificationPayload payload, Long notificationId) {
+		Message.Builder builder = Message.builder()
 				.setToken(deviceToken.getFcmToken())
 				.setNotification(com.google.firebase.messaging.Notification.builder()
 						.setTitle(payload.getTitle())
 						.setBody(payload.getBody())
 						.build())
 				.putAllData(payload.getData())
-				.putData("type", payload.getType().name())
-				.build();
+				.putData("type", payload.getType().name());
+		if (notificationId != null) {
+			builder.putData("notificationId", String.valueOf(notificationId));
+		}
+		return builder.build();
 	}
 
 	public NotificationResponseDTO.NotificationListResponseDTO listNotifications(Long memberId, Long teamId, String cursor, Integer size) {
@@ -98,8 +115,11 @@ public class NotificationService {
 		boolean hasNext = notifications.size() > pageSize;
 		List<Notification> items = hasNext ? notifications.subList(0, pageSize) : notifications;
 
+		Map<Long, String> profileImageUrls = profileImageUrls(items);
+		Map<Long, String> firstImageUrls = firstImageUrls(items);
+
 		List<NotificationResponseDTO.NotificationListItemDTO> responseItems = items.stream()
-				.map(this::toListItem)
+				.map(notification -> toListItem(notification, profileImageUrls, firstImageUrls))
 				.toList();
 
 		String nextCursor = null;
@@ -137,7 +157,12 @@ public class NotificationService {
 		notificationRepository.updateAllAsReadByMemberId(memberId, LocalDateTime.now());
 	}
 
-	private NotificationResponseDTO.NotificationListItemDTO toListItem(Notification notification) {
+	private NotificationResponseDTO.NotificationListItemDTO toListItem(
+			Notification notification,
+			Map<Long, String> profileImageUrls,
+			Map<Long, String> firstImageUrls
+	) {
+		String firstImageUrl = firstImageUrls.get(notification.getFeedId());
 		return NotificationResponseDTO.NotificationListItemDTO.builder()
 				.notificationId(notification.getId())
 				.type(notification.getType())
@@ -145,9 +170,46 @@ public class NotificationService {
 				.body(notification.getBody())
 				.teamId(notification.getTeamId())
 				.feedId(notification.getFeedId())
+				.profileImageUrl(profileImageUrls.get(notification.getActorTeamMemberId()))
+				.thumbnailImageUrl(imageUrlResolver.resolve(firstImageUrl, ImagePreset.FEED_THUMB))
+				.heroPreviewUrl(imageUrlResolver.resolve(firstImageUrl, ImagePreset.FEED_HERO_PREVIEW))
 				.isRead(notification.isRead())
 				.createdAt(notification.getCreatedAt())
 				.build();
+	}
+
+	private Map<Long, String> profileImageUrls(List<Notification> notifications) {
+		List<Long> actorTeamMemberIds = notifications.stream()
+				.map(Notification::getActorTeamMemberId)
+				.filter(id -> id != null)
+				.distinct()
+				.toList();
+		if (actorTeamMemberIds.isEmpty()) {
+			return Map.of();
+		}
+		return teamMemberRepository.findByIdsWithMember(actorTeamMemberIds).stream()
+				.collect(Collectors.toMap(
+						TeamMember::getId,
+						defaultProfileImageResolver::resolveForTeamMember,
+						(first, second) -> first
+				));
+	}
+
+	private Map<Long, String> firstImageUrls(List<Notification> notifications) {
+		List<Long> feedIds = notifications.stream()
+				.map(Notification::getFeedId)
+				.filter(id -> id != null)
+				.distinct()
+				.toList();
+		if (feedIds.isEmpty()) {
+			return Map.of();
+		}
+		return feedImageRepository.findFirstActiveByFeedIds(feedIds).stream()
+				.collect(Collectors.toMap(
+						image -> image.getFeed().getId(),
+						FeedImage::getImgUrl,
+						(first, second) -> first
+				));
 	}
 
 	private int normalizePageSize(Integer size) {
