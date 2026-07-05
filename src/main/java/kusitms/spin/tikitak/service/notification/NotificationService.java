@@ -162,7 +162,12 @@ public class NotificationService {
 			Map<Long, String> profileImageUrls,
 			Map<Long, String> firstImageUrls
 	) {
-		String firstImageUrl = firstImageUrls.get(notification.getFeedId());
+		String profileImageUrl = notification.getActorTeamMemberId() == null
+				? null
+				: profileImageUrls.get(notification.getActorTeamMemberId());
+		String firstImageUrl = notification.getFeedId() == null
+				? null
+				: firstImageUrls.get(notification.getFeedId());
 		return NotificationResponseDTO.NotificationListItemDTO.builder()
 				.notificationId(notification.getId())
 				.type(notification.getType())
@@ -170,7 +175,7 @@ public class NotificationService {
 				.body(notification.getBody())
 				.teamId(notification.getTeamId())
 				.feedId(notification.getFeedId())
-				.profileImageUrl(profileImageUrls.get(notification.getActorTeamMemberId()))
+				.profileImageUrl(profileImageUrl)
 				.thumbnailImageUrl(imageUrlResolver.resolve(firstImageUrl, ImagePreset.FEED_THUMB))
 				.heroPreviewUrl(imageUrlResolver.resolve(firstImageUrl, ImagePreset.FEED_HERO_PREVIEW))
 				.isRead(notification.isRead())
