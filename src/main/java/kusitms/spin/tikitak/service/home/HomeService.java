@@ -115,14 +115,18 @@ public class HomeService {
 						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
-		if (feedRepository.countActiveFeedsWithRegion(teamId) < REGION_MIN_FEEDS) {
+		YearMonth currentMonth = YearMonth.now();
+		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
+		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+
+		if (feedRepository.countActiveFeedsWithRegion(teamId, startOfMonth, startOfNextMonth) < REGION_MIN_FEEDS) {
 			return HomeResponseDTO.RegionResponse.builder()
-					.month(YearMonth.now().getMonthValue())
+					.month(currentMonth.getMonthValue())
 					.regions(List.of())
 					.build();
 		}
 
-		List<HomeResponseDTO.RegionItemDTO> regions = feedRepository.findRegionSummaries(teamId)
+		List<HomeResponseDTO.RegionItemDTO> regions = feedRepository.findRegionSummaries(teamId, startOfMonth, startOfNextMonth)
 				.stream()
 				.map(row -> HomeResponseDTO.RegionItemDTO.builder()
 						.region(row.getRegion())
@@ -133,7 +137,7 @@ public class HomeService {
 				.toList();
 
 		return HomeResponseDTO.RegionResponse.builder()
-				.month(YearMonth.now().getMonthValue())
+				.month(currentMonth.getMonthValue())
 				.regions(regions)
 				.build();
 	}
