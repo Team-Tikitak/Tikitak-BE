@@ -49,7 +49,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 			""")
 	long countByMemberIdAndTeamId(@Param("memberId") Long memberId, @Param("teamId") Long teamId);
 
-	long countByMemberIdAndIsReadFalse(Long memberId);
+	@Query("""
+			select count(n)
+			from Notification n
+			where n.member.id = :memberId
+				and n.isRead = false
+				and (:teamId is null or n.teamId = :teamId)
+			""")
+	long countByMemberIdAndTeamIdAndIsReadFalse(@Param("memberId") Long memberId, @Param("teamId") Long teamId);
 
 	Optional<Notification> findByIdAndMemberId(Long id, Long memberId);
 

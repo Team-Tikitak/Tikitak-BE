@@ -45,12 +45,14 @@ public class NotificationController {
 	@GetMapping("/unread-count")
 	@Operation(
 			summary = "안읽은 알림 개수 조회",
-			description = "현재 로그인한 사용자의 안읽은 알림 개수를 조회합니다."
+			description = "현재 로그인한 사용자의 안읽은 알림 개수를 조회합니다. teamId를 전달하면 해당 팀의 안읽은 알림 개수만 조회합니다."
 	)
 	public CommonResponse<NotificationResponseDTO.UnreadCountResponseDTO> getUnreadCount(
-			@Parameter(hidden = true) @CurrentMemberId Long memberId
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@Parameter(description = "조회할 팀 ID. 전달 시 해당 팀 안읽은 알림 개수만 조회합니다.")
+			@RequestParam(required = false) Long teamId
 	) {
-		return CommonResponse.success(notificationService.getUnreadCount(memberId));
+		return CommonResponse.success(notificationService.getUnreadCount(memberId, teamId));
 	}
 
 	@PatchMapping("/{notificationId}/read")

@@ -139,9 +139,9 @@ public class NotificationService {
 				.build();
 	}
 
-	public NotificationResponseDTO.UnreadCountResponseDTO getUnreadCount(Long memberId) {
+	public NotificationResponseDTO.UnreadCountResponseDTO getUnreadCount(Long memberId, Long teamId) {
 		return NotificationResponseDTO.UnreadCountResponseDTO.builder()
-				.unreadCount(notificationRepository.countByMemberIdAndIsReadFalse(memberId))
+				.unreadCount(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(memberId, teamId))
 				.build();
 	}
 
