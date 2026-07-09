@@ -162,6 +162,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId());
 
 			assertThat(result).hasSize(1);
+			assertThat(result.get(0).getFeedId()).isEqualTo(newer.getId());
 			assertThat(result.get(0).getThumbnailUrl()).isEqualTo("https://newer.jpg");
 		}
 
