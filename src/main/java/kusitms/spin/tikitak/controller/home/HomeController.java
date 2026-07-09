@@ -76,7 +76,7 @@ public class HomeController {
 	@GetMapping("/regions")
 	@Operation(
 			summary = "지역별 추억 조회 API",
-			description = "지역명, 피드 개수, 썸네일 이미지 를 리스트 형태로 반환합니다."
+			description = "이번 달에 작성된 피드를 대상으로 지역명, 피드 개수, 썸네일 이미지를 리스트 형태로 반환합니다."
 	)
 	public CommonResponse<HomeResponseDTO.RegionResponse> getRegions(
 			@Parameter(hidden = true) @CurrentMemberId Long memberId,
