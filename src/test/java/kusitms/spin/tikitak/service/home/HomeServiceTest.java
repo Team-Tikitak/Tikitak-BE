@@ -34,6 +34,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMembe
 import static kusitms.spin.tikitak.support.fixture.ImageUrlResolverFixture.disabledImageUrlResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -211,12 +212,12 @@ class HomeServiceTest extends UnitTest {
 	@DisplayName("장소 있는 피드가 3개 이상이면 지역 목록을 반환한다")
 	void returnsRegionListWhenEnoughFeeds() {
 		List<RegionRow> rows = List.of(
-				regionRow("서울 강남구", 3L, "https://img1.jpg"),
-				regionRow("경기 성남시 분당구", 2L, null)
+				regionRow("서울 강남구", 3L, 100L, "https://img1.jpg"),
+				regionRow("경기 성남시 분당구", 2L, 200L, null)
 		);
 		stubRequester();
-		when(feedRepository.countActiveFeedsWithRegion(TEAM_ID)).thenReturn(5L);
-		when(feedRepository.findRegionSummaries(TEAM_ID)).thenReturn(rows);
+		when(feedRepository.countActiveFeedsWithRegion(eq(TEAM_ID), any(), any())).thenReturn(5L);
+		when(feedRepository.findRegionSummaries(eq(TEAM_ID), any(), any())).thenReturn(rows);
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
@@ -224,8 +225,10 @@ class HomeServiceTest extends UnitTest {
 		assertThat(result.getRegions()).hasSize(2);
 		assertThat(result.getRegions().get(0).getRegion()).isEqualTo("서울 강남구");
 		assertThat(result.getRegions().get(0).getFeedCount()).isEqualTo(3L);
+		assertThat(result.getRegions().get(0).getFeedId()).isEqualTo(100L);
 		assertThat(result.getRegions().get(0).getThumbnailImageUrl()).isEqualTo("https://img1.jpg");
 		assertThat(result.getRegions().get(1).getRegion()).isEqualTo("경기 성남시 분당구");
+		assertThat(result.getRegions().get(1).getFeedId()).isEqualTo(200L);
 		assertThat(result.getRegions().get(1).getThumbnailImageUrl()).isNull();
 	}
 
@@ -233,7 +236,7 @@ class HomeServiceTest extends UnitTest {
 	@DisplayName("장소 있는 피드가 3개 미만이면 빈 목록을 반환한다")
 	void returnsEmptyRegionListWhenNotEnoughFeeds() {
 		stubRequester();
-		when(feedRepository.countActiveFeedsWithRegion(TEAM_ID)).thenReturn(2L);
+		when(feedRepository.countActiveFeedsWithRegion(eq(TEAM_ID), any(), any())).thenReturn(2L);
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
@@ -263,10 +266,11 @@ class HomeServiceTest extends UnitTest {
 		)).thenReturn(Optional.of(requester));
 	}
 
-	private RegionRow regionRow(String region, long feedCount, String thumbnailUrl) {
+	private RegionRow regionRow(String region, long feedCount, Long feedId, String thumbnailUrl) {
 		RegionRow row = mock(RegionRow.class);
 		when(row.getRegion()).thenReturn(region);
 		when(row.getFeedCount()).thenReturn(feedCount);
+		when(row.getFeedId()).thenReturn(feedId);
 		when(row.getThumbnailUrl()).thenReturn(thumbnailUrl);
 		return row;
 	}

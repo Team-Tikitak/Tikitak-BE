@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +25,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 	private static final LocalDate IN_MAY = LocalDate.of(2026, 5, 15);
+	private static final LocalDateTime MARCH_START = LocalDateTime.of(2026, 3, 1, 0, 0);
+	private static final LocalDateTime APRIL_START = LocalDateTime.of(2026, 4, 1, 0, 0);
+	private static final LocalDateTime FEBRUARY_TIME = LocalDateTime.of(2026, 2, 28, 12, 0);
 
 	@Autowired
 	private FeedRepository feedRepository;
@@ -50,7 +54,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId())).isEqualTo(3);
+			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId(), MARCH_START, APRIL_START)).isEqualTo(3);
 		}
 
 		@Test
@@ -64,7 +68,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId())).isZero();
+			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId(), MARCH_START, APRIL_START)).isZero();
 		}
 
 		@Test
@@ -85,7 +89,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId())).isZero();
+			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId(), MARCH_START, APRIL_START)).isZero();
 		}
 
 		@Test
@@ -105,7 +109,22 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId())).isZero();
+			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId(), MARCH_START, APRIL_START)).isZero();
+		}
+
+		@Test
+		@DisplayName("조회 대상 월 범위 밖의 피드는 제외한다")
+		void excludesFeedsOutsideMonth() {
+			Member author = persist(member("rg-cnt-outside-author"));
+			Team team = persist(team("rg-cnt-outside"));
+			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+			Place place = persist(place("서울 강남구"));
+
+			persist(feed(team, authorTm, place, FEBRUARY_TIME));
+
+			flushAndClear();
+
+			assertThat(feedRepository.countActiveFeedsWithRegion(team.getId(), MARCH_START, APRIL_START)).isZero();
 		}
 	}
 
@@ -132,7 +151,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId());
+			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId(), MARCH_START, APRIL_START);
 
 			assertThat(result).hasSize(2);
 			assertThat(result.get(0).getRegion()).isEqualTo("서울 강남구");
@@ -159,9 +178,10 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId());
+			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId(), MARCH_START, APRIL_START);
 
 			assertThat(result).hasSize(1);
+			assertThat(result.get(0).getFeedId()).isEqualTo(newer.getId());
 			assertThat(result.get(0).getThumbnailUrl()).isEqualTo("https://newer.jpg");
 		}
 
@@ -177,7 +197,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId());
+			List<RegionRow> result = feedRepository.findRegionSummaries(team.getId(), MARCH_START, APRIL_START);
 
 			assertThat(result).hasSize(1);
 			assertThat(result.get(0).getThumbnailUrl()).isNull();
@@ -200,7 +220,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.findRegionSummaries(team.getId())).isEmpty();
+			assertThat(feedRepository.findRegionSummaries(team.getId(), MARCH_START, APRIL_START)).isEmpty();
 		}
 
 		@Test
@@ -220,7 +240,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.findRegionSummaries(team.getId())).isEmpty();
+			assertThat(feedRepository.findRegionSummaries(team.getId(), MARCH_START, APRIL_START)).isEmpty();
 		}
 
 		@Test
@@ -236,7 +256,22 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.findRegionSummaries(myTeam.getId())).isEmpty();
+			assertThat(feedRepository.findRegionSummaries(myTeam.getId(), MARCH_START, APRIL_START)).isEmpty();
+		}
+
+		@Test
+		@DisplayName("조회 대상 월 범위 밖의 피드는 제외한다")
+		void excludesFeedsOutsideMonth() {
+			Member author = persist(member("rg-outside-author"));
+			Team team = persist(team("rg-outside"));
+			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+			Place place = persist(place("서울 강남구"));
+
+			persist(feed(team, authorTm, place, FEBRUARY_TIME));
+
+			flushAndClear();
+
+			assertThat(feedRepository.findRegionSummaries(team.getId(), MARCH_START, APRIL_START)).isEmpty();
 		}
 	}
 

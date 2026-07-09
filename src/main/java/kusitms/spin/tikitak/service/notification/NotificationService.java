@@ -139,9 +139,9 @@ public class NotificationService {
 				.build();
 	}
 
-	public NotificationResponseDTO.UnreadCountResponseDTO getUnreadCount(Long memberId) {
+	public NotificationResponseDTO.UnreadCountResponseDTO getUnreadCount(Long memberId, Long teamId) {
 		return NotificationResponseDTO.UnreadCountResponseDTO.builder()
-				.unreadCount(notificationRepository.countByMemberIdAndIsReadFalse(memberId))
+				.unreadCount(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(memberId, teamId))
 				.build();
 	}
 
@@ -153,8 +153,8 @@ public class NotificationService {
 	}
 
 	@Transactional
-	public void markAllAsRead(Long memberId) {
-		notificationRepository.updateAllAsReadByMemberId(memberId, LocalDateTime.now());
+	public void markAllAsRead(Long memberId, Long teamId) {
+		notificationRepository.updateAllAsReadByMemberId(memberId, teamId, LocalDateTime.now());
 	}
 
 	private NotificationResponseDTO.NotificationListItemDTO toListItem(

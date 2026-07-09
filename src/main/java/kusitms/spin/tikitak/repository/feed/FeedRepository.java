@@ -531,8 +531,14 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			where f.team.id = :teamId
 			  and f.deletedAt is null
 			  and p.region is not null
+			  and f.createdAt >= :startOfMonth
+			  and f.createdAt < :startOfNextMonth
 			""")
-	long countActiveFeedsWithRegion(@Param("teamId") Long teamId);
+	long countActiveFeedsWithRegion(
+			@Param("teamId") Long teamId,
+			@Param("startOfMonth") LocalDateTime startOfMonth,
+			@Param("startOfNextMonth") LocalDateTime startOfNextMonth
+	);
 
 	@Query(value = """
 			WITH region_feeds AS (
@@ -545,14 +551,21 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			    WHERE f.team_id = :teamId
 			      AND f.deleted_at IS NULL
 			      AND p.region IS NOT NULL
+			      AND f.created_at >= :startOfMonth
+			      AND f.created_at < :startOfNextMonth
 			)
 			SELECT rf.region AS region,
 			       rf.feed_count AS feedCount,
+			       rf.id AS feedId,
 			       fi.img_url AS thumbnailUrl
 			FROM region_feeds rf
 			LEFT JOIN feed_image fi ON fi.feed_id = rf.id AND fi.order_index = 0
 			WHERE rf.rn = 1
 			ORDER BY rf.feed_count DESC, rf.region ASC
 			""", nativeQuery = true)
-	List<RegionRow> findRegionSummaries(@Param("teamId") Long teamId);
+	List<RegionRow> findRegionSummaries(
+			@Param("teamId") Long teamId,
+			@Param("startOfMonth") LocalDateTime startOfMonth,
+			@Param("startOfNextMonth") LocalDateTime startOfNextMonth
+	);
 }
