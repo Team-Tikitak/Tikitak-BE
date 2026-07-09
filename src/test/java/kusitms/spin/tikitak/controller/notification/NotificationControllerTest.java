@@ -112,6 +112,6 @@ class NotificationControllerTest extends ApiTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true));
 
-		verify(notificationService).markAllAsRead(TEST_MEMBER_ID);
+		verify(notificationService).markAllAsRead(TEST_MEMBER_ID, null);
 	}
 }

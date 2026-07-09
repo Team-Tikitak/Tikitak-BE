@@ -308,9 +308,9 @@ class NotificationServiceTest extends UnitTest {
 	void marksAllNotificationsAsRead() {
 		NotificationService notificationService = notificationService(Optional.empty());
 
-		notificationService.markAllAsRead(1L);
+		notificationService.markAllAsRead(1L, null);
 
-		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), any(LocalDateTime.class));
+		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), isNull(), any(LocalDateTime.class));
 	}
 
 	private NotificationService notificationService(Optional<FirebaseMessaging> firebaseMessaging) {
