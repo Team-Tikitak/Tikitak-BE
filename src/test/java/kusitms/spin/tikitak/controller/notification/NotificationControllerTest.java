@@ -74,6 +74,25 @@ class NotificationControllerTest extends ApiTest {
 	}
 
 	@Test
+	@DisplayName("GET /api/v1/me/notifications?teamId=10은 해당 팀 알림만 조회한다")
+	void listNotificationsFilteredByTeamId() throws Exception {
+		NotificationResponseDTO.NotificationListResponseDTO response = NotificationResponseDTO.NotificationListResponseDTO.builder()
+				.items(List.of())
+				.pageInfo(NotificationResponseDTO.PageInfoDTO.builder()
+						.hasNext(false)
+						.size(20)
+						.totalCount(0L)
+						.build())
+				.build();
+		when(notificationService.listNotifications(eq(TEST_MEMBER_ID), eq(10L), isNull(), isNull())).thenReturn(response);
+
+		mockMvc.perform(get("/api/v1/me/notifications").param("teamId", "10"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.pageInfo.totalCount").value(0L));
+	}
+
+	@Test
 	@DisplayName("GET /api/v1/me/notifications/unread-count는 안읽은 알림 개수를 반환한다")
 	void getUnreadCount() throws Exception {
 		when(notificationService.getUnreadCount(eq(TEST_MEMBER_ID), isNull())).thenReturn(
@@ -82,6 +101,17 @@ class NotificationControllerTest extends ApiTest {
 		mockMvc.perform(get("/api/v1/me/notifications/unread-count"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.unreadCount").value(3L));
+	}
+
+	@Test
+	@DisplayName("GET /api/v1/me/notifications/unread-count?teamId=10은 해당 팀의 안읽은 알림 개수를 반환한다")
+	void getUnreadCountFilteredByTeamId() throws Exception {
+		when(notificationService.getUnreadCount(eq(TEST_MEMBER_ID), eq(10L))).thenReturn(
+				NotificationResponseDTO.UnreadCountResponseDTO.builder().unreadCount(2L).build());
+
+		mockMvc.perform(get("/api/v1/me/notifications/unread-count").param("teamId", "10"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.unreadCount").value(2L));
 	}
 
 	@Test
@@ -113,5 +143,15 @@ class NotificationControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.success").value(true));
 
 		verify(notificationService).markAllAsRead(TEST_MEMBER_ID, null);
+	}
+
+	@Test
+	@DisplayName("PATCH /api/v1/me/notifications/read-all?teamId=10은 해당 팀 알림만 읽음 처리한다")
+	void markAllAsReadFilteredByTeamId() throws Exception {
+		mockMvc.perform(patch("/api/v1/me/notifications/read-all").param("teamId", "10"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true));
+
+		verify(notificationService).markAllAsRead(TEST_MEMBER_ID, 10L);
 	}
 }

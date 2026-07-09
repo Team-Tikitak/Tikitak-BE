@@ -240,6 +240,22 @@ class NotificationServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("teamId를 전달하면 해당 팀 알림만 조회한다")
+	void listsNotificationsFilteredByTeamId() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		Notification notification = notification(1L, false);
+		when(notificationRepository.findFirstPage(eq(1L), eq(10L), any())).thenReturn(List.of(notification));
+		when(notificationRepository.countByMemberIdAndTeamId(1L, 10L)).thenReturn(1L);
+
+		NotificationResponseDTO.NotificationListResponseDTO response =
+				notificationService.listNotifications(1L, 10L, null, null);
+
+		assertThat(response.getItems()).hasSize(1);
+		assertThat(response.getPageInfo().getTotalCount()).isEqualTo(1L);
+		verify(notificationRepository, never()).findFirstPage(eq(1L), isNull(), any());
+	}
+
+	@Test
 	@DisplayName("알림 목록 조회 시 작성자 프로필과 피드 이미지를 함께 반환한다")
 	void listNotificationsIncludesActorProfileAndFeedImages() {
 		NotificationService notificationService = notificationService(Optional.empty());
@@ -282,6 +298,17 @@ class NotificationServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("teamId를 전달하면 해당 팀의 안읽은 알림 개수만 조회한다")
+	void returnsUnreadCountFilteredByTeamId() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		when(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(1L, 10L)).thenReturn(2L);
+
+		NotificationResponseDTO.UnreadCountResponseDTO response = notificationService.getUnreadCount(1L, 10L);
+
+		assertThat(response.getUnreadCount()).isEqualTo(2L);
+	}
+
+	@Test
 	@DisplayName("본인 소유의 알림을 읽음 처리한다")
 	void marksOwnNotificationAsRead() {
 		NotificationService notificationService = notificationService(Optional.empty());
@@ -311,6 +338,16 @@ class NotificationServiceTest extends UnitTest {
 		notificationService.markAllAsRead(1L, null);
 
 		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), isNull(), any(LocalDateTime.class));
+	}
+
+	@Test
+	@DisplayName("teamId를 전달하면 해당 팀 알림만 읽음 처리한다")
+	void marksTeamNotificationsAsRead() {
+		NotificationService notificationService = notificationService(Optional.empty());
+
+		notificationService.markAllAsRead(1L, 10L);
+
+		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), eq(10L), any(LocalDateTime.class));
 	}
 
 	private NotificationService notificationService(Optional<FirebaseMessaging> firebaseMessaging) {
