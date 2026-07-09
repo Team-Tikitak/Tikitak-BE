@@ -274,9 +274,9 @@ class NotificationServiceTest extends UnitTest {
 	@DisplayName("안읽은 알림 개수를 조회한다")
 	void returnsUnreadCount() {
 		NotificationService notificationService = notificationService(Optional.empty());
-		when(notificationRepository.countByMemberIdAndIsReadFalse(1L)).thenReturn(3L);
+		when(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(1L, null)).thenReturn(3L);
 
-		NotificationResponseDTO.UnreadCountResponseDTO response = notificationService.getUnreadCount(1L);
+		NotificationResponseDTO.UnreadCountResponseDTO response = notificationService.getUnreadCount(1L, null);
 
 		assertThat(response.getUnreadCount()).isEqualTo(3L);
 	}

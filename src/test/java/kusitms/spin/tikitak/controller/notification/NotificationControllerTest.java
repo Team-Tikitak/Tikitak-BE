@@ -76,7 +76,7 @@ class NotificationControllerTest extends ApiTest {
 	@Test
 	@DisplayName("GET /api/v1/me/notifications/unread-count는 안읽은 알림 개수를 반환한다")
 	void getUnreadCount() throws Exception {
-		when(notificationService.getUnreadCount(TEST_MEMBER_ID)).thenReturn(
+		when(notificationService.getUnreadCount(eq(TEST_MEMBER_ID), isNull())).thenReturn(
 				NotificationResponseDTO.UnreadCountResponseDTO.builder().unreadCount(3L).build());
 
 		mockMvc.perform(get("/api/v1/me/notifications/unread-count"))
