@@ -127,6 +127,7 @@ public class HomeService {
 				.map(row -> HomeResponseDTO.RegionItemDTO.builder()
 						.region(row.getRegion())
 						.feedCount(row.getFeedCount())
+						.feedId(row.getFeedId())
 						.thumbnailImageUrl(imageUrlResolver.resolve(row.getThumbnailUrl(), ImagePreset.FEED_THUMB))
 						.build())
 				.toList();

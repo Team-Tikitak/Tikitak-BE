@@ -94,6 +94,8 @@ public class HomeResponseDTO {
 	public static class RegionItemDTO {
 		private String region;
 		private long feedCount;
+		@Schema(description = "지역 대표 썸네일의 피드 ID")
+		private Long feedId;
 		@Schema(
 				description = "지역 대표 썸네일 이미지 URL. feed_thumb preset이 적용됩니다.",
 				example = "https://media.tikitak.space/media/feed-image/8b2e58f0-8e24-4e34-91b0-87dc86d1892a.jpg?preset=feed_thumb"

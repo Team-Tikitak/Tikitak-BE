@@ -548,6 +548,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			)
 			SELECT rf.region AS region,
 			       rf.feed_count AS feedCount,
+			       rf.id AS feedId,
 			       fi.img_url AS thumbnailUrl
 			FROM region_feeds rf
 			LEFT JOIN feed_image fi ON fi.feed_id = rf.id AND fi.order_index = 0
