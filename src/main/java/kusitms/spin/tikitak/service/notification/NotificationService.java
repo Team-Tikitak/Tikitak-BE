@@ -153,8 +153,8 @@ public class NotificationService {
 	}
 
 	@Transactional
-	public void markAllAsRead(Long memberId) {
-		notificationRepository.updateAllAsReadByMemberId(memberId, LocalDateTime.now());
+	public void markAllAsRead(Long memberId, Long teamId) {
+		notificationRepository.updateAllAsReadByMemberId(memberId, teamId, LocalDateTime.now());
 	}
 
 	private NotificationResponseDTO.NotificationListItemDTO toListItem(

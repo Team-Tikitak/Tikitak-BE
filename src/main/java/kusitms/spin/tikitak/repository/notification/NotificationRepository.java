@@ -66,6 +66,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 			set n.isRead = true, n.readAt = :readAt
 			where n.member.id = :memberId
 				and n.isRead = false
+				and (:teamId is null or n.teamId = :teamId)
 			""")
-	void updateAllAsReadByMemberId(@Param("memberId") Long memberId, @Param("readAt") LocalDateTime readAt);
+	void updateAllAsReadByMemberId(
+			@Param("memberId") Long memberId,
+			@Param("teamId") Long teamId,
+			@Param("readAt") LocalDateTime readAt
+	);
 }
