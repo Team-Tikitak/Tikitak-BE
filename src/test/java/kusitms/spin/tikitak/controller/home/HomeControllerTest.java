@@ -249,8 +249,8 @@ class HomeControllerTest extends ApiTest {
 		HomeResponseDTO.RegionResponse response = HomeResponseDTO.RegionResponse.builder()
 				.month(MONTH)
 				.regions(List.of(
-						regionItem("서울 강남구", 12L, "https://example.com/img1.jpg"),
-						regionItem("경기 성남시 분당구", 5L, null)
+						regionItem("서울 강남구", 12L, 100L, "https://example.com/img1.jpg"),
+						regionItem("경기 성남시 분당구", 5L, 200L, null)
 				))
 				.build();
 
@@ -264,8 +264,10 @@ class HomeControllerTest extends ApiTest {
 				.andExpect(jsonPath("$.data.regions.length()").value(2))
 				.andExpect(jsonPath("$.data.regions[0].region").value("서울 강남구"))
 				.andExpect(jsonPath("$.data.regions[0].feedCount").value(12))
+				.andExpect(jsonPath("$.data.regions[0].feedId").value(100))
 				.andExpect(jsonPath("$.data.regions[0].thumbnailImageUrl").value("https://example.com/img1.jpg"))
 				.andExpect(jsonPath("$.data.regions[1].region").value("경기 성남시 분당구"))
+				.andExpect(jsonPath("$.data.regions[1].feedId").value(200))
 				.andExpect(jsonPath("$.data.regions[1].thumbnailImageUrl").doesNotExist());
 	}
 
@@ -305,10 +307,11 @@ class HomeControllerTest extends ApiTest {
 				.build();
 	}
 
-	private HomeResponseDTO.RegionItemDTO regionItem(String region, long feedCount, String thumbnailUrl) {
+	private HomeResponseDTO.RegionItemDTO regionItem(String region, long feedCount, Long feedId, String thumbnailUrl) {
 		return HomeResponseDTO.RegionItemDTO.builder()
 				.region(region)
 				.feedCount(feedCount)
+				.feedId(feedId)
 				.thumbnailImageUrl(thumbnailUrl)
 				.build();
 	}
