@@ -147,7 +147,7 @@ public class MediaService {
                 ));
 
         List<MediaUploadCompleteResponse.Item> responseItems = medias.stream()
-                .map(media -> completeMedia(upload, media, requestItemsByPublicId))
+                .map(media -> completeMedia(media, requestItemsByPublicId))
                 .toList();
 
         upload.complete();
@@ -227,7 +227,6 @@ public class MediaService {
     }
 
     private MediaUploadCompleteResponse.Item completeMedia(
-            MediaUpload upload,
             Media media,
             Map<UUID, MediaUploadCompleteRequest.Item> requestItemsByPublicId
     ) {

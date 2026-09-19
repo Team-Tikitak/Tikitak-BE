@@ -81,14 +81,14 @@ public class FeedService {
 	private final ImageUrlResolver imageUrlResolver;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId,
-			Long teamId,
-			String cursor,
-			Integer size,
-			String placeId,
-      String region,
-			String type,
-			List<Long> taggedTeamMemberIds
+		Long memberId,
+		Long teamId,
+		String cursor,
+		Integer size,
+		String placeId,
+		String region,
+		String type,
+		List<Long> taggedTeamMemberIds
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
@@ -842,13 +842,13 @@ public class FeedService {
 	}
 
 	private List<Feed> findFeedPage(
-			Long teamId,
-			String placeId,
-			String region,
-			FeedTypeFilter feedType,
-			List<Long> taggedTeamMemberIds,
-			Cursor cursor,
-			int pageSize
+		Long teamId,
+		String placeId,
+		String region,
+		FeedTypeFilter feedType,
+		List<Long> taggedTeamMemberIds,
+		Cursor cursor,
+		int pageSize
 	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
 		String feedTypeName = feedType.queryValue();
