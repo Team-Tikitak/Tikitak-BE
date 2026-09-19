@@ -81,14 +81,14 @@ public class FeedService {
 	private final ImageUrlResolver imageUrlResolver;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
-			Long memberId,
-			Long teamId,
-			String cursor,
-			Integer size,
-			String placeId,
-      String region,
-			String type,
-			List<Long> taggedTeamMemberIds
+		Long memberId,
+		Long teamId,
+		String cursor,
+		Integer size,
+		String placeId,
+		String region,
+		String type,
+		List<Long> taggedTeamMemberIds
 	) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 		Cursor parsedCursor = parseCursor(cursor);
