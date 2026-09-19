@@ -22,4 +22,13 @@ public interface FeedImageRepository extends JpaRepository<FeedImage, Long> {
 				and fi.orderIndex = 0
 			""")
 	List<FeedImage> findFirstActiveByFeedIds(@Param("feedIds") Collection<Long> feedIds);
+
+	@Query("""
+			select fi
+			from FeedImage fi
+			join fi.feed f
+			where f.id in :feedIds
+				and f.deletedAt is null
+			""")
+	List<FeedImage> findActiveByFeedIds(@Param("feedIds") Collection<Long> feedIds);
 }
