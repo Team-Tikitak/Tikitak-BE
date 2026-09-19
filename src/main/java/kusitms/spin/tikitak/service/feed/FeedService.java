@@ -842,13 +842,13 @@ public class FeedService {
 	}
 
 	private List<Feed> findFeedPage(
-			Long teamId,
-			String placeId,
-			String region,
-			FeedTypeFilter feedType,
-			List<Long> taggedTeamMemberIds,
-			Cursor cursor,
-			int pageSize
+		Long teamId,
+		String placeId,
+		String region,
+		FeedTypeFilter feedType,
+		List<Long> taggedTeamMemberIds,
+		Cursor cursor,
+		int pageSize
 	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
 		String feedTypeName = feedType.queryValue();
