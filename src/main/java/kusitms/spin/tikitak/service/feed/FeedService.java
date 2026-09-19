@@ -16,8 +16,10 @@ import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
+import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
+import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.place.PlaceRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -73,6 +75,8 @@ public class FeedService {
 	private final FeedRepository feedRepository;
 	private final FeedReactionRepository feedReactionRepository;
 	private final FeedCommentRepository feedCommentRepository;
+	private final FeedImageRepository feedImageRepository;
+	private final FeedTagRepository feedTagRepository;
 	private final PlaceRepository placeRepository;
 	private final MediaRepository mediaRepository;
 	private final TeamRepository teamRepository;
@@ -111,10 +115,14 @@ public class FeedService {
 		Map<Long, Long> commentCounts = commentCounts(feedIds);
 		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaries = reactionSummaries(feedIds);
 		Map<Long, FeedReactionType> myReactions = myReactions(feedIds, viewer.getId());
+		Map<Long, List<FeedImage>> images = feedImages(feedIds);
+		Map<Long, List<FeedTag>> tags = feedTags(feedIds);
 
 		List<FeedResponseDTO.FeedListItemDTO> responseItems = items.stream()
 				.map(feed -> toListItem(
 						feed,
+						images.getOrDefault(feed.getId(), List.of()),
+						tags.getOrDefault(feed.getId(), List.of()),
 						commentCounts.getOrDefault(feed.getId(), 0L),
 						summaries.getOrDefault(feed.getId(), emptyReactionSummary()),
 						myReactions.get(feed.getId())
@@ -175,12 +183,16 @@ public class FeedService {
 		Map<Long, Long> commentCountMap = commentCounts(rankedIds);
 		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(rankedIds);
 		Map<Long, FeedReactionType> myReactionMap = myReactions(rankedIds, viewer.getId());
+		Map<Long, List<FeedImage>> imageMap = feedImages(rankedIds);
+		Map<Long, List<FeedTag>> tagMap = feedTags(rankedIds);
 
 		return rankedIds.stream()
 				.map(feedById::get)
 				.filter(Objects::nonNull)
 				.map(feed -> toListItem(
 						feed,
+						imageMap.getOrDefault(feed.getId(), List.of()),
+						tagMap.getOrDefault(feed.getId(), List.of()),
 						commentCountMap.getOrDefault(feed.getId(), 0L),
 						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
 						myReactionMap.get(feed.getId())
@@ -227,12 +239,16 @@ public class FeedService {
 		Map<Long, Long> commentCountMap = commentCounts(feedIds);
 		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
 		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+		Map<Long, List<FeedImage>> imageMap = feedImages(feedIds);
+		Map<Long, List<FeedTag>> tagMap = feedTags(feedIds);
 
 		return feedIds.stream()
 				.map(feedById::get)
 				.filter(Objects::nonNull)
 				.map(feed -> toListItem(
 						feed,
+						imageMap.getOrDefault(feed.getId(), List.of()),
+						tagMap.getOrDefault(feed.getId(), List.of()),
 						commentCountMap.getOrDefault(feed.getId(), 0L),
 						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
 						myReactionMap.get(feed.getId())
@@ -269,12 +285,16 @@ public class FeedService {
 		Map<Long, Long> commentCountMap = commentCounts(feedIds);
 		Map<Long, FeedResponseDTO.ReactionSummaryDTO> summaryMap = reactionSummaries(feedIds);
 		Map<Long, FeedReactionType> myReactionMap = myReactions(feedIds, viewer.getId());
+		Map<Long, List<FeedImage>> imageMap = feedImages(feedIds);
+		Map<Long, List<FeedTag>> tagMap = feedTags(feedIds);
 
 		List<FeedResponseDTO.FeedListItemDTO> feeds = feedIds.stream()
 				.map(feedById::get)
 				.filter(Objects::nonNull)
 				.map(feed -> toListItem(
 						feed,
+						imageMap.getOrDefault(feed.getId(), List.of()),
+						tagMap.getOrDefault(feed.getId(), List.of()),
 						commentCountMap.getOrDefault(feed.getId(), 0L),
 						summaryMap.getOrDefault(feed.getId(), emptyReactionSummary()),
 						myReactionMap.get(feed.getId())
@@ -676,19 +696,24 @@ public class FeedService {
 
 	private FeedResponseDTO.FeedListItemDTO toListItem(
 			Feed feed,
+			List<FeedImage> images,
+			List<FeedTag> tags,
 			long commentCount,
 			FeedResponseDTO.ReactionSummaryDTO reactionSummary,
 			FeedReactionType myReaction
 	) {
+		List<FeedImage> sortedImages = images.stream()
+				.sorted(Comparator.comparing(FeedImage::getOrderIndex))
+				.toList();
 		return FeedResponseDTO.FeedListItemDTO.builder()
 				.feedId(feed.getId())
 				.type(feed.getType())
 				.content(feed.getContent())
-				.thumbnailImageUrl(thumbnailImageUrl(feed))
-				.heroPreviewUrl(heroPreviewUrl(feed))
-				.imageCount(feed.getImages().size())
+				.thumbnailImageUrl(firstImageUrl(sortedImages, ImagePreset.FEED_THUMB))
+				.heroPreviewUrl(firstImageUrl(sortedImages, ImagePreset.FEED_HERO_PREVIEW))
+				.imageCount(images.size())
 				.author(toAuthor(feed.getTeamMember()))
-				.taggedMembers(feed.getTags().stream()
+				.taggedMembers(tags.stream()
 						.map(FeedTag::getTeamMember)
 						.map(this::toTaggedMember)
 						.toList())
@@ -812,6 +837,14 @@ public class FeedService {
 				.orElse(null);
 	}
 
+	private String firstImageUrl(List<FeedImage> sortedImages, ImagePreset preset) {
+		return sortedImages.stream()
+				.findFirst()
+				.map(FeedImage::getImgUrl)
+				.map(url -> imageUrlResolver.resolve(url, preset))
+				.orElse(null);
+	}
+
 	private long countFeeds(
 			Long teamId,
 			String placeId,
@@ -924,6 +957,22 @@ public class FeedService {
 		}
 		return feedReactionRepository.findMyReactions(feedIds, teamMemberId).stream()
 				.collect(Collectors.toMap(row -> (Long) row[0], row -> (FeedReactionType) row[1]));
+	}
+
+	private Map<Long, List<FeedImage>> feedImages(List<Long> feedIds) {
+		if (feedIds.isEmpty()) {
+			return Map.of();
+		}
+		return feedImageRepository.findActiveByFeedIds(feedIds).stream()
+				.collect(Collectors.groupingBy(image -> image.getFeed().getId()));
+	}
+
+	private Map<Long, List<FeedTag>> feedTags(List<Long> feedIds) {
+		if (feedIds.isEmpty()) {
+			return Map.of();
+		}
+		return feedTagRepository.findByFeedIds(feedIds).stream()
+				.collect(Collectors.groupingBy(tag -> tag.getFeed().getId()));
 	}
 
 	private FeedResponseDTO.ReactionSummaryDTO reactionSummary(Long feedId) {

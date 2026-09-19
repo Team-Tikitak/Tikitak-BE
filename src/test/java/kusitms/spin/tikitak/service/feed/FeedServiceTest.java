@@ -16,8 +16,10 @@ import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
+import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
+import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.place.PlaceRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -81,6 +83,12 @@ class FeedServiceTest extends UnitTest {
 	private FeedCommentRepository feedCommentRepository;
 
 	@Mock
+	private FeedImageRepository feedImageRepository;
+
+	@Mock
+	private FeedTagRepository feedTagRepository;
+
+	@Mock
 	private PlaceRepository placeRepository;
 
 	@Mock
@@ -105,6 +113,8 @@ class FeedServiceTest extends UnitTest {
 				feedRepository,
 				feedReactionRepository,
 				feedCommentRepository,
+				feedImageRepository,
+				feedTagRepository,
 				placeRepository,
 				mediaRepository,
 				teamRepository,
@@ -592,6 +602,7 @@ class FeedServiceTest extends UnitTest {
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(feedImageRepository.findActiveByFeedIds(List.of(FEED_ID))).thenReturn(feed.getImages());
 		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
 
 		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
@@ -622,6 +633,7 @@ class FeedServiceTest extends UnitTest {
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(feedTagRepository.findByFeedIds(List.of(FEED_ID))).thenReturn(feed.getTags());
 		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
 		when(defaultProfileImageResolver.resolveForTeamMember(taggedWithoutImg)).thenReturn(defaultImgUrl);
 
