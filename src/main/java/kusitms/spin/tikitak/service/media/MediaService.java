@@ -226,6 +226,26 @@ public class MediaService {
         return true;
     }
 
+    public List<Long> findExpiredMediaUploadIds(LocalDateTime now, int limit) {
+        return mediaUploadRepository.findExpiredMediaUploadIds(now, PageRequest.of(0, limit));
+    }
+
+    @Transactional
+    public boolean deleteExpiredMediaUpload(Long uploadId) {
+        MediaUpload upload = mediaUploadRepository.findByIdForUpdate(uploadId)
+                .orElse(null);
+
+        if (upload == null || upload.getExpiresAt() == null || !upload.getExpiresAt().isBefore(LocalDateTime.now())) {
+            return false;
+        }
+        if (mediaRepository.existsByUploadId(uploadId)) {
+            return false;
+        }
+
+        mediaUploadRepository.delete(upload);
+        return true;
+    }
+
     private MediaUploadCompleteResponse.Item completeMedia(
             Media media,
             Map<UUID, MediaUploadCompleteRequest.Item> requestItemsByPublicId

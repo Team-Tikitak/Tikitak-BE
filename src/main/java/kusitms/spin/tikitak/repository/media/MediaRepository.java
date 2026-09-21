@@ -76,6 +76,8 @@ public interface MediaRepository extends JpaRepository<Media, Long>, DailyQuesti
 
     long countByTeamIdAndPurposeAndStatus(Long teamId, MediaPurpose purpose, MediaStatus status);
 
+    boolean existsByUploadId(Long uploadId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from Media m where m.upload.id = :uploadId")
     List<Media> findByUploadIdForUpdate(@Param("uploadId") Long uploadId);

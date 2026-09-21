@@ -31,8 +31,12 @@ public class MediaCleanupBatchService {
         int deletedUploadedCount = deleteMedia(uploadedMediaIds, MediaCleanupTarget.UPLOADED);
         int hardDeletedCount = deleteMedia(deletedMediaIds, MediaCleanupTarget.DELETED);
 
-        log.info("Expired media cleanup completed. pendingTargetCount={}, pendingDeletedCount={}, uploadedTargetCount={}, uploadedDeletedCount={}, deletedTargetCount={}, hardDeletedCount={}",
-                pendingMediaIds.size(), deletedPendingCount, uploadedMediaIds.size(), deletedUploadedCount, deletedMediaIds.size(), hardDeletedCount);
+        List<Long> orphanedUploadIds = mediaService.findExpiredMediaUploadIds(LocalDateTime.now(), BATCH_SIZE);
+        int deletedUploadCount = deleteMediaUploads(orphanedUploadIds);
+
+        log.info("Expired media cleanup completed. pendingTargetCount={}, pendingDeletedCount={}, uploadedTargetCount={}, uploadedDeletedCount={}, deletedTargetCount={}, hardDeletedCount={}, orphanedUploadTargetCount={}, orphanedUploadDeletedCount={}",
+                pendingMediaIds.size(), deletedPendingCount, uploadedMediaIds.size(), deletedUploadedCount, deletedMediaIds.size(), hardDeletedCount,
+                orphanedUploadIds.size(), deletedUploadCount);
     }
 
     private int deleteMedia(List<Long> mediaIds, boolean pending) {
@@ -53,6 +57,20 @@ public class MediaCleanupBatchService {
                 }
             } catch (Exception e) {
                 log.error("Failed to clean up expired media. mediaId={}", mediaId, e);
+            }
+        }
+        return deletedCount;
+    }
+
+    private int deleteMediaUploads(List<Long> uploadIds) {
+        int deletedCount = 0;
+        for (Long uploadId : uploadIds) {
+            try {
+                if (mediaService.deleteExpiredMediaUpload(uploadId)) {
+                    deletedCount++;
+                }
+            } catch (Exception e) {
+                log.error("Failed to clean up expired media upload. mediaUploadId={}", uploadId, e);
             }
         }
         return deletedCount;
