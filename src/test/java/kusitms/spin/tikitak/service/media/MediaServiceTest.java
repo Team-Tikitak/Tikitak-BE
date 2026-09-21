@@ -329,6 +329,88 @@ class MediaServiceTest extends UnitTest {
     }
 
     @Test
+    @DisplayName("만료되고 남은 media가 없는 mediaUpload id 목록을 최대 처리 개수만큼 조회한다")
+    void findExpiredMediaUploadIds() {
+        LocalDateTime now = LocalDateTime.of(2026, 3, 4, 20, 30);
+        when(mediaUploadRepository.findExpiredMediaUploadIds(any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(8L, 9L));
+
+        List<Long> uploadIds = mediaService.findExpiredMediaUploadIds(now, 100);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(mediaUploadRepository).findExpiredMediaUploadIds(eq(now), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
+        assertThat(uploadIds).containsExactly(8L, 9L);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 mediaUpload는 삭제하지 않는다")
+    void deleteExpiredMediaUploadSkipsWhenNotFound() {
+        when(mediaUploadRepository.findByIdForUpdate(UPLOAD_ID)).thenReturn(Optional.empty());
+
+        boolean deleted = mediaService.deleteExpiredMediaUpload(UPLOAD_ID);
+
+        assertThat(deleted).isFalse();
+        verify(mediaUploadRepository, never()).delete(any(MediaUpload.class));
+    }
+
+    @Test
+    @DisplayName("아직 만료되지 않은 mediaUpload는 삭제하지 않는다")
+    void deleteExpiredMediaUploadSkipsWhenNotExpired() {
+        MediaUpload upload = MediaUpload.builder()
+                .id(UPLOAD_ID)
+                .purpose(MediaPurpose.FEED_IMAGE)
+                .status(MediaUploadStatus.COMPLETED)
+                .memberId(MEMBER_ID)
+                .expiresAt(LocalDateTime.now().plusDays(1))
+                .build();
+        when(mediaUploadRepository.findByIdForUpdate(UPLOAD_ID)).thenReturn(Optional.of(upload));
+
+        boolean deleted = mediaService.deleteExpiredMediaUpload(UPLOAD_ID);
+
+        assertThat(deleted).isFalse();
+        verify(mediaUploadRepository, never()).delete(any(MediaUpload.class));
+    }
+
+    @Test
+    @DisplayName("만료됐어도 남은 media가 있으면 삭제하지 않는다")
+    void deleteExpiredMediaUploadSkipsWhenMediaStillExists() {
+        MediaUpload upload = MediaUpload.builder()
+                .id(UPLOAD_ID)
+                .purpose(MediaPurpose.FEED_IMAGE)
+                .status(MediaUploadStatus.COMPLETED)
+                .memberId(MEMBER_ID)
+                .expiresAt(LocalDateTime.now().minusDays(1))
+                .build();
+        when(mediaUploadRepository.findByIdForUpdate(UPLOAD_ID)).thenReturn(Optional.of(upload));
+        when(mediaRepository.existsByUploadId(UPLOAD_ID)).thenReturn(true);
+
+        boolean deleted = mediaService.deleteExpiredMediaUpload(UPLOAD_ID);
+
+        assertThat(deleted).isFalse();
+        verify(mediaUploadRepository, never()).delete(any(MediaUpload.class));
+    }
+
+    @Test
+    @DisplayName("만료되고 남은 media가 없는 mediaUpload는 하드 삭제한다")
+    void deleteExpiredMediaUpload() {
+        MediaUpload upload = MediaUpload.builder()
+                .id(UPLOAD_ID)
+                .purpose(MediaPurpose.FEED_IMAGE)
+                .status(MediaUploadStatus.COMPLETED)
+                .memberId(MEMBER_ID)
+                .expiresAt(LocalDateTime.now().minusDays(1))
+                .build();
+        when(mediaUploadRepository.findByIdForUpdate(UPLOAD_ID)).thenReturn(Optional.of(upload));
+        when(mediaRepository.existsByUploadId(UPLOAD_ID)).thenReturn(false);
+
+        boolean deleted = mediaService.deleteExpiredMediaUpload(UPLOAD_ID);
+
+        assertThat(deleted).isTrue();
+        verify(mediaUploadRepository).delete(upload);
+    }
+
+    @Test
     @DisplayName("업로드 완료 요청은 R2 객체 확인 후 미디어와 업로드 묶음을 완료 상태로 변경한다")
     void completeUpload() {
         MediaUpload upload = upload(MediaUploadStatus.PENDING, MEMBER_ID);
