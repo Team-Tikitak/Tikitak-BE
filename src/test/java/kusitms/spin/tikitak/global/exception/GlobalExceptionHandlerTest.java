@@ -69,6 +69,7 @@ class GlobalExceptionHandlerTest extends ApiTest {
         mockMvc.perform(get("/test/param"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.code").value("COMMON002"));
     }
 
@@ -78,6 +79,7 @@ class GlobalExceptionHandlerTest extends ApiTest {
         mockMvc.perform(get("/test/header"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.code").value("COMMON002"));
     }
 
@@ -87,6 +89,7 @@ class GlobalExceptionHandlerTest extends ApiTest {
         mockMvc.perform(get("/test/constraint-violation"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.code").value("COMMON001"))
                 .andExpect(jsonPath("$.errors", hasSize(1)))
                 .andExpect(jsonPath("$.errors[0].field").value("name"));
@@ -98,6 +101,7 @@ class GlobalExceptionHandlerTest extends ApiTest {
         mockMvc.perform(get("/test/method-validation").param("size", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.code").value("COMMON001"))
                 .andExpect(jsonPath("$.errors", hasSize(1)))
                 .andExpect(jsonPath("$.errors[0].field").value("size"));
