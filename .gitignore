@@ -41,3 +41,6 @@ src/main/resources/application-local.yaml
 
 ### Test runtime ###
 .jqwik-database
+
+### Codex critic reviews (local only) ###
+.codex-reviews/

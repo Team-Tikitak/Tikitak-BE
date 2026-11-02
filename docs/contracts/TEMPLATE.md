@@ -15,7 +15,7 @@
 <!-- 워커는 여기 적힌 경로 밖을 수정하지 않는다. 필요하면 멈추고 오케스트레이터에게 보고. -->
 - `src/main/java/.../`
 - `src/test/java/.../`
-- `src/main/resources/db/migration/V__*.sql` (엔티티 변경 시 필수)
+- `src/main/resources/db/migration/V<번호>__<설명>.sql` (엔티티 변경 시 필수, 번호는 마지막 번호 + 1)
 
 ## 완료 조건
 <!-- 검증 워커가 하나씩 체크할 수 있게, 확인 가능한 문장으로. -->
