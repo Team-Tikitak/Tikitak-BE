@@ -11,6 +11,9 @@ public enum ErrorCode {
     COMMON001("COMMON001", "잘못된 요청입니다.", 400),
     COMMON002("COMMON002", "필수 파라미터가 누락되었습니다.", 400),
     COMMON003("COMMON003", "지원하지 않는 형식입니다.", 415),
+    COMMON004("COMMON004", "서버 내부 오류가 발생했습니다.", 500),
+    COMMON005("COMMON005", "요청한 리소스를 찾을 수 없습니다.", 404),
+    COMMON006("COMMON006", "지원하지 않는 HTTP 메서드입니다.", 405),
 
     // System
     SYSTEM001("SYSTEM001", "서버 상태 확인에 실패했습니다.", 500),
