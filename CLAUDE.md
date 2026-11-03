@@ -57,6 +57,7 @@ DB 스키마는 `src/main/resources/db/migration` 아래 Flyway로 관리됨. (`
 - `support/fixture/*Fixture` — FixtureMonkey/수동 object-mother 스타일로 요청/도메인 객체를 만드는 픽스처.
 - `support/fake/**` — 전체 Spring 컨텍스트 없이 여러 협력 레포지토리가 필요한 테스트를 위해 직접 작성한 fake repository/publisher 구현체.
 - `*PropertyTest` 클래스는 jqwik을 사용한 property-based testing으로 validator를 검증한다. (예: `FeedCommentValidatorPropertyTest`, `AuthServicePropertyTest`).
+- `architecture/` — ArchUnit으로 위 Architecture/Conventions 규칙을 강제한다(`LayerDependencyArchTest`, `ConventionArchTest`, 테스트 클래스는 검사 제외). 기존 위반은 규칙별 예외 상수에 이유와 함께 명시돼 있으며, 새 예외 추가는 리뷰 대상이다([결정 기록](docs/decisions/2026-11-02-archunit-explicit-exceptions.md)).
 
 ## Conventions
 
