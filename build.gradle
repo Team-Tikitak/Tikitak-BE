@@ -57,6 +57,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'net.jqwik:jqwik:1.7.3'
 	testImplementation 'com.navercorp.fixturemonkey:fixture-monkey:1.1.19'
+	testImplementation 'com.tngtech.archunit:archunit:1.5.1'
 	testImplementation platform('org.testcontainers:testcontainers-bom:2.0.5')
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'

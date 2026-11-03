@@ -12,3 +12,4 @@
 | 2026-09-21 | [MediaUpload 삭제 조건은 status 전이 없이 자식 없음+expiresAt만으로 판단](2026-09-21-mediaupload-orphan-check-no-status-transition.md) | #154 | Media.upload는 생성 시 한 번만 세팅되는 단조 관계라 not-exists 체크만으로 안전하게 삭제 가능 |
 | 2026-09-21 | [media_upload.expires_at 인덱스는 필터가 아니라 ORDER BY+LIMIT 최적화용](2026-09-21-media-upload-expires-at-index-tradeoff.md) | #154 | 필터 선택도는 낮지만 정리 배치의 ORDER BY+LIMIT 쿼리가 테이블 커질수록 비싸져서 예방적으로 추가 |
 | 2026-09-21 | [CREATE INDEX CONCURRENTLY + Flyway 기본 락 설정의 자기 자신 데드락](2026-09-21-flyway-concurrent-index-deadlock.md) | #154 | Flyway가 트랜잭션 안에서 들고 있는 schema-history 락 때문에 CONCURRENTLY가 무한 대기, transactionalLock=false로 해결 |
+| 2026-11-02 | [ArchUnit 기존 위반은 동결 대신 명시적 예외 목록으로 허용](2026-11-02-archunit-explicit-exceptions.md) | - | FreezingArchRule store는 무엇을 왜 허용했는지 리뷰에서 보이지 않아, 규칙별 예외 상수에 이유·후속 조치 주석을 달아 관리 |
