@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #168
 - **브랜치**: `Refactor/#168-archunit-exception-cleanup` (Orca worktree, develop 4f9239b 기준)
-- **상태**: 승인됨 (2026-11-04)
+- **상태**: 완료 (2026-11-04, PR #172)
 
 ## 목표
 - ArchUnit 예외 상수에 남아 있는 기존 위반 중 L3, L4, C4, C9, C10을 고치고, 해당 예외 항목을 지운다.
