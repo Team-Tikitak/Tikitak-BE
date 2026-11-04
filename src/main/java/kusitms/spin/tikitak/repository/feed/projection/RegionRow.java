@@ -1,4 +1,4 @@
-package kusitms.spin.tikitak.service.home.dto;
+package kusitms.spin.tikitak.repository.feed.projection;
 
 public interface RegionRow {
 	String getRegion();

@@ -3,7 +3,7 @@ package kusitms.spin.tikitak.service.auth;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import kusitms.spin.tikitak.domain.auth.RefreshToken;
+import kusitms.spin.tikitak.domain.auth.entity.RefreshToken;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.global.config.AuthProperties;

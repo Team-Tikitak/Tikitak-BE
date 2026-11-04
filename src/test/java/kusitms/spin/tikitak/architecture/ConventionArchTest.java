@@ -51,12 +51,6 @@ class ConventionArchTest {
 	private static final String SPRING_TRANSACTIONAL = "org.springframework.transaction.annotation.Transactional";
 	private static final String JAKARTA_TRANSACTIONAL = "jakarta.transaction.Transactional";
 
-	/** C4 예외 목록. */
-	private static final Set<String> C4_ENTITY_LOCATION_EXCEPTIONS = Set.of(
-			// domain.auth 바로 아래에 있음(entity 패키지 아님). 후속: domain.auth.entity로 옮긴다
-			"kusitms.spin.tikitak.domain.auth.RefreshToken"
-	);
-
 	/** C7 예외 목록. "클래스 FQCN#메서드 이름" 형식. */
 	private static final Set<String> C7_RESPONSE_TYPE_EXCEPTIONS = Set.of(
 			// OAuth 시작: 302 리다이렉트 또는 authorize URL 응답이라 ResponseEntity<?>를 반환. 후속: 리다이렉트 응답 규칙을 따로 정한다
@@ -135,7 +129,6 @@ class ConventionArchTest {
 	void c4_entitiesResideInDomainEntityPackage() {
 		classes()
 				.that().areAnnotatedWith(Entity.class)
-				.and(notInExceptions(C4_ENTITY_LOCATION_EXCEPTIONS))
 				.should().resideInAPackage("..domain.*.entity..")
 				.because("CLAUDE.md Architecture: 엔티티는 domain/<feature>/entity에 둔다")
 				.check(PRODUCTION_CLASSES);

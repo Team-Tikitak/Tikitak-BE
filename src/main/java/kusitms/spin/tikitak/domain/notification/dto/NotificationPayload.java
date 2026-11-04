@@ -1,4 +1,4 @@
-package kusitms.spin.tikitak.service.notification.dto;
+package kusitms.spin.tikitak.domain.notification.dto;
 
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import lombok.Builder;

@@ -9,7 +9,7 @@ Java 21, Spring Boot 4, PostgreSQL + Flyway, Redis, JPA/Hibernate, 미디어 저
 
 ## Architecture
 
-최상위는 계층별(package-by-layer), 그 아래는 기능별(package-by-feature) 구조이다: `controller/<feature>`, `service/<feature>`, `repository/<feature>`, `domain/<feature>/entity|enums`. 기능별로 이름(auth, feed, team, media, dailyquestion, map, home, me, member, notification, place, system)이 네 계층 전체에서 동일하게 유지되므로, 하나의 기능을 이해하려면 각 계층에서 같은 하위 패키지를 함께 보면 된다.
+최상위는 계층별(package-by-layer), 그 아래는 기능별(package-by-feature) 구조이다: `controller/<feature>`, `service/<feature>`, `repository/<feature>`, `domain/<feature>/entity|enums`. 도메인이 쓰는 값 타입(예: 알림 payload)은 `domain/<feature>/dto`, repository가 반환하는 native query projection은 `repository/<feature>/projection`에 둔다. 기능별로 이름(auth, feed, team, media, dailyquestion, map, home, me, member, notification, place, system)이 네 계층 전체에서 동일하게 유지되므로, 하나의 기능을 이해하려면 각 계층에서 같은 하위 패키지를 함께 보면 된다.
 
 `global/`은 공통 처리를 모아둔 곳이다:
 - `global/config` — Spring 설정 클래스 (`SecurityConfig`, `R2Config`, `FirebaseConfig`, `KakaoMapProperties` 등)
