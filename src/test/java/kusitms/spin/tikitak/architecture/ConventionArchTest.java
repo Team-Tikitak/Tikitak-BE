@@ -71,14 +71,6 @@ class ConventionArchTest {
 			"kusitms.spin.tikitak.service.media.ImageUrlResolver"
 	);
 
-	/** C10 예외 목록. */
-	private static final Set<String> C10_VALUE_ANNOTATION_EXCEPTIONS = Set.of(
-			// OAuth state Redis 키 프리픽스/TTL을 @Value로 주입. 후속: AuthProperties로 옮긴다
-			"kusitms.spin.tikitak.service.auth.RedisOAuthStateStore",
-			// 로그인 코드 Redis 키 프리픽스/TTL을 @Value로 주입. 후속: AuthProperties로 옮긴다
-			"kusitms.spin.tikitak.service.auth.RedisLoginCodeStore"
-	);
-
 	private static final List<Class<? extends RuntimeException>> RAW_EXCEPTION_TYPES = List.of(
 			IllegalArgumentException.class,
 			IllegalStateException.class,
@@ -197,7 +189,6 @@ class ConventionArchTest {
 	void c10_valueAnnotationOnlyInGlobalConfig() {
 		noClasses()
 				.that().resideOutsideOfPackage("..global.config..")
-				.and(notInExceptions(C10_VALUE_ANNOTATION_EXCEPTIONS))
 				.should().dependOnClassesThat().belongToAnyOf(Value.class)
 				.because("CLAUDE.md Conventions: 설정값은 흩어진 @Value 대신 global/config의 *Properties로 바인딩한다")
 				.check(PRODUCTION_CLASSES);
