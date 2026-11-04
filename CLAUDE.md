@@ -44,6 +44,10 @@ DB 스키마는 `src/main/resources/db/migration` 아래 Flyway로 관리됨. (`
 
 # check는 test와 integrationTest를 모두 실행
 ./gradlew check
+
+# 포맷 적용 / 검사 (Spotless: 탭 들여쓰기, 줄 끝 공백, 파일 끝 개행, import 정리. CI는 spotlessCheck 실패 시 막힘)
+./gradlew spotlessApply
+./gradlew spotlessCheck
 ```
 
 ## Testing conventions
@@ -64,6 +68,7 @@ DB 스키마는 `src/main/resources/db/migration` 아래 Flyway로 관리됨. (`
 - 새 엔드포인트는 `CommonResponse.success(data)` / `successWithStatus(data, status)`로 응답하고, 실패는 raw exception이나 수동으로 만든 에러 `ResponseEntity`가 아니라 `BusinessException` + `ErrorCode`로 처리함.
 - "설정 안 함"과 "명시적 null"을 구분해야 하는 부분 수정(PATCH) DTO는 일반 nullable 필드가 아니라 `PatchField<T>` 필드를 사용함.
 - 설정값은 여기저기 흩어진 `@Value` 대신 `global/config`의 `*Properties` 클래스(예: `R2Properties`, `AuthProperties`, `FirebaseProperties`)를 통해 바인딩함.
+- 커밋 전에 `./gradlew spotlessApply`를 돌린다. 포맷은 손으로 맞추지 않고 Spotless 결과를 그대로 쓴다([결정 기록](docs/decisions/2026-11-04-spotless-minimal-rules.md)).
 
 ## Git workflow
 

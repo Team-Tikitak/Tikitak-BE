@@ -12,7 +12,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 지킬 것
 - **계약의 "범위" 밖 파일은 수정하지 않는다.** 범위 밖 수정이 꼭 필요해 보이면 멈추고, 왜 필요한지 보고한다.
-- 범위 밖 리팩터링, 포맷 정리, import 정리를 하지 않는다.
+- 범위 밖 리팩터링, 손으로 하는 포맷 정리·import 정리를 하지 않는다. 단, 수정한 파일에 `./gradlew spotlessApply`를 돌려 나온 포맷 변경은 허용한다.
 - 엔티티(`domain/**/entity`)를 바꾸면 새 Flyway 마이그레이션을 추가한다. 번호는 `src/main/resources/db/migration`의 마지막 번호 + 1.
 - 비즈니스 규칙 실패는 `new BusinessException(ErrorCode.XXX)`로 던지고, 새 실패 케이스는 `ErrorCode`에 추가한다. `IllegalStateException` 같은 raw 예외를 던지지 않는다.
 - 응답은 `CommonResponse.success(...)`, PATCH DTO는 `PatchField<T>`, 설정값은 `global/config`의 `*Properties`.
