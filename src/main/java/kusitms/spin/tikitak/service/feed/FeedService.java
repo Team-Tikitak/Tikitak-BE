@@ -58,7 +58,7 @@ public class FeedService {
 	private static final int MAX_PAGE_SIZE = 50;
 	private static final int MAX_IMAGE_COUNT = 10;
 	private static final int MAX_TAG_COUNT = 12;
-    private static final int MAX_CONTENT_LENGTH = 1000;
+	private static final int MAX_CONTENT_LENGTH = 1000;
 	private static final int EVERYONE_PICK_MIN_FEEDS = 3;
 	private static final int ALL_TAGGED_MIN_FEEDS = 3;
 	private static final int COMBINATION_MIN_FEEDS = 3;
@@ -885,7 +885,7 @@ public class FeedService {
 	) {
 		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
 		String feedTypeName = feedType.queryValue();
-  
+
 		if (!taggedTeamMemberIds.isEmpty()) {
 			if (cursor.createdAt() == null) {
 				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
@@ -903,26 +903,26 @@ public class FeedService {
 					cursor.createdAt(), cursor.feedId(), pageRequest);
 		}
 
-    if (placeId != null) {
-        if (cursor.createdAt() == null) {
-            return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
-        }
-        return feedRepository.findActiveCursorPageByPlaceId(
-                teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
-    }
+	if (placeId != null) {
+		if (cursor.createdAt() == null) {
+			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
+		}
+		return feedRepository.findActiveCursorPageByPlaceId(
+				teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	}
 
-    if (region != null) {
-        if (cursor.createdAt() == null) {
-            return feedRepository.findActiveFirstPageByRegion(teamId, region, feedTypeName, pageRequest);
-        }
-        return feedRepository.findActiveCursorPageByRegion(
-                teamId, region, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
-    }
+	if (region != null) {
+		if (cursor.createdAt() == null) {
+			return feedRepository.findActiveFirstPageByRegion(teamId, region, feedTypeName, pageRequest);
+		}
+		return feedRepository.findActiveCursorPageByRegion(
+				teamId, region, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	}
 
-    if (cursor.createdAt() == null) {
-        return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
-    }
-    return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	if (cursor.createdAt() == null) {
+		return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
+	}
+	return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
 	}
 
 	private FeedTypeFilter parseFeedType(String type) {

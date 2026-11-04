@@ -32,7 +32,7 @@ public class AppleOAuthService {
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String state) {
 		AuthProperties.Apple apple = authProperties.oauth().apple();
 		validateAppleClientConfig(apple, false);
-		
+
 		URI authorizeUrl = UriComponentsBuilder.fromUriString(AUTHORIZATION_URI)
 				.queryParam("client_id", apple.clientId())
 				.queryParam("redirect_uri", apple.redirectUri())
@@ -49,7 +49,7 @@ public class AppleOAuthService {
 
 	public OAuthUserInfo getUserInfo(String code, String idToken) {
 		AppleIdTokenPayload idTokenPayload = validateIdToken(idToken);
-		
+
 		if (isBlank(idTokenPayload.sub())) {
 			throw new OAuthAuthenticationException("Apple provider id is empty.");
 		}

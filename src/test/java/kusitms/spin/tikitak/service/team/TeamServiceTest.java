@@ -35,10 +35,9 @@ import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWit
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeamAndCharacterType;
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithCharacterType;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
-import static kusitms.spin.tikitak.support.fixture.TeamFixture.inactiveTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMember;
-import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeOwner;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
+import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeOwner;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;

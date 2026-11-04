@@ -29,144 +29,144 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class TeamMemberService {
 
-    private final TeamRepository teamRepository;
-    private final TeamMemberRepository teamMemberRepository;
-    private final MediaRepository mediaRepository;
-    private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final TeamRepository teamRepository;
+	private final TeamMemberRepository teamMemberRepository;
+	private final MediaRepository mediaRepository;
+	private final DefaultProfileImageResolver defaultProfileImageResolver;
 
-    public TeamMemberResponseDTO.TeamMemberListResponseDTO listTeamMembers(Long memberId, Long teamId) {
-        // TeamMember까지 같이 조회
-        Team team = teamRepository.findTeamWithTeamMembersById(teamId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
+	public TeamMemberResponseDTO.TeamMemberListResponseDTO listTeamMembers(Long memberId, Long teamId) {
+		// TeamMember까지 같이 조회
+		Team team = teamRepository.findTeamWithTeamMembersById(teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM001));
 
-        // API 호출한 사용자가 해당 팀의 멤버인지 검증
-        team.getTeamMembers().stream()
-                .filter(tm -> tm.getMember().getId().equals(memberId)
-                        && tm.getStatus() == TeamMemberStatus.ACTIVE)
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
+		// API 호출한 사용자가 해당 팀의 멤버인지 검증
+		team.getTeamMembers().stream()
+				.filter(tm -> tm.getMember().getId().equals(memberId)
+						&& tm.getStatus() == TeamMemberStatus.ACTIVE)
+				.findFirst()
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM002));
 
-        List<TeamMemberResponseDTO.TeamMemberItemDTO> members = team.getTeamMembers().stream()
-                .filter(tm -> tm.getStatus() == TeamMemberStatus.ACTIVE)
-                .map(tm -> TeamMemberResponseDTO.TeamMemberItemDTO.builder()
-                        .teamMemberId(tm.getId())
-                        .nickname(tm.getNickname())
-                        .role(tm.getRole())
-                        .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
-                        .build())
-                .toList();
+		List<TeamMemberResponseDTO.TeamMemberItemDTO> members = team.getTeamMembers().stream()
+				.filter(tm -> tm.getStatus() == TeamMemberStatus.ACTIVE)
+				.map(tm -> TeamMemberResponseDTO.TeamMemberItemDTO.builder()
+						.teamMemberId(tm.getId())
+						.nickname(tm.getNickname())
+						.role(tm.getRole())
+						.profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(tm))
+						.build())
+				.toList();
 
-        return TeamMemberResponseDTO.TeamMemberListResponseDTO.builder()
-                .members(members)
-                .build();
-    }
+		return TeamMemberResponseDTO.TeamMemberListResponseDTO.builder()
+				.members(members)
+				.build();
+	}
 
-    @Transactional
-    public TeamMemberResponseDTO.TeamMemberUpdateResponseDTO updateMyProfile(
-            Long memberId, Long teamId, TeamMemberRequestDTO.TeamMemberUpdateRequestDTO request
-    ) {
-        TeamMember teamMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+	@Transactional
+	public TeamMemberResponseDTO.TeamMemberUpdateResponseDTO updateMyProfile(
+			Long memberId, Long teamId, TeamMemberRequestDTO.TeamMemberUpdateRequestDTO request
+	) {
+		TeamMember teamMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
-        if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM003);
-        }
+		if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.TEAM003);
+		}
 
-        log.info("[updateMyProfile] memberId={}, teamId={}, profileImagePublicId={}",
-                memberId, teamId, request.getMediaPublicId());
+		log.info("[updateMyProfile] memberId={}, teamId={}, profileImagePublicId={}",
+				memberId, teamId, request.getMediaPublicId());
 
-        Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
+		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
-        log.info("[updateMyProfile] newProfileMedia={}, url={}",
-                newProfileMedia != null ? newProfileMedia.getId() : null,
-                newProfileMedia != null ? newProfileMedia.getUrl() : null);
+		log.info("[updateMyProfile] newProfileMedia={}, url={}",
+				newProfileMedia != null ? newProfileMedia.getId() : null,
+				newProfileMedia != null ? newProfileMedia.getUrl() : null);
 
-        if (newProfileMedia != null && teamMember.getProfileMedia() != null) {
-            teamMember.getProfileMedia().markDeleted();
-        }
-        teamMember.updateProfile(
-                request.getNickname(),
-                newProfileMedia != null ? newProfileMedia.getUrl() : null,
-                newProfileMedia
-        );
+		if (newProfileMedia != null && teamMember.getProfileMedia() != null) {
+			teamMember.getProfileMedia().markDeleted();
+		}
+		teamMember.updateProfile(
+				request.getNickname(),
+				newProfileMedia != null ? newProfileMedia.getUrl() : null,
+				newProfileMedia
+		);
 
-        return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
-                .nickname(teamMember.getNickname())
-                .profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
-                .build();
-    }
+		return TeamMemberResponseDTO.TeamMemberUpdateResponseDTO.builder()
+				.nickname(teamMember.getNickname())
+				.profileImgUrl(defaultProfileImageResolver.resolveForTeamMember(teamMember))
+				.build();
+	}
 
-    @Transactional
-    public void leaveTeam(Long memberId, Long teamId) {
-        TeamMember teamMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+	@Transactional
+	public void leaveTeam(Long memberId, Long teamId) {
+		TeamMember teamMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
-        if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER003);
-        }
+		if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
+		}
 
-        if (teamMember.getRole() == TeamMemberRole.OWNER) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER002);
-        }
+		if (teamMember.getRole() == TeamMemberRole.OWNER) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER002);
+		}
 
-        teamMember.leaveTeam();
-        if (teamId.equals(teamMember.getMember().getActiveTeamId())) {
-            teamMember.getMember().clearActiveTeam();
-        }
-    }
+		teamMember.leaveTeam();
+		if (teamId.equals(teamMember.getMember().getActiveTeamId())) {
+			teamMember.getMember().clearActiveTeam();
+		}
+	}
 
-    @Transactional
-    public void kickMember(Long callerId, Long teamId, Long targetTeamMemberId) {
-        TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(callerId, teamId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+	@Transactional
+	public void kickMember(Long callerId, Long teamId, Long targetTeamMemberId) {
+		TeamMember caller = teamMemberRepository.findByMemberIdAndTeamId(callerId, teamId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
-        if (caller.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER003);
-        }
+		if (caller.getStatus() != TeamMemberStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER003);
+		}
 
-        if (caller.getRole() != TeamMemberRole.OWNER) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER004);
-        }
+		if (caller.getRole() != TeamMemberRole.OWNER) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER004);
+		}
 
-        // 강퇴 대상 팀 멤버
-        TeamMember target = teamMemberRepository.findById(targetTeamMemberId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
+		// 강퇴 대상 팀 멤버
+		TeamMember target = teamMemberRepository.findById(targetTeamMemberId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER001));
 
-        if (!target.getTeam().getId().equals(teamId)) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER001);
-        }
+		if (!target.getTeam().getId().equals(teamId)) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER001);
+		}
 
-        if (target.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER001);
-        }
+		if (target.getStatus() != TeamMemberStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER001);
+		}
 
-        if (target.getRole() == TeamMemberRole.OWNER) {
-            throw new BusinessException(ErrorCode.TEAM_MEMBER005);
-        }
+		if (target.getRole() == TeamMemberRole.OWNER) {
+			throw new BusinessException(ErrorCode.TEAM_MEMBER005);
+		}
 
-        target.kickTeamMember();
-    }
+		target.kickTeamMember();
+	}
 
-    private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
-        if (mediaPublicId == null) return null;
-        Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-                .orElse(null);
-        if (media == null) {
-            log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
-            return null;
-        }
-        log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
-                media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
-        log.info("[resolveProfileMedia] filter check. memberIdMatch={}, purposeMatch={}, statusMatch={}",
-                media.getMemberId().equals(memberId),
-                media.getPurpose() == MediaPurpose.PROFILE_IMAGE,
-                media.getStatus() == MediaStatus.UPLOADED);
-        if (!media.getMemberId().equals(memberId)
-                || media.getPurpose() != MediaPurpose.PROFILE_IMAGE
-                || media.getStatus() != MediaStatus.UPLOADED) {
-            return null;
-        }
-        media.markUsed();
-        return media;
-    }
+	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
+		if (mediaPublicId == null) return null;
+		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
+				.orElse(null);
+		if (media == null) {
+			log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
+			return null;
+		}
+		log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
+				media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
+		log.info("[resolveProfileMedia] filter check. memberIdMatch={}, purposeMatch={}, statusMatch={}",
+				media.getMemberId().equals(memberId),
+				media.getPurpose() == MediaPurpose.PROFILE_IMAGE,
+				media.getStatus() == MediaStatus.UPLOADED);
+		if (!media.getMemberId().equals(memberId)
+				|| media.getPurpose() != MediaPurpose.PROFILE_IMAGE
+				|| media.getStatus() != MediaStatus.UPLOADED) {
+			return null;
+		}
+		media.markUsed();
+		return media;
+	}
 }

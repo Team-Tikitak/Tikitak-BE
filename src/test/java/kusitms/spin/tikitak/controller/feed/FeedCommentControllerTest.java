@@ -87,10 +87,10 @@ class FeedCommentControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "feedImageId": 33,
-								  "content": "좋다!",
-								  "positionX": 0.42,
-								  "positionY": 0.68
+								"feedImageId": 33,
+								"content": "좋다!",
+								"positionX": 0.42,
+								"positionY": 0.68
 								}
 								"""))
 				.andExpect(status().isCreated())
@@ -121,9 +121,9 @@ class FeedCommentControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "content": "수정됨",
-								  "positionX": 0.5,
-								  "positionY": 0.7
+								"content": "수정됨",
+								"positionX": 0.5,
+								"positionY": 0.7
 								}
 								"""))
 				.andExpect(status().isOk())

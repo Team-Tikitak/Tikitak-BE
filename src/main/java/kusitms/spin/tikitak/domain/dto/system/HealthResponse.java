@@ -14,16 +14,16 @@ import java.time.Instant;
 @AllArgsConstructor
 public class HealthResponse {
 
-    @JsonProperty("status")
-    private String status;
+	@JsonProperty("status")
+	private String status;
 
-    @JsonProperty("serverTime")
-    private String serverTime;
+	@JsonProperty("serverTime")
+	private String serverTime;
 
-    public static HealthResponse up() {
-        return HealthResponse.builder()
-                .status("UP")
-                .serverTime(Instant.now().toString())
-                .build();
-    }
+	public static HealthResponse up() {
+		return HealthResponse.builder()
+				.status("UP")
+				.serverTime(Instant.now().toString())
+				.build();
+	}
 }

@@ -18,8 +18,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -117,7 +117,7 @@ class MeControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "teamId": 10
+								"teamId": 10
 								}
 								"""))
 				.andExpect(status().isOk())
@@ -142,7 +142,7 @@ class MeControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "teamId": 0
+								"teamId": 0
 								}
 								"""))
 				.andExpect(status().isBadRequest())
@@ -180,8 +180,8 @@ class MeControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "termsAgreed": true,
-								  "privacyAgreed": true
+								"termsAgreed": true,
+								"privacyAgreed": true
 								}
 								"""))
 				.andExpect(status().isOk())
@@ -202,7 +202,7 @@ class MeControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "profileCharacterType": "TAK_SPARK"
+								"profileCharacterType": "TAK_SPARK"
 								}
 								"""))
 				.andExpect(status().isOk())
@@ -228,7 +228,7 @@ class MeControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "profileCharacterType": "INVALID"
+								"profileCharacterType": "INVALID"
 								}
 								"""))
 				.andExpect(status().isBadRequest())

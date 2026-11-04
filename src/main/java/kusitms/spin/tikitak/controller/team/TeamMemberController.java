@@ -24,47 +24,47 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class TeamMemberController {
 
-    private final TeamMemberService teamMemberService;
+	private final TeamMemberService teamMemberService;
 
-    @GetMapping
-    @Operation(summary = "팀 멤버 목록 조회 API")
-    public CommonResponse<TeamMemberResponseDTO.TeamMemberListResponseDTO> listTeamMembers(
-            @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @PathVariable Long teamId
-    ) {
-        TeamMemberResponseDTO.TeamMemberListResponseDTO response = teamMemberService.listTeamMembers(memberId, teamId);
-        return CommonResponse.success(response);
-    }
+	@GetMapping
+	@Operation(summary = "팀 멤버 목록 조회 API")
+	public CommonResponse<TeamMemberResponseDTO.TeamMemberListResponseDTO> listTeamMembers(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		TeamMemberResponseDTO.TeamMemberListResponseDTO response = teamMemberService.listTeamMembers(memberId, teamId);
+		return CommonResponse.success(response);
+	}
 
-    @PatchMapping("/me")
-    @Operation(summary = "내 팀 프로필 수정 API")
-    public CommonResponse<TeamMemberResponseDTO.TeamMemberUpdateResponseDTO> updateMyProfile(
-            @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @PathVariable Long teamId,
-            @Valid @RequestBody TeamMemberRequestDTO.TeamMemberUpdateRequestDTO request
-    ) {
-        TeamMemberResponseDTO.TeamMemberUpdateResponseDTO response = teamMemberService.updateMyProfile(memberId, teamId, request);
-        return CommonResponse.success(response);
-    }
+	@PatchMapping("/me")
+	@Operation(summary = "내 팀 프로필 수정 API")
+	public CommonResponse<TeamMemberResponseDTO.TeamMemberUpdateResponseDTO> updateMyProfile(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId,
+			@Valid @RequestBody TeamMemberRequestDTO.TeamMemberUpdateRequestDTO request
+	) {
+		TeamMemberResponseDTO.TeamMemberUpdateResponseDTO response = teamMemberService.updateMyProfile(memberId, teamId, request);
+		return CommonResponse.success(response);
+	}
 
-    @DeleteMapping("/me")
-    @Operation(summary = "팀 나가기 API")
-    public CommonResponse<Void> leaveTeam(
-            @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @PathVariable Long teamId
-    ) {
-        teamMemberService.leaveTeam(memberId, teamId);
-        return CommonResponse.success(null);
-    }
+	@DeleteMapping("/me")
+	@Operation(summary = "팀 나가기 API")
+	public CommonResponse<Void> leaveTeam(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId
+	) {
+		teamMemberService.leaveTeam(memberId, teamId);
+		return CommonResponse.success(null);
+	}
 
-    @DeleteMapping("/{targetTeamMemberId}")
-    @Operation(summary = "팀 멤버 강퇴 API", description = "팀장만 사용할 수 있습니다.")
-    public CommonResponse<Void> kickMember(
-            @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @PathVariable Long teamId,
-            @PathVariable Long targetTeamMemberId
-    ) {
-        teamMemberService.kickMember(memberId, teamId, targetTeamMemberId);
-        return CommonResponse.success(null);
-    }
+	@DeleteMapping("/{targetTeamMemberId}")
+	@Operation(summary = "팀 멤버 강퇴 API", description = "팀장만 사용할 수 있습니다.")
+	public CommonResponse<Void> kickMember(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable Long teamId,
+			@PathVariable Long targetTeamMemberId
+	) {
+		teamMemberService.kickMember(memberId, teamId, targetTeamMemberId);
+		return CommonResponse.success(null);
+	}
 }

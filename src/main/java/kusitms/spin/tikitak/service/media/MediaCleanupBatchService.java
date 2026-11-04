@@ -13,72 +13,72 @@ import java.util.List;
 @Slf4j
 public class MediaCleanupBatchService {
 
-    private static final int RETENTION_DAYS = 7;
-    private static final int DELETED_RETENTION_DAYS = 1;
-    private static final int BATCH_SIZE = 100;
+	private static final int RETENTION_DAYS = 7;
+	private static final int DELETED_RETENTION_DAYS = 1;
+	private static final int BATCH_SIZE = 100;
 
-    private final MediaService mediaService;
+	private final MediaService mediaService;
 
-    @Scheduled(cron = "0 0 4 * * *")
-    public void deleteExpiredPendingMedia() {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
-        LocalDateTime deletedCutoff = LocalDateTime.now().minusDays(DELETED_RETENTION_DAYS);
-        List<Long> pendingMediaIds = mediaService.findExpiredPendingMediaIds(cutoff, BATCH_SIZE);
-        List<Long> uploadedMediaIds = mediaService.findExpiredUploadedMediaIds(cutoff, BATCH_SIZE);
-        List<Long> deletedMediaIds = mediaService.findExpiredDeletedMediaIds(deletedCutoff, BATCH_SIZE);
+	@Scheduled(cron = "0 0 4 * * *")
+	public void deleteExpiredPendingMedia() {
+		LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
+		LocalDateTime deletedCutoff = LocalDateTime.now().minusDays(DELETED_RETENTION_DAYS);
+		List<Long> pendingMediaIds = mediaService.findExpiredPendingMediaIds(cutoff, BATCH_SIZE);
+		List<Long> uploadedMediaIds = mediaService.findExpiredUploadedMediaIds(cutoff, BATCH_SIZE);
+		List<Long> deletedMediaIds = mediaService.findExpiredDeletedMediaIds(deletedCutoff, BATCH_SIZE);
 
-        int deletedPendingCount = deleteMedia(pendingMediaIds, true);
-        int deletedUploadedCount = deleteMedia(uploadedMediaIds, MediaCleanupTarget.UPLOADED);
-        int hardDeletedCount = deleteMedia(deletedMediaIds, MediaCleanupTarget.DELETED);
+		int deletedPendingCount = deleteMedia(pendingMediaIds, true);
+		int deletedUploadedCount = deleteMedia(uploadedMediaIds, MediaCleanupTarget.UPLOADED);
+		int hardDeletedCount = deleteMedia(deletedMediaIds, MediaCleanupTarget.DELETED);
 
-        List<Long> orphanedUploadIds = mediaService.findExpiredMediaUploadIds(LocalDateTime.now(), BATCH_SIZE);
-        int deletedUploadCount = deleteMediaUploads(orphanedUploadIds);
+		List<Long> orphanedUploadIds = mediaService.findExpiredMediaUploadIds(LocalDateTime.now(), BATCH_SIZE);
+		int deletedUploadCount = deleteMediaUploads(orphanedUploadIds);
 
-        log.info("Expired media cleanup completed. pendingTargetCount={}, pendingDeletedCount={}, uploadedTargetCount={}, uploadedDeletedCount={}, deletedTargetCount={}, hardDeletedCount={}, orphanedUploadTargetCount={}, orphanedUploadDeletedCount={}",
-                pendingMediaIds.size(), deletedPendingCount, uploadedMediaIds.size(), deletedUploadedCount, deletedMediaIds.size(), hardDeletedCount,
-                orphanedUploadIds.size(), deletedUploadCount);
-    }
+		log.info("Expired media cleanup completed. pendingTargetCount={}, pendingDeletedCount={}, uploadedTargetCount={}, uploadedDeletedCount={}, deletedTargetCount={}, hardDeletedCount={}, orphanedUploadTargetCount={}, orphanedUploadDeletedCount={}",
+				pendingMediaIds.size(), deletedPendingCount, uploadedMediaIds.size(), deletedUploadedCount, deletedMediaIds.size(), hardDeletedCount,
+				orphanedUploadIds.size(), deletedUploadCount);
+	}
 
-    private int deleteMedia(List<Long> mediaIds, boolean pending) {
-        return deleteMedia(mediaIds, pending ? MediaCleanupTarget.PENDING : MediaCleanupTarget.UPLOADED);
-    }
+	private int deleteMedia(List<Long> mediaIds, boolean pending) {
+		return deleteMedia(mediaIds, pending ? MediaCleanupTarget.PENDING : MediaCleanupTarget.UPLOADED);
+	}
 
-    private int deleteMedia(List<Long> mediaIds, MediaCleanupTarget target) {
-        int deletedCount = 0;
-        for (Long mediaId : mediaIds) {
-            try {
-                boolean deleted = switch (target) {
-                    case PENDING -> mediaService.deleteExpiredPendingMedia(mediaId);
-                    case UPLOADED -> mediaService.deleteExpiredUploadedMedia(mediaId);
-                    case DELETED -> mediaService.deleteExpiredDeletedMedia(mediaId);
-                };
-                if (deleted) {
-                    deletedCount++;
-                }
-            } catch (Exception e) {
-                log.error("Failed to clean up expired media. mediaId={}", mediaId, e);
-            }
-        }
-        return deletedCount;
-    }
+	private int deleteMedia(List<Long> mediaIds, MediaCleanupTarget target) {
+		int deletedCount = 0;
+		for (Long mediaId : mediaIds) {
+			try {
+				boolean deleted = switch (target) {
+					case PENDING -> mediaService.deleteExpiredPendingMedia(mediaId);
+					case UPLOADED -> mediaService.deleteExpiredUploadedMedia(mediaId);
+					case DELETED -> mediaService.deleteExpiredDeletedMedia(mediaId);
+				};
+				if (deleted) {
+					deletedCount++;
+				}
+			} catch (Exception e) {
+				log.error("Failed to clean up expired media. mediaId={}", mediaId, e);
+			}
+		}
+		return deletedCount;
+	}
 
-    private int deleteMediaUploads(List<Long> uploadIds) {
-        int deletedCount = 0;
-        for (Long uploadId : uploadIds) {
-            try {
-                if (mediaService.deleteExpiredMediaUpload(uploadId)) {
-                    deletedCount++;
-                }
-            } catch (Exception e) {
-                log.error("Failed to clean up expired media upload. mediaUploadId={}", uploadId, e);
-            }
-        }
-        return deletedCount;
-    }
+	private int deleteMediaUploads(List<Long> uploadIds) {
+		int deletedCount = 0;
+		for (Long uploadId : uploadIds) {
+			try {
+				if (mediaService.deleteExpiredMediaUpload(uploadId)) {
+					deletedCount++;
+				}
+			} catch (Exception e) {
+				log.error("Failed to clean up expired media upload. mediaUploadId={}", uploadId, e);
+			}
+		}
+		return deletedCount;
+	}
 
-    private enum MediaCleanupTarget {
-        PENDING,
-        UPLOADED,
-        DELETED
-    }
+	private enum MediaCleanupTarget {
+		PENDING,
+		UPLOADED,
+		DELETED
+	}
 }
