@@ -10,13 +10,13 @@ import java.util.UUID;
 
 public class TeamMemberRequestDTO {
 
-    @Getter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TeamMemberUpdateRequestDTO {
-        @NotBlank
-        @Size(max = 30)
-        private String nickname;
-        private UUID mediaPublicId;
-    }
+	@Getter
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class TeamMemberUpdateRequestDTO {
+		@NotBlank
+		@Size(max = 30)
+		private String nickname;
+		private UUID mediaPublicId;
+	}
 }

@@ -1,8 +1,8 @@
 package kusitms.spin.tikitak.service.media;
 
+import jakarta.annotation.PostConstruct;
 import kusitms.spin.tikitak.global.config.ImageOptimizationProperties;
 import kusitms.spin.tikitak.global.config.R2Properties;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

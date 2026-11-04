@@ -1,12 +1,12 @@
 package kusitms.spin.tikitak.architecture;
 
-import java.util.Set;
-
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+
+import java.util.Set;
 
 /**
  * 아키텍처 테스트가 공유하는 프로덕션 클래스 import.

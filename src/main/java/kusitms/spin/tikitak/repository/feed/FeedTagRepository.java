@@ -17,11 +17,11 @@ public interface FeedTagRepository extends JpaRepository<FeedTag, Long> {
 			from FeedTag ft
 			join ft.feed f
 			where f.team.id = :teamId
-			  and f.deletedAt is null
-			  and f.createdAt >= :startOfMonth
-			  and f.createdAt < :startOfNextMonth
-			  and ft.teamMember.status = :status
-			  and ft.teamMember.deletedAt is null
+			and f.deletedAt is null
+			and f.createdAt >= :startOfMonth
+			and f.createdAt < :startOfNextMonth
+			and ft.teamMember.status = :status
+			and ft.teamMember.deletedAt is null
 			group by ft.teamMember
 			order by count(ft) desc, ft.teamMember.nickname asc
 			""")

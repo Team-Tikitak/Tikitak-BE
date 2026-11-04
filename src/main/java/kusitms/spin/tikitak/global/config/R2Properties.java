@@ -11,15 +11,15 @@ import org.springframework.validation.annotation.Validated;
 @Getter
 @Setter
 public class R2Properties {
-    private String accountId;
-    private String region = "auto";
-    @NotBlank
-    private String accessKeyId;
-    @NotBlank
-    private String secretAccessKey;
-    @NotBlank
-    private String bucketName;
-    @NotBlank
-    private String endpoint;
-    private String publicBaseUrl;
+	private String accountId;
+	private String region = "auto";
+	@NotBlank
+	private String accessKeyId;
+	@NotBlank
+	private String secretAccessKey;
+	@NotBlank
+	private String bucketName;
+	@NotBlank
+	private String endpoint;
+	private String publicBaseUrl;
 }

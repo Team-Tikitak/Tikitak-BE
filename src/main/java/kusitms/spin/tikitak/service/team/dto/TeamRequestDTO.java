@@ -9,26 +9,26 @@ import java.util.UUID;
 
 public class TeamRequestDTO {
 
-    @Getter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TeamCreateRequestDTO {
-        @NotBlank
-        private String teamName;
-        @NotBlank
-        private String introduction;
-        private UUID mediaPublicId;
-        @NotBlank
-        private String nickName;
-    }
+	@Getter
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class TeamCreateRequestDTO {
+		@NotBlank
+		private String teamName;
+		@NotBlank
+		private String introduction;
+		private UUID mediaPublicId;
+		@NotBlank
+		private String nickName;
+	}
 
-    @Getter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TeamUpdateRequestDTO {
-        @NotBlank
-        private String teamName;
-        @NotBlank
-        private String introduction;
-    }
+	@Getter
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class TeamUpdateRequestDTO {
+		@NotBlank
+		private String teamName;
+		@NotBlank
+		private String introduction;
+	}
 }

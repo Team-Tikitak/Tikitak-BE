@@ -1,14 +1,14 @@
 package kusitms.spin.tikitak.architecture;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.util.Set;
+
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static kusitms.spin.tikitak.architecture.ArchitectureClasses.PRODUCTION_CLASSES;
 import static kusitms.spin.tikitak.architecture.ArchitectureClasses.notInExceptions;
-
-import java.util.Set;
-
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 
 /**
  * CLAUDE.md "Architecture": 최상위는 계층별(controller/service/repository/domain), 그 아래는 기능별 구조다.

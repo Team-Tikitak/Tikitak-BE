@@ -7,7 +7,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "kakao.map")
 public record KakaoMapProperties(
-        @NotBlank
-        String restApiKey
+		@NotBlank
+		String restApiKey
 ) {
 }

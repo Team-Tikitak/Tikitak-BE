@@ -1,7 +1,7 @@
 package kusitms.spin.tikitak.service.auth;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.config.AuthProperties;

@@ -125,7 +125,7 @@ class FeedControllerTest extends ApiTest {
 				isNull(),
 				isNull(),
 				isNull(),
-        isNull(),
+		isNull(),
 				eq(List.of(101L, 102L))
 		)).thenReturn(emptyListResponse());
 
@@ -146,7 +146,7 @@ class FeedControllerTest extends ApiTest {
 				isNull(),
 				isNull(),
 				isNull(),
-        isNull(),
+		isNull(),
 				eq(List.of(101L, 102L))
 		)).thenReturn(emptyListResponse());
 
@@ -184,16 +184,16 @@ class FeedControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "content": "오늘 카페 좋았다",
-								  "mediaPublicIds": ["11111111-1111-1111-1111-111111111111"],
-								  "place": {
-								    "placeId": "kakao_12345",
-								    "name": "카페 티키",
-								    "latitude": 37.12345,
-								    "longitude": 127.12345,
-								    "address": "서울시 강남구"
-								  },
-								  "taggedTeamMemberIds": [101]
+								"content": "오늘 카페 좋았다",
+								"mediaPublicIds": ["11111111-1111-1111-1111-111111111111"],
+								"place": {
+									"placeId": "kakao_12345",
+									"name": "카페 티키",
+									"latitude": 37.12345,
+									"longitude": 127.12345,
+									"address": "서울시 강남구"
+								},
+								"taggedTeamMemberIds": [101]
 								}
 				"""))
 				.andExpect(status().isCreated())
@@ -214,10 +214,10 @@ class FeedControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "content": "수정된 내용",
-								  "mediaPublicIds": ["11111111-1111-1111-1111-111111111111"],
-								  "place": null,
-								  "taggedTeamMemberIds": []
+								"content": "수정된 내용",
+								"mediaPublicIds": ["11111111-1111-1111-1111-111111111111"],
+								"place": null,
+								"taggedTeamMemberIds": []
 								}
 								"""))
 				.andExpect(status().isOk())
@@ -250,7 +250,7 @@ class FeedControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "reactionType": "TAK_LEADER"
+								"reactionType": "TAK_LEADER"
 								}
 								"""))
 				.andExpect(status().isOk())
