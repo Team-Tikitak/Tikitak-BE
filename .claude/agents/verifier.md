@@ -15,7 +15,7 @@ hooks:
 ## 규칙
 - **코드를 수정하지 않는다.** 문제를 찾으면 고치지 말고 보고만 한다.
 - `git commit`, `git push`, `git checkout`, `git reset`, `git stash` 등 작업 트리를 바꾸는 명령을 실행하지 않는다.
-- Bash 명령은 `scripts/readonly-bash-guard.sh` hook이 허용 목록으로 검사한다 (조회용 git, 읽기 명령, `./gradlew test|integrationTest|check` 등). 차단되면 우회하려 하지 말고, 그 항목을 "확인 불가"로 적는다.
+- Bash 명령은 `scripts/readonly-bash-guard.sh` hook이 허용 목록으로 검사한다 (조회용 git, 읽기 명령, `./gradlew test|integrationTest|check|spotlessCheck` 등). 차단되면 우회하려 하지 말고, 그 항목을 "확인 불가"로 적는다.
 - 근거 없이 PASS를 주지 않는다. 확인하지 못한 항목은 "확인 불가"와 이유를 적는다.
 
 ## 확인 순서
