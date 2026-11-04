@@ -80,6 +80,7 @@ DB 스키마는 `src/main/resources/db/migration` 아래 Flyway로 관리됨. (`
 ## 작업 하네스
 
 - 작업은 `docs/contracts/TEMPLATE.md` 양식의 짧은 계약으로 시작하고, 사람이 승인한 뒤 구현한다.
+- 전체 진행 순서(조사 → 계약 → 구현 → 검증 → 커밋 승인 → critic → PR)는 `.claude/skills/harness-workflow/SKILL.md`에 있다.
 - 워커 역할은 `.claude/agents/`에 정의돼 있다: `researcher`(조사, 읽기 전용) → `implementer`(계약 범위 안에서 구현) → `verifier`(별도 컨텍스트에서 완료 조건 판정, 수정 안 함).
 - 실수·실패는 `docs/lessons-log.md`에 한 줄로 남기고, 같은 실수가 두 번째 나오면 린터/테스트/설정/이 파일의 규칙으로 승격한다.
 - 설계 판단은 `docs/decisions/`에 결정 하나당 파일 하나로 남긴다.
