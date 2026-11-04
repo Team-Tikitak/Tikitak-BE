@@ -40,7 +40,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_JAVA_UTIL_LOGGING;
 import static kusitms.spin.tikitak.architecture.ArchitectureClasses.PRODUCTION_CLASSES;
-import static kusitms.spin.tikitak.architecture.ArchitectureClasses.notInExceptions;
 
 /**
  * CLAUDE.md "Architecture"/"Conventions"의 코드 컨벤션 중 기계적으로 판정할 수 있는 것을 강제한다.
@@ -51,12 +50,6 @@ class ConventionArchTest {
 	private static final String SPRING_TRANSACTIONAL = "org.springframework.transaction.annotation.Transactional";
 	private static final String JAKARTA_TRANSACTIONAL = "jakarta.transaction.Transactional";
 
-	/** C4 예외 목록. */
-	private static final Set<String> C4_ENTITY_LOCATION_EXCEPTIONS = Set.of(
-			// domain.auth 바로 아래에 있음(entity 패키지 아님). 후속: domain.auth.entity로 옮긴다
-			"kusitms.spin.tikitak.domain.auth.RefreshToken"
-	);
-
 	/** C7 예외 목록. "클래스 FQCN#메서드 이름" 형식. */
 	private static final Set<String> C7_RESPONSE_TYPE_EXCEPTIONS = Set.of(
 			// OAuth 시작: 302 리다이렉트 또는 authorize URL 응답이라 ResponseEntity<?>를 반환. 후속: 리다이렉트 응답 규칙을 따로 정한다
@@ -65,24 +58,6 @@ class ConventionArchTest {
 			"kusitms.spin.tikitak.controller.auth.AuthController#handleOAuthCallback",
 			// Apple OAuth 콜백(form_post): 302 리다이렉트라 본문 없음(ResponseEntity<Void>). 후속: 위와 같음
 			"kusitms.spin.tikitak.controller.auth.AuthController#handleAppleOAuthCallback"
-	);
-
-	/** C9 예외 목록. */
-	private static final Set<String> C9_RAW_EXCEPTION_EXCEPTIONS = Set.of(
-			// JSON 직렬화/서명/해시 실패(인프라 오류)를 IllegalStateException으로 감쌈. 후속: ErrorCode 추가 후 BusinessException으로 전환
-			"kusitms.spin.tikitak.service.auth.TokenService",
-			// 로그인 코드 payload 직렬화/역직렬화 실패(인프라 오류). 후속: 위와 같음
-			"kusitms.spin.tikitak.service.auth.RedisLoginCodeStore",
-			// 이미지 최적화 설정 누락(기동 시 설정 오류). 후속: *Properties 검증(@Validated)으로 옮긴다
-			"kusitms.spin.tikitak.service.media.ImageUrlResolver"
-	);
-
-	/** C10 예외 목록. */
-	private static final Set<String> C10_VALUE_ANNOTATION_EXCEPTIONS = Set.of(
-			// OAuth state Redis 키 프리픽스/TTL을 @Value로 주입. 후속: AuthProperties로 옮긴다
-			"kusitms.spin.tikitak.service.auth.RedisOAuthStateStore",
-			// 로그인 코드 Redis 키 프리픽스/TTL을 @Value로 주입. 후속: AuthProperties로 옮긴다
-			"kusitms.spin.tikitak.service.auth.RedisLoginCodeStore"
 	);
 
 	private static final List<Class<? extends RuntimeException>> RAW_EXCEPTION_TYPES = List.of(
@@ -135,7 +110,6 @@ class ConventionArchTest {
 	void c4_entitiesResideInDomainEntityPackage() {
 		classes()
 				.that().areAnnotatedWith(Entity.class)
-				.and(notInExceptions(C4_ENTITY_LOCATION_EXCEPTIONS))
 				.should().resideInAPackage("..domain.*.entity..")
 				.because("CLAUDE.md Architecture: 엔티티는 domain/<feature>/entity에 둔다")
 				.check(PRODUCTION_CLASSES);
@@ -193,7 +167,6 @@ class ConventionArchTest {
 	void c9_noRawRuntimeExceptionsInServiceAndController() {
 		noClasses()
 				.that().resideInAnyPackage("..service..", "..controller..")
-				.and(notInExceptions(C9_RAW_EXCEPTION_EXCEPTIONS))
 				.should(instantiateAnyOf(RAW_EXCEPTION_TYPES))
 				.because("CLAUDE.md Architecture/Conventions: 비즈니스 규칙 실패는 new BusinessException(ErrorCode.XXX)로 던진다")
 				.check(PRODUCTION_CLASSES);
@@ -204,7 +177,6 @@ class ConventionArchTest {
 	void c10_valueAnnotationOnlyInGlobalConfig() {
 		noClasses()
 				.that().resideOutsideOfPackage("..global.config..")
-				.and(notInExceptions(C10_VALUE_ANNOTATION_EXCEPTIONS))
 				.should().dependOnClassesThat().belongToAnyOf(Value.class)
 				.because("CLAUDE.md Conventions: 설정값은 흩어진 @Value 대신 global/config의 *Properties로 바인딩한다")
 				.check(PRODUCTION_CLASSES);

@@ -1,10 +1,10 @@
 package kusitms.spin.tikitak.service.notification;
 
+import kusitms.spin.tikitak.domain.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
-import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
