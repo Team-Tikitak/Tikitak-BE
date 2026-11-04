@@ -32,7 +32,7 @@ READ_COMMANDS = {
 FIND_FORBIDDEN = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 
 # verifier만: 빌드·테스트 실행 (build/ 산출물 외에는 소스를 바꾸지 않는 태스크)
-GRADLE_TASKS = {"test", "integrationTest", "check", "compileJava", "compileTestJava", "clean", "build"}
+GRADLE_TASKS = {"test", "integrationTest", "check", "spotlessCheck", "compileJava", "compileTestJava", "clean", "build"}
 GRADLE_OPTIONS = {"--info", "--stacktrace", "-q", "--quiet", "--console=plain", "--no-daemon", "--rerun-tasks", "--continue"}
 
 # 허용하는 리다이렉션 (출력을 버리거나 합치는 것만)
