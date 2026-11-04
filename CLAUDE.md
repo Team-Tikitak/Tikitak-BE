@@ -68,7 +68,10 @@ DB 스키마는 `src/main/resources/db/migration` 아래 Flyway로 관리됨. (`
 - 새 엔드포인트는 `CommonResponse.success(data)` / `successWithStatus(data, status)`로 응답하고, 실패는 raw exception이나 수동으로 만든 에러 `ResponseEntity`가 아니라 `BusinessException` + `ErrorCode`로 처리함.
 - "설정 안 함"과 "명시적 null"을 구분해야 하는 부분 수정(PATCH) DTO는 일반 nullable 필드가 아니라 `PatchField<T>` 필드를 사용함.
 - 설정값은 여기저기 흩어진 `@Value` 대신 `global/config`의 `*Properties` 클래스(예: `R2Properties`, `AuthProperties`, `FirebaseProperties`)를 통해 바인딩함.
-- 커밋 전에 `./gradlew spotlessApply`를 돌린다. 포맷은 손으로 맞추지 않고 Spotless 결과를 그대로 쓴다([결정 기록](docs/decisions/2026-11-04-spotless-minimal-rules.md)).
+- 커밋 전에 수정한 Java 파일에 Spotless를 적용한다. 포맷은 손으로 맞추지 않고 Spotless 결과를 그대로 쓴다([결정 기록](docs/decisions/2026-11-04-spotless-minimal-rules.md)).
+  - 작업 트리에 이번 작업과 관계없는 미커밋 Java 파일이 없으면 `./gradlew spotlessApply`. 기존 파일은 이미 정리돼 있으므로 수정한 파일만 바뀐다.
+  - 관계없는 미커밋 Java 파일이 있으면 `spotlessApply`가 그 파일까지 고치므로, 수정한 파일마다 `./gradlew spotlessApply -PspotlessIdeHook=<파일 절대경로>`를 쓴다(한 번에 파일 하나).
+  - text block 안의 앞쪽 공백도 탭 단위로 바뀐다. 공백에 의미가 있는 text block을 추가하면 결정 기록의 "남은 리스크"를 따른다.
 
 ## Git workflow
 
