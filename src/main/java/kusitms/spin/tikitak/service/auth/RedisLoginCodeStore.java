@@ -3,6 +3,8 @@ package kusitms.spin.tikitak.service.auth;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kusitms.spin.tikitak.global.config.LoginCodeProperties;
+import kusitms.spin.tikitak.global.exception.BusinessException;
+import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.service.auth.dto.LoginCodePayload;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -37,7 +39,7 @@ public class RedisLoginCodeStore implements LoginCodeStore {
 		try {
 			return objectMapper.writeValueAsString(payload);
 		} catch (JsonProcessingException e) {
-			throw new IllegalStateException("Failed to serialize login code payload.", e);
+			throw new BusinessException(ErrorCode.COMMON004, e);
 		}
 	}
 
@@ -45,7 +47,7 @@ public class RedisLoginCodeStore implements LoginCodeStore {
 		try {
 			return objectMapper.readValue(raw, LoginCodePayload.class);
 		} catch (JsonProcessingException e) {
-			throw new IllegalStateException("Failed to deserialize login code payload.", e);
+			throw new BusinessException(ErrorCode.COMMON004, e);
 		}
 	}
 }

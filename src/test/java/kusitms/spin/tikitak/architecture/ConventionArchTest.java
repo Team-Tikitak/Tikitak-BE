@@ -40,7 +40,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_JAVA_UTIL_LOGGING;
 import static kusitms.spin.tikitak.architecture.ArchitectureClasses.PRODUCTION_CLASSES;
-import static kusitms.spin.tikitak.architecture.ArchitectureClasses.notInExceptions;
 
 /**
  * CLAUDE.md "Architecture"/"Conventions"의 코드 컨벤션 중 기계적으로 판정할 수 있는 것을 강제한다.
@@ -59,16 +58,6 @@ class ConventionArchTest {
 			"kusitms.spin.tikitak.controller.auth.AuthController#handleOAuthCallback",
 			// Apple OAuth 콜백(form_post): 302 리다이렉트라 본문 없음(ResponseEntity<Void>). 후속: 위와 같음
 			"kusitms.spin.tikitak.controller.auth.AuthController#handleAppleOAuthCallback"
-	);
-
-	/** C9 예외 목록. */
-	private static final Set<String> C9_RAW_EXCEPTION_EXCEPTIONS = Set.of(
-			// JSON 직렬화/서명/해시 실패(인프라 오류)를 IllegalStateException으로 감쌈. 후속: ErrorCode 추가 후 BusinessException으로 전환
-			"kusitms.spin.tikitak.service.auth.TokenService",
-			// 로그인 코드 payload 직렬화/역직렬화 실패(인프라 오류). 후속: 위와 같음
-			"kusitms.spin.tikitak.service.auth.RedisLoginCodeStore",
-			// 이미지 최적화 설정 누락(기동 시 설정 오류). 후속: *Properties 검증(@Validated)으로 옮긴다
-			"kusitms.spin.tikitak.service.media.ImageUrlResolver"
 	);
 
 	private static final List<Class<? extends RuntimeException>> RAW_EXCEPTION_TYPES = List.of(
@@ -178,7 +167,6 @@ class ConventionArchTest {
 	void c9_noRawRuntimeExceptionsInServiceAndController() {
 		noClasses()
 				.that().resideInAnyPackage("..service..", "..controller..")
-				.and(notInExceptions(C9_RAW_EXCEPTION_EXCEPTIONS))
 				.should(instantiateAnyOf(RAW_EXCEPTION_TYPES))
 				.because("CLAUDE.md Architecture/Conventions: 비즈니스 규칙 실패는 new BusinessException(ErrorCode.XXX)로 던진다")
 				.check(PRODUCTION_CLASSES);

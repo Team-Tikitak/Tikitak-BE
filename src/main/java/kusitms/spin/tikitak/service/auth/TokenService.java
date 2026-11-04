@@ -196,7 +196,7 @@ public class TokenService {
 		try {
 			return objectMapper.writeValueAsString(value);
 		} catch (JsonProcessingException e) {
-			throw new IllegalStateException("Failed to create token payload.", e);
+			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
 	}
 
@@ -206,7 +206,7 @@ public class TokenService {
 			mac.init(new SecretKeySpec(authProperties.jwt().secret().getBytes(StandardCharsets.UTF_8), HMAC_SHA256));
 			return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
 		} catch (Exception e) {
-			throw new IllegalStateException("Failed to sign token.", e);
+			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
 	}
 
@@ -224,7 +224,7 @@ public class TokenService {
 			}
 			return builder.toString();
 		} catch (Exception e) {
-			throw new IllegalStateException("Failed to hash token.", e);
+			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
 	}
 }
