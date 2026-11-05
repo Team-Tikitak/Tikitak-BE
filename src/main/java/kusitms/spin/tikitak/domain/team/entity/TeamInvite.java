@@ -1,24 +1,20 @@
 package kusitms.spin.tikitak.domain.team.entity;
 
 import jakarta.persistence.*;
+import kusitms.spin.tikitak.domain.common.BaseCreatedTimeEntity;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "team_invite")
 @Getter
-@Builder
-@EntityListeners(AuditingEntityListener.class)
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class TeamInvite {
+public class TeamInvite extends BaseCreatedTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,10 +32,6 @@ public class TeamInvite {
 
 	@Column(name = "is_active", nullable = false)
 	private boolean active;
-
-	@CreatedDate
-	@Column(nullable = false, updatable = false)
-	private LocalDateTime createdAt;
 
 	public boolean isExpired() {
 		return expiresAt.isBefore(LocalDateTime.now());
