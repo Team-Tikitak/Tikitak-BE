@@ -15,3 +15,4 @@
 | 2026-11-02 | [ArchUnit 기존 위반은 동결 대신 명시적 예외 목록으로 허용](2026-11-02-archunit-explicit-exceptions.md) | - | FreezingArchRule store는 무엇을 왜 허용했는지 리뷰에서 보이지 않아, 규칙별 예외 상수에 이유·후속 조치 주석을 달아 관리 |
 | 2026-11-04 | [Spotless는 레이아웃 포맷터 없이 공백·import 최소 규칙만 적용](2026-11-04-spotless-minimal-rules.md) | - | 레이아웃 포맷터는 공백 무시 후에도 2,500~5,700줄이 바뀌어 동작 변경 0을 확인할 수 없으므로, 탭·줄 끝 공백·파일 끝 개행·import만 고정. `ratchetFrom`은 기능 PR을 오염시켜 기각 |
 | 2026-11-04 | [JVM 타임존은 바꾸지 않고 날짜·월 경계만 KST로 계산](2026-11-04-kst-boundaries-without-tz-change.md) | #162 | JVM TZ 고정은 기존 UTC 저장값과 9시간 불연속·blue/green 마이그레이션 위험이 있어, 저장은 그대로 두고 경계만 KST로 계산해 시스템 zone으로 변환. `@Scheduled`는 zone 명시 |
+| 2026-11-05 | [외부 API 호출(OAuth/FCM/R2)은 DB 트랜잭션·락 밖에서 실행](2026-11-05-external-call-outside-transaction.md) | #161 | 트랜잭션 구간을 패키지별 별도 빈으로 빼고(self-invocation·TransactionTemplate 대신), 업로드 완료는 사전 읽기 → headObject → 락 후 전체 재검증 |

@@ -22,6 +22,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 @Service
 @RequiredArgsConstructor
@@ -32,10 +33,14 @@ public class KakaoOAuthService {
 	private static final String TOKEN_URI = "https://kauth.kakao.com/oauth/token";
 	private static final String USER_INFO_URI = "https://kapi.kakao.com/v2/user/me";
 	private static final String SCOPE = "profile_nickname,profile_image,account_email";
+	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
+	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
 
 	private final AuthProperties authProperties;
 	private final ObjectMapper objectMapper;
-	private final HttpClient httpClient = HttpClient.newHttpClient();
+	final HttpClient httpClient = HttpClient.newBuilder()
+			.connectTimeout(CONNECT_TIMEOUT)
+			.build();
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String state) {
 		AuthProperties.Kakao kakao = authProperties.oauth().kakao();
@@ -76,6 +81,10 @@ public class KakaoOAuthService {
 	}
 
 	private KakaoOAuthTokenResponse requestToken(String code) {
+		return send(buildTokenRequest(code), KakaoOAuthTokenResponse.class);
+	}
+
+	HttpRequest buildTokenRequest(String code) {
 		AuthProperties.Kakao kakao = authProperties.oauth().kakao();
 		validateKakaoClientConfig(kakao, true);
 		String body = formParam("grant_type", "authorization_code")
@@ -84,21 +93,23 @@ public class KakaoOAuthService {
 				+ "&" + formParam("code", code)
 				+ "&" + formParam("client_secret", kakao.clientSecret());
 
-		HttpRequest request = HttpRequest.newBuilder(URI.create(TOKEN_URI))
+		return HttpRequest.newBuilder(URI.create(TOKEN_URI))
 				.header(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded;charset=UTF-8")
+				.timeout(REQUEST_TIMEOUT)
 				.POST(HttpRequest.BodyPublishers.ofString(body))
 				.build();
-
-		return send(request, KakaoOAuthTokenResponse.class);
 	}
 
 	private KakaoUserInfoResponse requestKakaoUserInfo(String accessToken) {
-		HttpRequest request = HttpRequest.newBuilder(URI.create(USER_INFO_URI))
+		return send(buildUserInfoRequest(accessToken), KakaoUserInfoResponse.class);
+	}
+
+	HttpRequest buildUserInfoRequest(String accessToken) {
+		return HttpRequest.newBuilder(URI.create(USER_INFO_URI))
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+				.timeout(REQUEST_TIMEOUT)
 				.GET()
 				.build();
-
-		return send(request, KakaoUserInfoResponse.class);
 	}
 
 	private <T> T send(HttpRequest request, Class<T> responseType) {
@@ -118,8 +129,8 @@ public class KakaoOAuthService {
 			Thread.currentThread().interrupt();
 			throw new OAuthAuthenticationException("Kakao OAuth request interrupted.", e);
 		} catch (IOException e) {
-			log.warn("Kakao OAuth response parsing failed. uri={}, reason={}", request.uri(), e.getMessage());
-			throw new OAuthAuthenticationException("Kakao OAuth response parsing failed.", e);
+			log.warn("Kakao OAuth request failed. uri={}, reason={}", request.uri(), e.getMessage());
+			throw new OAuthAuthenticationException("Kakao OAuth request failed.", e);
 		}
 	}
 

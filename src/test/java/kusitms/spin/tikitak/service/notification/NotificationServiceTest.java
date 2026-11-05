@@ -8,24 +8,23 @@ import com.google.firebase.messaging.SendResponse;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.notification.dto.NotificationPayload;
-import kusitms.spin.tikitak.domain.notification.entity.MemberDeviceToken;
 import kusitms.spin.tikitak.domain.notification.entity.Notification;
-import kusitms.spin.tikitak.domain.notification.enums.DevicePlatform;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
-import kusitms.spin.tikitak.repository.member.MemberRepository;
-import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.notification.NotificationRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.media.ImagePreset;
 import kusitms.spin.tikitak.service.media.ImageUrlResolver;
+import kusitms.spin.tikitak.service.notification.NotificationPersistService.DeviceTokenTarget;
+import kusitms.spin.tikitak.service.notification.NotificationPersistService.SavedNotification;
 import kusitms.spin.tikitak.service.notification.dto.NotificationResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 
 import java.time.LocalDateTime;
@@ -33,7 +32,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMember;
-import static kusitms.spin.tikitak.support.fixture.MemberFixture.inactiveMember;
 import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMemberWithoutProfileImg;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,10 +51,7 @@ import static org.mockito.Mockito.when;
 class NotificationServiceTest extends UnitTest {
 
 	@Mock
-	private MemberRepository memberRepository;
-
-	@Mock
-	private MemberDeviceTokenRepository deviceTokenRepository;
+	private NotificationPersistService notificationPersistService;
 
 	@Mock
 	private NotificationRepository notificationRepository;
@@ -78,148 +74,148 @@ class NotificationServiceTest extends UnitTest {
 	@Test
 	@DisplayName("존재하지 않거나 탈퇴한 회원에게는 알림을 저장/전송하지 않는다")
 	void doesNotSaveOrSendWhenMemberIsNotActive() {
-		NotificationService notificationService = notificationService(Optional.empty());
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(inactiveMember(1L)));
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		NotificationPayload payload = somePayload();
+		when(notificationPersistService.saveForActiveMember(1L, payload, true)).thenReturn(Optional.empty());
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
-		verify(notificationRepository, never()).save(any());
-		verifyNoInteractions(deviceTokenRepository);
+		verify(notificationPersistService).saveForActiveMember(1L, payload, true);
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
+		verifyNoInteractions(firebaseMessaging);
 	}
 
 	@Test
 	@DisplayName("FCM이 설정되지 않은 경우에도 알림은 저장하되 전송하지 않는다")
 	void doesNotSendWhenFirebaseMessagingIsNotConfigured() {
 		NotificationService notificationService = notificationService(Optional.empty());
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
+		NotificationPayload payload = somePayload();
+		when(notificationPersistService.saveForActiveMember(1L, payload, false))
+				.thenReturn(Optional.of(new SavedNotification(100L, List.of())));
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
-		verify(notificationRepository).save(any(Notification.class));
-		verifyNoInteractions(deviceTokenRepository);
+		verify(notificationPersistService).saveForActiveMember(1L, payload, false);
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
 	}
 
 	@Test
 	@DisplayName("등록된 디바이스 토큰이 없으면 FCM을 호출하지 않는다")
 	void doesNotCallFcmWhenNoDeviceTokens() {
 		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
-		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of());
+		NotificationPayload payload = somePayload();
+		when(notificationPersistService.saveForActiveMember(1L, payload, true))
+				.thenReturn(Optional.of(new SavedNotification(100L, List.of())));
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
 		verifyNoInteractions(firebaseMessaging);
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
 	}
 
 	@Test
 	@DisplayName("전송 결과가 UNREGISTERED 오류이면 해당 디바이스 토큰을 삭제한다")
 	void deletesDeviceTokenWhenUnregistered() throws Exception {
 		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
-		MemberDeviceToken deviceToken = deviceToken("token-1");
-		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
+		NotificationPayload payload = somePayload();
+		givenSavedWithTokens(payload, new DeviceTokenTarget(1L, "token-1"));
 
-		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
-		when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
-		SendResponse failedResponse = mock(SendResponse.class);
-		when(failedResponse.isSuccessful()).thenReturn(false);
-		when(failedResponse.getException()).thenReturn(exception);
-
+		List<SendResponse> responses = List.of(failedResponse(MessagingErrorCode.UNREGISTERED));
 		BatchResponse batchResponse = mock(BatchResponse.class);
-		when(batchResponse.getResponses()).thenReturn(List.of(failedResponse));
+		when(batchResponse.getResponses()).thenReturn(responses);
 		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
-		verify(deviceTokenRepository).delete(deviceToken);
+		verify(notificationPersistService).deleteDeviceTokens(List.of(1L));
 	}
 
 	@Test
 	@DisplayName("전송에 성공하면 디바이스 토큰을 삭제하지 않는다")
 	void doesNotDeleteDeviceTokenOnSuccess() throws Exception {
 		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
-		MemberDeviceToken deviceToken = deviceToken("token-1");
-		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
+		NotificationPayload payload = somePayload();
+		givenSavedWithTokens(payload, new DeviceTokenTarget(1L, "token-1"));
 
-		SendResponse successResponse = mock(SendResponse.class);
-		when(successResponse.isSuccessful()).thenReturn(true);
-
+		List<SendResponse> responses = List.of(successResponse());
 		BatchResponse batchResponse = mock(BatchResponse.class);
-		when(batchResponse.getResponses()).thenReturn(List.of(successResponse));
+		when(batchResponse.getResponses()).thenReturn(responses);
 		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
-		verify(deviceTokenRepository, never()).delete(any());
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
 	}
 
 	@Test
 	@DisplayName("전송 결과가 UNREGISTERED 이외의 오류이면 디바이스 토큰을 삭제하지 않는다")
 	void doesNotDeleteDeviceTokenOnOtherErrorCodes() throws Exception {
 		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
-		MemberDeviceToken deviceToken = deviceToken("token-1");
-		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
+		NotificationPayload payload = somePayload();
+		givenSavedWithTokens(payload, new DeviceTokenTarget(1L, "token-1"));
 
-		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
-		when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNAVAILABLE);
-		SendResponse failedResponse = mock(SendResponse.class);
-		when(failedResponse.isSuccessful()).thenReturn(false);
-		when(failedResponse.getException()).thenReturn(exception);
-
+		List<SendResponse> responses = List.of(failedResponse(MessagingErrorCode.UNAVAILABLE));
 		BatchResponse batchResponse = mock(BatchResponse.class);
-		when(batchResponse.getResponses()).thenReturn(List.of(failedResponse));
+		when(batchResponse.getResponses()).thenReturn(responses);
 		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
-		verify(deviceTokenRepository, never()).delete(any());
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
 	}
 
 	@Test
 	@DisplayName("등록된 모든 디바이스 토큰으로 전송하고 실패한 토큰만 삭제한다")
 	void sendsToAllDeviceTokensAndDeletesOnlyFailedOnes() throws Exception {
 		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
-		MemberDeviceToken validToken = deviceToken("token-valid");
-		MemberDeviceToken invalidToken = deviceToken("token-invalid");
-		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(validToken, invalidToken));
+		NotificationPayload payload = somePayload();
+		givenSavedWithTokens(
+				payload,
+				new DeviceTokenTarget(1L, "token-valid"),
+				new DeviceTokenTarget(2L, "token-invalid")
+		);
 
-		SendResponse successResponse = mock(SendResponse.class);
-		when(successResponse.isSuccessful()).thenReturn(true);
-
-		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
-		when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
-		SendResponse failedResponse = mock(SendResponse.class);
-		when(failedResponse.isSuccessful()).thenReturn(false);
-		when(failedResponse.getException()).thenReturn(exception);
-
+		List<SendResponse> responses = List.of(successResponse(), failedResponse(MessagingErrorCode.UNREGISTERED));
 		BatchResponse batchResponse = mock(BatchResponse.class);
-		when(batchResponse.getResponses()).thenReturn(List.of(successResponse, failedResponse));
+		when(batchResponse.getResponses()).thenReturn(responses);
 		when(firebaseMessaging.sendEach(anyList())).thenReturn(batchResponse);
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
 		verify(firebaseMessaging).sendEach(argThat(messages -> messages.size() == 2));
-		verify(deviceTokenRepository).delete(invalidToken);
-		verify(deviceTokenRepository, never()).delete(validToken);
+		verify(notificationPersistService).deleteDeviceTokens(List.of(2L));
 	}
 
 	@Test
 	@DisplayName("FCM 전송 중 예외가 발생해도 호출자에게 전파하지 않는다")
 	void doesNotPropagateExceptionWhenFcmCallFails() throws Exception {
 		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
-		when(memberRepository.findById(1L)).thenReturn(Optional.of(activeMember(1L)));
-		MemberDeviceToken deviceToken = deviceToken("token-1");
-		when(deviceTokenRepository.findAllByMemberId(1L)).thenReturn(List.of(deviceToken));
+		NotificationPayload payload = somePayload();
+		givenSavedWithTokens(payload, new DeviceTokenTarget(1L, "token-1"));
 
 		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
 		when(firebaseMessaging.sendEach(anyList())).thenThrow(exception);
 
-		notificationService.send(1L, somePayload());
+		notificationService.send(1L, payload);
 
-		verify(deviceTokenRepository, never()).delete(any());
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
+	}
+
+	@Test
+	@DisplayName("FCM이 RuntimeException을 던지면 알림 저장(별도 트랜잭션)은 이미 끝난 뒤이고, 예외는 전파되며 토큰은 삭제하지 않는다")
+	void notificationIsSavedBeforeFcmRuntimeExceptionPropagates() throws Exception {
+		NotificationService notificationService = notificationService(Optional.of(firebaseMessaging));
+		NotificationPayload payload = somePayload();
+		givenSavedWithTokens(payload, new DeviceTokenTarget(1L, "token-1"));
+		RuntimeException fcmFailure = new RuntimeException("fcm failed");
+		when(firebaseMessaging.sendEach(anyList())).thenThrow(fcmFailure);
+
+		assertThatThrownBy(() -> notificationService.send(1L, payload)).isSameAs(fcmFailure);
+
+		InOrder inOrder = inOrder(notificationPersistService, firebaseMessaging);
+		inOrder.verify(notificationPersistService).saveForActiveMember(1L, payload, true);
+		inOrder.verify(firebaseMessaging).sendEach(anyList());
+		verify(notificationPersistService, never()).deleteDeviceTokens(anyList());
 	}
 
 	@Test
@@ -352,8 +348,7 @@ class NotificationServiceTest extends UnitTest {
 
 	private NotificationService notificationService(Optional<FirebaseMessaging> firebaseMessaging) {
 		return new NotificationService(
-				memberRepository,
-				deviceTokenRepository,
+				notificationPersistService,
 				notificationRepository,
 				teamMemberRepository,
 				feedImageRepository,
@@ -378,16 +373,24 @@ class NotificationServiceTest extends UnitTest {
 				.build();
 	}
 
-	private MemberDeviceToken deviceToken(String fcmToken) {
-		LocalDateTime now = LocalDateTime.now();
-		return MemberDeviceToken.builder()
-				.id(1L)
-				.member(activeMember(1L))
-				.fcmToken(fcmToken)
-				.platform(DevicePlatform.ANDROID)
-				.createdAt(now)
-				.updatedAt(now)
-				.build();
+	private void givenSavedWithTokens(NotificationPayload payload, DeviceTokenTarget... deviceTokens) {
+		when(notificationPersistService.saveForActiveMember(1L, payload, true))
+				.thenReturn(Optional.of(new SavedNotification(100L, List.of(deviceTokens))));
+	}
+
+	private SendResponse successResponse() {
+		SendResponse response = mock(SendResponse.class);
+		when(response.isSuccessful()).thenReturn(true);
+		return response;
+	}
+
+	private SendResponse failedResponse(MessagingErrorCode errorCode) {
+		FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
+		when(exception.getMessagingErrorCode()).thenReturn(errorCode);
+		SendResponse response = mock(SendResponse.class);
+		when(response.isSuccessful()).thenReturn(false);
+		when(response.getException()).thenReturn(exception);
+		return response;
 	}
 
 	private NotificationPayload somePayload() {

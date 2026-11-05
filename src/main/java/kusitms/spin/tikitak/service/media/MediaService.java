@@ -23,6 +23,9 @@ import kusitms.spin.tikitak.repository.media.MediaUploadRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.media.MediaUploadCompletionService.CompletionPlan;
+import kusitms.spin.tikitak.service.media.MediaUploadCompletionService.UploadTarget;
+import kusitms.spin.tikitak.service.media.MediaUploadCompletionService.UploadedObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -41,12 +44,12 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -65,6 +68,7 @@ public class MediaService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamRepository teamRepository;
 	private final MemberRepository memberRepository;
+	private final MediaUploadCompletionService mediaUploadCompletionService;
 	private final Optional<S3Presigner> s3Presigner;
 	private final Optional<S3Client> s3Client;
 
@@ -113,50 +117,28 @@ public class MediaService {
 		return new MediaUploadResponse(upload.getPublicId(), upload.getStatus(), items);
 	}
 
-	@Transactional(noRollbackFor = ExpiredUploadException.class)
+	/**
+	 * 업로드 완료. R2 {@code headObject}가 DB 트랜잭션·락을 잡지 않도록 트랜잭션을 두지 않고 세 단계로 나눈다:
+	 * 락 없는 사전 검증({@link MediaUploadCompletionService#prepare}) → {@code headObject}(트랜잭션 없음)
+	 * → 락을 잡고 전체 재검증 후 상태 전환({@link MediaUploadCompletionService#complete}).
+	 * 이 메서드 안에서 리포지토리를 직접 쓰지 않는다(트랜잭션 없는 구간의 EntityManager가 커넥션을 잡을 수 있음).
+	 */
 	public MediaUploadCompleteResponse completeUpload(Long memberId, UUID uploadId, MediaUploadCompleteRequest request) {
 		if (request.getItems() == null || request.getItems().isEmpty()) {
 			throw new BusinessException(ErrorCode.MEDIA011);
 		}
 
-		MediaUpload upload = mediaUploadRepository.findByPublicIdForUpdate(uploadId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA016));
-		if (!upload.getMemberId().equals(memberId)) {
-			throw new BusinessException(ErrorCode.MEDIA015);
+		CompletionPlan plan = mediaUploadCompletionService.prepare(memberId, uploadId, request.getItems());
+		Map<Long, UploadedObject> uploadedObjects = new HashMap<>();
+		for (UploadTarget target : plan.targets()) {
+			HeadObjectResponse object = headObject(target);
+			UploadedObject uploadedObject = new UploadedObject(object.contentType(), object.contentLength());
+			if (!uploadedObject.matches(target.contentType(), target.size())) {
+				throw new BusinessException(ErrorCode.MEDIA013);
+			}
+			uploadedObjects.put(target.mediaId(), uploadedObject);
 		}
-		if (upload.getStatus() != MediaUploadStatus.PENDING) {
-			throw new BusinessException(ErrorCode.MEDIA014);
-		}
-		if (upload.isExpired(LocalDateTime.now())) {
-			upload.expire();
-			throw new ExpiredUploadException();
-		}
-
-		List<Media> medias = mediaRepository.findByUploadIdForUpdate(upload.getId());
-		if (medias.size() != request.getItems().size()) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-
-		Map<UUID, MediaUploadCompleteRequest.Item> requestItemsByPublicId = request.getItems().stream()
-				.collect(Collectors.toMap(
-						MediaUploadCompleteRequest.Item::getMediaPublicId,
-						item -> item,
-						(left, right) -> {
-							throw new BusinessException(ErrorCode.MEDIA013);
-						}
-				));
-
-		List<MediaUploadCompleteResponse.Item> responseItems = medias.stream()
-				.map(media -> completeMedia(media, requestItemsByPublicId))
-				.toList();
-
-		upload.complete();
-		return new MediaUploadCompleteResponse(
-				upload.getPublicId(),
-				upload.getStatus(),
-				upload.getCompletedAt(),
-				responseItems
-		);
+		return mediaUploadCompletionService.complete(memberId, uploadId, request.getItems(), uploadedObjects);
 	}
 
 	@Transactional
@@ -246,28 +228,6 @@ public class MediaService {
 		return true;
 	}
 
-	private MediaUploadCompleteResponse.Item completeMedia(
-			Media media,
-			Map<UUID, MediaUploadCompleteRequest.Item> requestItemsByPublicId
-	) {
-		MediaUploadCompleteRequest.Item item = requestItemsByPublicId.get(media.getPublicId());
-		if (item == null) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-		validateCompletableMedia(media, item);
-		HeadObjectResponse object = headObject(media);
-		validateUploadedObject(media, item, object);
-
-		String imageUrl = buildPublicUrl(media);
-		media.completeUpload(imageUrl);
-		return new MediaUploadCompleteResponse.Item(
-				media.getPublicId(),
-				media.getStatus(),
-				MediaUploadStatus.COMPLETED,
-				imageUrl
-		);
-	}
-
 	private boolean deleteExpiredMedia(Long mediaId, MediaStatus status) {
 		Media media = mediaRepository.findByIdForUpdate(mediaId)
 				.orElse(null);
@@ -321,41 +281,23 @@ public class MediaService {
 		}
 	}
 
-	private void validateCompletableMedia(Media media, MediaUploadCompleteRequest.Item item) {
-		if (media.getStatus() != MediaStatus.PENDING) {
-			throw new BusinessException(ErrorCode.MEDIA014);
-		}
-		if (!media.getContentType().equals(item.getContentType()) || !media.getSize().equals(item.getSize())) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-	}
-
-	private HeadObjectResponse headObject(Media media) {
+	private HeadObjectResponse headObject(UploadTarget target) {
 		S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA017));
 		try {
 			HeadObjectRequest request = HeadObjectRequest.builder()
 					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
+					.key(target.key())
 					.build();
 			return client.headObject(request);
 		} catch (S3Exception e) {
-			log.error("Failed to verify uploaded object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+			log.error("Failed to verify uploaded object. mediaId={}, key={}", target.mediaId(), target.key(), e);
 			if (e.statusCode() == 404) {
 				throw new BusinessException(ErrorCode.MEDIA012, e);
 			}
 			throw new BusinessException(ErrorCode.MEDIA017, e);
 		} catch (Exception e) {
-			log.error("Failed to verify uploaded object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+			log.error("Failed to verify uploaded object. mediaId={}, key={}", target.mediaId(), target.key(), e);
 			throw new BusinessException(ErrorCode.MEDIA017, e);
-		}
-	}
-
-	private void validateUploadedObject(Media media, MediaUploadCompleteRequest.Item item, HeadObjectResponse object) {
-		if (object.contentLength() == null || !object.contentLength().equals(item.getSize())) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-		if (!media.getContentType().equals(object.contentType())) {
-			throw new BusinessException(ErrorCode.MEDIA013);
 		}
 	}
 
@@ -452,14 +394,6 @@ public class MediaService {
 		}
 	}
 
-	private String buildPublicUrl(Media media) {
-		String publicBaseUrl = r2Properties.getPublicBaseUrl();
-		if (publicBaseUrl == null || publicBaseUrl.isBlank()) {
-			return media.getKey();
-		}
-		return publicBaseUrl.replaceAll("/+$", "") + "/" + media.getKey();
-	}
-
 	private String buildObjectKey(MediaPurpose purpose, UUID publicId, String contentType) {
 		return "media/" + toKeySegment(purpose) + "/" + publicId + "." + extensionOf(contentType);
 	}
@@ -486,11 +420,5 @@ public class MediaService {
 			return principal.memberId();
 		}
 		throw new BusinessException(ErrorCode.AUTH009);
-	}
-
-	private static class ExpiredUploadException extends BusinessException {
-		private ExpiredUploadException() {
-			super(ErrorCode.MEDIA014);
-		}
 	}
 }
