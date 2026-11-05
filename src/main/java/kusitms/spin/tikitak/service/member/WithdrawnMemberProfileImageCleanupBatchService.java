@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.member;
 
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,7 +19,7 @@ public class WithdrawnMemberProfileImageCleanupBatchService {
 
 	private final WithdrawnMemberProfileImageCleanupService cleanupService;
 
-	@Scheduled(cron = "0 15 4 * * *")
+	@Scheduled(cron = "0 15 4 * * *", zone = KstDateProvider.KST_ZONE_ID)
 	public void cleanUpWithdrawnMemberProfileImages() {
 		LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
 		List<Long> targetIds = cleanupService.findCleanupTargetIds(cutoff, BATCH_SIZE);

@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.feed;
 
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,7 +20,7 @@ public class FeedCleanupBatchService {
 
 	private final FeedCleanupService feedCleanupService;
 
-	@Scheduled(cron = "0 30 4 * * *")
+	@Scheduled(cron = "0 30 4 * * *", zone = KstDateProvider.KST_ZONE_ID)
 	public void hardDeleteExpiredFeeds() {
 		LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
 		int targetCount = 0;
