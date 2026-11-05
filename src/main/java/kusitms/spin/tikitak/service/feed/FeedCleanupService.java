@@ -51,7 +51,7 @@ public class FeedCleanupService {
 				.distinct()
 				.toList();
 		List<ObjectDeleteOutbox> deleteRequests = objectDeleteOutboxService.saveAll(medias.stream()
-				.map(media -> ObjectDeleteOutbox.builder()
+				.<ObjectDeleteOutbox>map(media -> ObjectDeleteOutbox.builder()
 						.bucket(r2Properties.getBucketName())
 						.objectKey(media.getKey())
 						.mediaId(media.getId())

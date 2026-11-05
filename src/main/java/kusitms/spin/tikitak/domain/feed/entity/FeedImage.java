@@ -8,24 +8,20 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.common.BaseCreatedTimeEntity;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
+import lombok.experimental.SuperBuilder;
 
 @Entity
 @Table(name = "feed_image")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class FeedImage {
+public class FeedImage extends BaseCreatedTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,21 +45,11 @@ public class FeedImage {
 
 	private Integer height;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
 	void setFeed(Feed feed) {
 		this.feed = feed;
 	}
 
 	public void updateOrderIndex(int orderIndex) {
 		this.orderIndex = orderIndex;
-	}
-
-	@PrePersist
-	protected void onCreate() {
-		if (createdAt == null) {
-			createdAt = LocalDateTime.now();
-		}
 	}
 }

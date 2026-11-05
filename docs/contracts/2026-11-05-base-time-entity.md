@@ -11,7 +11,7 @@
 
 ## 사람이 정한 것 (2026-11-05)
 - 위치: `domain/common` 패키지 (entity 하위 패키지 아님 → ArchUnit C5 변경 없음, domain → global 의존 없음)
-- 테스트 빌더 호환: 대상 엔티티의 `@Builder` → `@SuperBuilder` (테스트의 `.createdAt(...)` 20곳 유지)
+- 테스트 빌더 호환: 대상 엔티티의 `@Builder` → `@SuperBuilder` (대상 10개 엔티티 빌더에 붙은 테스트의 `.createdAt(...)` 14곳, `.updatedAt(...)` 5곳 유지. 조사 단계의 "20곳"은 verifier 재집계로 정정)
 - FeedComment: 2단계로 미룸
 - 오케스트레이터 추천으로 확정(이의 시 변경): 2단계 계층, `createdAt`은 `updatable = false`로 통일, FeedReaction/Place 포함, 커스텀 `DateTimeProvider` 도입 안 함(KST 결정 기록의 B안과 같은 저장 시각 불연속이 생김)
 
@@ -60,13 +60,17 @@ API 응답, 저장 값, 쿼리 결과는 **변경 없음**. 내부 차이만 있
 - 신규 테스트: `src/test/java/kusitms/spin/tikitak/domain/common/BaseTimeEntityIntegrationTest.java`
 - `docs/decisions/2026-11-05-base-time-entity.md`, `docs/decisions/README.md`
 - 기존 테스트 파일은 **수정하지 않는다**. 컴파일이나 테스트가 깨지면 고치지 말고 멈춰서 보고한다.
+- **보완 (2026-11-05 사람 승인)**: `@SuperBuilder`의 `builder()`가 `XBuilder<?, ?>`를 돌려줘서 `stream().map(m -> X.builder()...build()).toList()`의 결과가 `List<X>`로 추론되지 않는다. 이 원인으로 컴파일이 깨지는 곳에 한해 **타입 인자 명시(`.<X>map(` 등)만** 허용한다.
+  - main: `src/main/java/kusitms/spin/tikitak/service/media/MediaService.java`(:101 근처), `src/main/java/kusitms/spin/tikitak/service/feed/FeedCleanupService.java`(:59 근처)
+  - test: 같은 원인으로 컴파일이 깨지는 곳이 있으면 같은 방식으로만 고치고 전부 보고한다. 다른 원인이면 멈춘다.
 
 ## 완료 조건
 - [ ] `./gradlew test`, `./gradlew integrationTest`, `./gradlew spotlessCheck` 통과 (ArchUnit 포함, 통합 프로필은 `ddl-auto: validate`라 매핑 불일치도 잡힘)
 - [ ] 대상 10개 엔티티 파일에 `createdAt`/`updatedAt` 필드 선언과 `AuditingEntityListener` 문자열이 0건이다.
 - [ ] 대상 10개 중 `@PrePersist`/`@PreUpdate`가 남은 파일은 TeamMember, Media, MediaUpload, ObjectDeleteOutbox뿐이고, 그 콜백 본문에 `createdAt`/`updatedAt` 대입이 없다.
 - [ ] 대상 10개 엔티티 모두 `@SuperBuilder`를 쓰고 `@Builder`(`@Builder.Default` 제외)가 없다.
-- [ ] `git diff --stat origin/develop -- src/test`에 신규 테스트 파일 1개만 나온다.
+- [ ] `git diff --stat origin/develop -- src/test`에 신규 테스트 파일 1개만 나온다. 예외는 범위 보완에 따른 타입 인자 명시 줄뿐이다.
+- [ ] 범위 보완으로 바뀐 main/test 줄은 타입 인자 추가 외의 차이가 없다.
 - [ ] `src/main/resources/db/migration`에 변경이 없다.
 - [ ] 6번 통합 테스트가 위 단언을 모두 포함하고 통과한다. 수정 후 `updatedAt` 비교는 DB에서 다시 읽은 값으로 한다(`flushAndClear` 후 조회).
 - [ ] 범위 밖 엔티티(Feed, FeedComment, Member, MemberDeviceToken, Notification, RefreshToken)에 diff가 없다.
