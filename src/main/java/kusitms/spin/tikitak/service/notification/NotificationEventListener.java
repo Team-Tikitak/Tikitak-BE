@@ -1,10 +1,10 @@
 package kusitms.spin.tikitak.service.notification;
 
+import kusitms.spin.tikitak.domain.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
-import kusitms.spin.tikitak.service.notification.dto.NotificationPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;

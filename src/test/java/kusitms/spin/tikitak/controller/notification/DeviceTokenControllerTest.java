@@ -46,8 +46,8 @@ class DeviceTokenControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "fcmToken": "token-1",
-								  "platform": "ANDROID"
+								"fcmToken": "token-1",
+								"platform": "ANDROID"
 								}
 								"""))
 				.andExpect(status().isOk())
@@ -64,7 +64,7 @@ class DeviceTokenControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "platform": "ANDROID"
+								"platform": "ANDROID"
 								}
 								"""))
 				.andExpect(status().isBadRequest())
@@ -79,8 +79,8 @@ class DeviceTokenControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "fcmToken": "token-1",
-								  "platform": "WINDOWS"
+								"fcmToken": "token-1",
+								"platform": "WINDOWS"
 								}
 								"""))
 				.andExpect(status().isBadRequest())
@@ -95,7 +95,7 @@ class DeviceTokenControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "fcmToken": "token-1"
+								"fcmToken": "token-1"
 								}
 								"""))
 				.andExpect(status().isOk())

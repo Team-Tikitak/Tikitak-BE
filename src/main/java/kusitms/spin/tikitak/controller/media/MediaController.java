@@ -28,48 +28,48 @@ import java.util.UUID;
 @Tag(name = "Media", description = "미디어 API")
 public class MediaController {
 
-    private final MediaService mediaService;
+	private final MediaService mediaService;
 
-    @Operation(
-            summary = "미디어 업로드 URL 발급",
-            description = "이미지를 R2에 업로드하기 위한 presigned URL을 발급합니다."
-    )
-    @SecurityRequirement(name = "bearerAuth")
-    @PostMapping("/api/v1/media/uploads")
-    public ResponseEntity<CommonResponse<MediaUploadResponse>> createUploadUrls(
-            @Valid @RequestBody MediaUploadRequest request
-    ) {
-        MediaUploadResponse response = mediaService.createUploadUrls(request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(CommonResponse.successWithStatus(response, HttpStatus.CREATED.value()));
-    }
+	@Operation(
+			summary = "미디어 업로드 URL 발급",
+			description = "이미지를 R2에 업로드하기 위한 presigned URL을 발급합니다."
+	)
+	@SecurityRequirement(name = "bearerAuth")
+	@PostMapping("/api/v1/media/uploads")
+	public ResponseEntity<CommonResponse<MediaUploadResponse>> createUploadUrls(
+			@Valid @RequestBody MediaUploadRequest request
+	) {
+		MediaUploadResponse response = mediaService.createUploadUrls(request);
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(CommonResponse.successWithStatus(response, HttpStatus.CREATED.value()));
+	}
 
-    @Operation(
-            summary = "미디어 업로드 완료 처리",
-            description = "프론트가 R2 업로드를 마친 뒤 실제 객체 존재 여부를 확인하고 업로드 상태를 완료 처리합니다."
-    )
-    @SecurityRequirement(name = "bearerAuth")
-    @PostMapping("/api/v1/media/uploads/{uploadId}/complete")
-    public CommonResponse<MediaUploadCompleteResponse> completeUpload(
-            @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @PathVariable UUID uploadId,
-            @Valid @RequestBody MediaUploadCompleteRequest request
-    ) {
-        MediaUploadCompleteResponse response = mediaService.completeUpload(memberId, uploadId, request);
-        return CommonResponse.success(response);
-    }
+	@Operation(
+			summary = "미디어 업로드 완료 처리",
+			description = "프론트가 R2 업로드를 마친 뒤 실제 객체 존재 여부를 확인하고 업로드 상태를 완료 처리합니다."
+	)
+	@SecurityRequirement(name = "bearerAuth")
+	@PostMapping("/api/v1/media/uploads/{uploadId}/complete")
+	public CommonResponse<MediaUploadCompleteResponse> completeUpload(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable UUID uploadId,
+			@Valid @RequestBody MediaUploadCompleteRequest request
+	) {
+		MediaUploadCompleteResponse response = mediaService.completeUpload(memberId, uploadId, request);
+		return CommonResponse.success(response);
+	}
 
-    @Operation(
-            summary = "미사용 미디어 삭제",
-            description = "아직 피드, 팀, 프로필 등에 연결되지 않은 PENDING 또는 UPLOADED 상태의 미디어를 삭제합니다."
-    )
-    @SecurityRequirement(name = "bearerAuth")
-    @DeleteMapping("/api/v1/media/{mediaPublicId}")
-    public CommonResponse<Void> deleteUnusedMedia(
-            @Parameter(hidden = true) @CurrentMemberId Long memberId,
-            @PathVariable UUID mediaPublicId
-    ) {
-        mediaService.deleteUnusedMedia(memberId, mediaPublicId);
-        return CommonResponse.success(null);
-    }
+	@Operation(
+			summary = "미사용 미디어 삭제",
+			description = "아직 피드, 팀, 프로필 등에 연결되지 않은 PENDING 또는 UPLOADED 상태의 미디어를 삭제합니다."
+	)
+	@SecurityRequirement(name = "bearerAuth")
+	@DeleteMapping("/api/v1/media/{mediaPublicId}")
+	public CommonResponse<Void> deleteUnusedMedia(
+			@Parameter(hidden = true) @CurrentMemberId Long memberId,
+			@PathVariable UUID mediaPublicId
+	) {
+		mediaService.deleteUnusedMedia(memberId, mediaPublicId);
+		return CommonResponse.success(null);
+	}
 }

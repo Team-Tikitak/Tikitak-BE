@@ -29,62 +29,62 @@ import java.util.UUID;
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class MediaUpload {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
 
-    @Builder.Default
-    @Column(name = "public_id", nullable = false, unique = true, updatable = false)
-    private UUID publicId = UUID.randomUUID();
+	@Builder.Default
+	@Column(name = "public_id", nullable = false, unique = true, updatable = false)
+	private UUID publicId = UUID.randomUUID();
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
-    private MediaPurpose purpose;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 50)
+	private MediaPurpose purpose;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private MediaUploadStatus status;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 30)
+	private MediaUploadStatus status;
 
-    @Column
-    private Long teamId;
+	@Column
+	private Long teamId;
 
-    @Column(nullable = false)
-    private Long memberId;
+	@Column(nullable = false)
+	private Long memberId;
 
-    @Column(nullable = false)
-    private LocalDateTime createdAt;
+	@Column(nullable = false)
+	private LocalDateTime createdAt;
 
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
+	@Column(nullable = false)
+	private LocalDateTime updatedAt;
 
-    private LocalDateTime completedAt;
+	private LocalDateTime completedAt;
 
-    private LocalDateTime expiresAt;
+	private LocalDateTime expiresAt;
 
-    public void complete() {
-        this.status = MediaUploadStatus.COMPLETED;
-        this.completedAt = LocalDateTime.now();
-    }
+	public void complete() {
+		this.status = MediaUploadStatus.COMPLETED;
+		this.completedAt = LocalDateTime.now();
+	}
 
-    public void expire() {
-        this.status = MediaUploadStatus.EXPIRED;
-    }
+	public void expire() {
+		this.status = MediaUploadStatus.EXPIRED;
+	}
 
-    public boolean isExpired(LocalDateTime now) {
-        return expiresAt != null && expiresAt.isBefore(now);
-    }
+	public boolean isExpired(LocalDateTime now) {
+		return expiresAt != null && expiresAt.isBefore(now);
+	}
 
-    @PrePersist
-    protected void onCreate() {
-        if (publicId == null) {
-            publicId = UUID.randomUUID();
-        }
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
+	@PrePersist
+	protected void onCreate() {
+		if (publicId == null) {
+			publicId = UUID.randomUUID();
+		}
+		createdAt = LocalDateTime.now();
+		updatedAt = LocalDateTime.now();
+	}
 
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
+	@PreUpdate
+	protected void onUpdate() {
+		updatedAt = LocalDateTime.now();
+	}
 }

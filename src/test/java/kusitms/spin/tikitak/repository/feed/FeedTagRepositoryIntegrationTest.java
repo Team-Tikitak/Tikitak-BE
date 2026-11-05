@@ -163,6 +163,46 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		assertThat(result).isEmpty();
 	}
 
+	@Test
+	@DisplayName("여러 피드에 걸친 태그를 feedId in (...)으로 한 번에 조회하고 teamMember를 함께 가져온다")
+	void findsTagsAcrossMultipleFeeds() {
+		Member m1 = persist(member("byfeeds-1"));
+		Member m2 = persist(member("byfeeds-2"));
+		Member author = persist(member("byfeeds-author"));
+		Team team = persist(team("byfeeds"));
+
+		TeamMember tagged1 = persist(teamMember(m1, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember tagged2 = persist(teamMember(m2, team, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+
+		Feed feed1 = feedWithCreatedAt(team, authorTm);
+		feed1.addTag(FeedTag.builder().teamMember(tagged1).build());
+		feed1.addTag(FeedTag.builder().teamMember(tagged2).build());
+		persist(feed1);
+
+		Feed feed2 = feedWithCreatedAt(team, authorTm);
+		feed2.addTag(FeedTag.builder().teamMember(tagged1).build());
+		persist(feed2);
+
+		Feed feed3 = feedWithCreatedAt(team, authorTm);
+		feed3.addTag(FeedTag.builder().teamMember(tagged2).build());
+		persist(feed3);
+
+		flushAndClear();
+
+		List<FeedTag> result = feedTagRepository.findByFeedIds(List.of(feed1.getId(), feed2.getId()));
+
+		assertThat(result).hasSize(3);
+		assertThat(result.stream().filter(tag -> tag.getFeed().getId().equals(feed1.getId())).count())
+				.isEqualTo(2);
+		assertThat(result.stream().filter(tag -> tag.getFeed().getId().equals(feed2.getId())).count())
+				.isEqualTo(1);
+		assertThat(result.stream().map(tag -> tag.getFeed().getId()))
+				.doesNotContain(feed3.getId());
+		assertThat(result).extracting(tag -> tag.getTeamMember().getNickname())
+				.doesNotContainNull();
+	}
+
 	// --- helpers ---
 
 	private TeamMember teamMemberWithNickname(Member member, Team team, String nickname) {

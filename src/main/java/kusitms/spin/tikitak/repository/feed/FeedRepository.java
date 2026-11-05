@@ -3,8 +3,8 @@ package kusitms.spin.tikitak.repository.feed;
 import jakarta.persistence.LockModeType;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionFeedRepository;
-import kusitms.spin.tikitak.service.home.dto.RegionRow;
-import kusitms.spin.tikitak.service.map.dto.MapPinRow;
+import kusitms.spin.tikitak.repository.feed.projection.MapPinRow;
+import kusitms.spin.tikitak.repository.feed.projection.RegionRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -369,25 +369,25 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 
 	@Query(value = """
 			WITH ranked AS (
-			    SELECT
-			        f.place_id,
-			        f.id AS feed_id,
-			        COUNT(*) OVER (PARTITION BY f.place_id) AS feed_count,
-			        ROW_NUMBER() OVER (PARTITION BY f.place_id
-			                          ORDER BY f.created_at DESC, f.id DESC) AS rn
-			    FROM feed f
-			    WHERE f.team_id = :teamId
-			      AND f.deleted_at IS NULL
-			      AND f.place_id IS NOT NULL
+				SELECT
+					f.place_id,
+					f.id AS feed_id,
+					COUNT(*) OVER (PARTITION BY f.place_id) AS feed_count,
+					ROW_NUMBER() OVER (PARTITION BY f.place_id
+									ORDER BY f.created_at DESC, f.id DESC) AS rn
+				FROM feed f
+				WHERE f.team_id = :teamId
+				AND f.deleted_at IS NULL
+				AND f.place_id IS NOT NULL
 			)
 			SELECT
-			    p.external_place_id AS externalPlaceId,
-			    p.name,
-			    p.latitude,
-			    p.longitude,
-			    p.address,
-			    r.feed_count AS feedCount,
-			    fi.img_url AS thumbnailUrl
+				p.external_place_id AS externalPlaceId,
+				p.name,
+				p.latitude,
+				p.longitude,
+				p.address,
+				r.feed_count AS feedCount,
+				fi.img_url AS thumbnailUrl
 			FROM ranked r
 			JOIN place p ON p.id = r.place_id
 			LEFT JOIN feed_image fi ON fi.feed_id = r.feed_id
@@ -400,9 +400,9 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			select count(f)
 			from Feed f
 			where f.team.id = :teamId
-			  and f.deletedAt is null
-			  and f.createdAt >= :startOfMonth
-			  and f.createdAt < :startOfNextMonth
+			and f.deletedAt is null
+			and f.createdAt >= :startOfMonth
+			and f.createdAt < :startOfNextMonth
 			""")
 	long countActiveByTeamAndMonth(
 			@Param("teamId") Long teamId,
@@ -414,22 +414,22 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			SELECT f.id
 			FROM feed f
 			LEFT JOIN (
-			    SELECT feed_id, COUNT(*) AS reaction_count
-			    FROM feed_reaction
-			    GROUP BY feed_id
+				SELECT feed_id, COUNT(*) AS reaction_count
+				FROM feed_reaction
+				GROUP BY feed_id
 			) r ON r.feed_id = f.id
 			LEFT JOIN (
-			    SELECT feed_id, COUNT(*) AS comment_count
-			    FROM feed_comment
-			    WHERE is_deleted = false
-			    GROUP BY feed_id
+				SELECT feed_id, COUNT(*) AS comment_count
+				FROM feed_comment
+				WHERE is_deleted = false
+				GROUP BY feed_id
 			) c ON c.feed_id = f.id
 			WHERE f.team_id = :teamId
-			  AND f.deleted_at IS NULL
-			  AND f.created_at >= :startOfMonth
-			  AND f.created_at < :startOfNextMonth
+			AND f.deleted_at IS NULL
+			AND f.created_at >= :startOfMonth
+			AND f.created_at < :startOfNextMonth
 			ORDER BY (COALESCE(r.reaction_count, 0) + COALESCE(c.comment_count, 0)) DESC,
-			         f.created_at DESC, f.id DESC
+					f.created_at DESC, f.id DESC
 			LIMIT 10
 			""", nativeQuery = true)
 	List<Long> findEveryonePickFeedIds(
@@ -443,8 +443,8 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			select distinct f
 			from Feed f
 			where f.id in :feedIds
-			  and f.team.id = :teamId
-			  and f.deletedAt is null
+			and f.team.id = :teamId
+			and f.deletedAt is null
 			""")
 	List<Feed> findActiveByIds(
 			@Param("teamId") Long teamId,
@@ -455,20 +455,20 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			SELECT f.id
 			FROM feed f
 			WHERE f.team_id = :teamId
-			  AND f.deleted_at IS NULL
-			  AND (
-			      SELECT COUNT(DISTINCT ft.team_member_id)
-			      FROM feed_tag ft
-			      JOIN team_member tm ON tm.id = ft.team_member_id
-			      WHERE ft.feed_id = f.id
-			        AND tm.team_id = :teamId
-			        AND tm.status = 'ACTIVE'
-			  ) = (
-			      SELECT COUNT(*)
-			      FROM team_member tm
-			      WHERE tm.team_id = :teamId
-			        AND tm.status = 'ACTIVE'
-			  )
+			AND f.deleted_at IS NULL
+			AND (
+				SELECT COUNT(DISTINCT ft.team_member_id)
+				FROM feed_tag ft
+				JOIN team_member tm ON tm.id = ft.team_member_id
+				WHERE ft.feed_id = f.id
+					AND tm.team_id = :teamId
+					AND tm.status = 'ACTIVE'
+			) = (
+				SELECT COUNT(*)
+				FROM team_member tm
+				WHERE tm.team_id = :teamId
+					AND tm.status = 'ACTIVE'
+			)
 			ORDER BY f.created_at DESC, f.id DESC
 			LIMIT 10
 			""", nativeQuery = true)
@@ -478,7 +478,7 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			SELECT ft1.team_member_id, ft2.team_member_id
 			FROM feed_tag ft1
 			JOIN feed_tag ft2
-			    ON ft1.feed_id = ft2.feed_id AND ft1.team_member_id < ft2.team_member_id
+				ON ft1.feed_id = ft2.feed_id AND ft1.team_member_id < ft2.team_member_id
 			JOIN feed f ON f.id = ft1.feed_id
 			JOIN team_member tm1 ON tm1.id = ft1.team_member_id AND tm1.status = 'ACTIVE'
 			JOIN team_member tm2 ON tm2.id = ft2.team_member_id AND tm2.status = 'ACTIVE'
@@ -491,11 +491,11 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 
 	@Query(value = """
 			WITH pair_feeds AS (
-			    SELECT f.id
-			    FROM feed f
-			    WHERE f.team_id = :teamId AND f.deleted_at IS NULL
-			      AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mA)
-			      AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mB)
+				SELECT f.id
+				FROM feed f
+				WHERE f.team_id = :teamId AND f.deleted_at IS NULL
+				AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mA)
+				AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mB)
 			)
 			SELECT ft.team_member_id
 			FROM feed_tag ft
@@ -513,8 +513,8 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			SELECT f.id
 			FROM feed f
 			WHERE f.team_id = :teamId AND f.deleted_at IS NULL
-			  AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mA)
-			  AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mB)
+			AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mA)
+			AND EXISTS (SELECT 1 FROM feed_tag WHERE feed_id = f.id AND team_member_id = :mB)
 			ORDER BY f.created_at DESC, f.id DESC
 			LIMIT 10
 			""", nativeQuery = true)
@@ -529,10 +529,10 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 			from Feed f
 			join f.place p
 			where f.team.id = :teamId
-			  and f.deletedAt is null
-			  and p.region is not null
-			  and f.createdAt >= :startOfMonth
-			  and f.createdAt < :startOfNextMonth
+			and f.deletedAt is null
+			and p.region is not null
+			and f.createdAt >= :startOfMonth
+			and f.createdAt < :startOfNextMonth
 			""")
 	long countActiveFeedsWithRegion(
 			@Param("teamId") Long teamId,
@@ -542,22 +542,22 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 
 	@Query(value = """
 			WITH region_feeds AS (
-			    SELECT f.id,
-			           p.region,
-			           ROW_NUMBER() OVER (PARTITION BY p.region ORDER BY f.created_at DESC, f.id DESC) AS rn,
-			           COUNT(f.id) OVER (PARTITION BY p.region) AS feed_count
-			    FROM feed f
-			    JOIN place p ON p.id = f.place_id
-			    WHERE f.team_id = :teamId
-			      AND f.deleted_at IS NULL
-			      AND p.region IS NOT NULL
-			      AND f.created_at >= :startOfMonth
-			      AND f.created_at < :startOfNextMonth
+				SELECT f.id,
+					p.region,
+					ROW_NUMBER() OVER (PARTITION BY p.region ORDER BY f.created_at DESC, f.id DESC) AS rn,
+					COUNT(f.id) OVER (PARTITION BY p.region) AS feed_count
+				FROM feed f
+				JOIN place p ON p.id = f.place_id
+				WHERE f.team_id = :teamId
+				AND f.deleted_at IS NULL
+				AND p.region IS NOT NULL
+				AND f.created_at >= :startOfMonth
+				AND f.created_at < :startOfNextMonth
 			)
 			SELECT rf.region AS region,
-			       rf.feed_count AS feedCount,
-			       rf.id AS feedId,
-			       fi.img_url AS thumbnailUrl
+				rf.feed_count AS feedCount,
+				rf.id AS feedId,
+				fi.img_url AS thumbnailUrl
 			FROM region_feeds rf
 			LEFT JOIN feed_image fi ON fi.feed_id = rf.id AND fi.order_index = 0
 			WHERE rf.rn = 1

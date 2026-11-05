@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import kusitms.spin.tikitak.global.config.LoginCodeProperties;
 import kusitms.spin.tikitak.service.auth.dto.LoginCodePayload;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -11,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -47,9 +47,8 @@ class RedisLoginCodeStoreIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		StringRedisTemplate redisTemplate = new StringRedisTemplate(connectionFactory);
-		store = new RedisLoginCodeStore(redisTemplate, new ObjectMapper());
-		ReflectionTestUtils.setField(store, "keyPrefix", "test:auth:login-code:");
-		ReflectionTestUtils.setField(store, "ttl", Duration.ofSeconds(2));
+		LoginCodeProperties properties = new LoginCodeProperties("test:auth:login-code:", Duration.ofSeconds(2));
+		store = new RedisLoginCodeStore(redisTemplate, new ObjectMapper(), properties);
 	}
 
 	@Test

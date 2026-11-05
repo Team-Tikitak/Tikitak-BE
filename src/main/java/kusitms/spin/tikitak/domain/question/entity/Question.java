@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -46,7 +48,7 @@ public class Question {
 	@Column(nullable = false)
 	private LocalDateTime updatedAt;
 
-	@jakarta.persistence.PrePersist
+	@PrePersist
 	protected void onCreate() {
 		LocalDateTime now = LocalDateTime.now();
 		if (createdAt == null) {
@@ -57,7 +59,7 @@ public class Question {
 		}
 	}
 
-	@jakarta.persistence.PreUpdate
+	@PreUpdate
 	protected void onUpdate() {
 		updatedAt = LocalDateTime.now();
 	}

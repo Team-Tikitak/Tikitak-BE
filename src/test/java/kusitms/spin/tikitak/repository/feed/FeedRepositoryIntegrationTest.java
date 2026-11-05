@@ -9,7 +9,7 @@ import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
-import kusitms.spin.tikitak.service.map.dto.MapPinRow;
+import kusitms.spin.tikitak.repository.feed.projection.MapPinRow;
 import kusitms.spin.tikitak.support.IntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

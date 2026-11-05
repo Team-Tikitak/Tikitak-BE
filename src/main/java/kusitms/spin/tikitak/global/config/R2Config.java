@@ -18,37 +18,37 @@ import java.net.URI;
 @ConditionalOnProperty(prefix = "r2", name = "endpoint")
 public class R2Config {
 
-    private final R2Properties r2Properties;
+	private final R2Properties r2Properties;
 
-    @Bean
-    public S3Client s3Client() {
-        return S3Client.builder()
-                .region(Region.of(r2Properties.getRegion()))
-                .endpointOverride(URI.create(r2Properties.getEndpoint()))
-                .credentialsProvider(createCredentialsProvider())
-                .serviceConfiguration(createS3Configuration())
-                .build();
-    }
+	@Bean
+	public S3Client s3Client() {
+		return S3Client.builder()
+				.region(Region.of(r2Properties.getRegion()))
+				.endpointOverride(URI.create(r2Properties.getEndpoint()))
+				.credentialsProvider(createCredentialsProvider())
+				.serviceConfiguration(createS3Configuration())
+				.build();
+	}
 
-    @Bean
-    public S3Presigner s3Presigner() {
-        return S3Presigner.builder()
-                .region(Region.of(r2Properties.getRegion()))
-                .endpointOverride(URI.create(r2Properties.getEndpoint()))
-                .credentialsProvider(createCredentialsProvider())
-                .serviceConfiguration(createS3Configuration())
-                .build();
-    }
+	@Bean
+	public S3Presigner s3Presigner() {
+		return S3Presigner.builder()
+				.region(Region.of(r2Properties.getRegion()))
+				.endpointOverride(URI.create(r2Properties.getEndpoint()))
+				.credentialsProvider(createCredentialsProvider())
+				.serviceConfiguration(createS3Configuration())
+				.build();
+	}
 
-    private StaticCredentialsProvider createCredentialsProvider() {
-        return StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(r2Properties.getAccessKeyId(), r2Properties.getSecretAccessKey())
-        );
-    }
+	private StaticCredentialsProvider createCredentialsProvider() {
+		return StaticCredentialsProvider.create(
+				AwsBasicCredentials.create(r2Properties.getAccessKeyId(), r2Properties.getSecretAccessKey())
+		);
+	}
 
-    private S3Configuration createS3Configuration() {
-        return S3Configuration.builder()
-                .pathStyleAccessEnabled(true) // R2는 path style 사용
-                .build();
-    }
+	private S3Configuration createS3Configuration() {
+		return S3Configuration.builder()
+				.pathStyleAccessEnabled(true) // R2는 path style 사용
+				.build();
+	}
 }

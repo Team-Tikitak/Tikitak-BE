@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface FeedTagRepository extends JpaRepository<FeedTag, Long> {
@@ -16,11 +17,11 @@ public interface FeedTagRepository extends JpaRepository<FeedTag, Long> {
 			from FeedTag ft
 			join ft.feed f
 			where f.team.id = :teamId
-			  and f.deletedAt is null
-			  and f.createdAt >= :startOfMonth
-			  and f.createdAt < :startOfNextMonth
-			  and ft.teamMember.status = :status
-			  and ft.teamMember.deletedAt is null
+			and f.deletedAt is null
+			and f.createdAt >= :startOfMonth
+			and f.createdAt < :startOfNextMonth
+			and ft.teamMember.status = :status
+			and ft.teamMember.deletedAt is null
 			group by ft.teamMember
 			order by count(ft) desc, ft.teamMember.nickname asc
 			""")
@@ -30,4 +31,12 @@ public interface FeedTagRepository extends JpaRepository<FeedTag, Long> {
 			@Param("startOfNextMonth") LocalDateTime startOfNextMonth,
 			@Param("status") TeamMemberStatus status
 	);
+
+	@Query("""
+			select ft
+			from FeedTag ft
+			join fetch ft.teamMember tm
+			where ft.feed.id in :feedIds
+			""")
+	List<FeedTag> findByFeedIds(@Param("feedIds") Collection<Long> feedIds);
 }

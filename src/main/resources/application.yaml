@@ -16,6 +16,8 @@ spring:
     enabled: true
     locations: classpath:db/migration
     validate-on-migrate: false
+    postgresql:
+      transactional-lock: false
   jpa:
     hibernate:
       ddl-auto: none
@@ -41,6 +43,11 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
 
 auth:
   oauth:

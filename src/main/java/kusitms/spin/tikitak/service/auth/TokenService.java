@@ -3,7 +3,7 @@ package kusitms.spin.tikitak.service.auth;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import kusitms.spin.tikitak.domain.auth.RefreshToken;
+import kusitms.spin.tikitak.domain.auth.entity.RefreshToken;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.global.config.AuthProperties;
@@ -16,16 +16,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 @Service
 @RequiredArgsConstructor
@@ -196,7 +196,7 @@ public class TokenService {
 		try {
 			return objectMapper.writeValueAsString(value);
 		} catch (JsonProcessingException e) {
-			throw new IllegalStateException("Failed to create token payload.", e);
+			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
 	}
 
@@ -206,7 +206,7 @@ public class TokenService {
 			mac.init(new SecretKeySpec(authProperties.jwt().secret().getBytes(StandardCharsets.UTF_8), HMAC_SHA256));
 			return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
 		} catch (Exception e) {
-			throw new IllegalStateException("Failed to sign token.", e);
+			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
 	}
 
@@ -224,7 +224,7 @@ public class TokenService {
 			}
 			return builder.toString();
 		} catch (Exception e) {
-			throw new IllegalStateException("Failed to hash token.", e);
+			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
 	}
 }

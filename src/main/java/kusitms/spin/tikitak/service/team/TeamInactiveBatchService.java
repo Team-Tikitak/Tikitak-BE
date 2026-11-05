@@ -13,14 +13,14 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class TeamInactiveBatchService {
 
-    private final TeamRepository teamRepository;
-    private final MemberRepository memberRepository;
+	private final TeamRepository teamRepository;
+	private final MemberRepository memberRepository;
 
-    @Scheduled(cron = "0 0 4 * * *")
-    @Transactional
-    public void deleteInactiveTeams() {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
-        memberRepository.clearActiveTeamIdsByInactiveTeamPredicate(TeamStatus.INACTIVE, cutoff);
-        teamRepository.bulkDeleteInactiveTeams(TeamStatus.INACTIVE, cutoff);
-    }
+	@Scheduled(cron = "0 0 4 * * *")
+	@Transactional
+	public void deleteInactiveTeams() {
+		LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
+		memberRepository.clearActiveTeamIdsByInactiveTeamPredicate(TeamStatus.INACTIVE, cutoff);
+		teamRepository.bulkDeleteInactiveTeams(TeamStatus.INACTIVE, cutoff);
+	}
 }

@@ -28,4 +28,4 @@ jobs:
         run: chmod +x gradlew
 
       - name: Test
-        run: ./gradlew clean test integrationTest
+        run: ./gradlew clean spotlessCheck test integrationTest

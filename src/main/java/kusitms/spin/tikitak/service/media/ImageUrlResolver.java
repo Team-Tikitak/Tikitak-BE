@@ -2,7 +2,6 @@ package kusitms.spin.tikitak.service.media;
 
 import kusitms.spin.tikitak.global.config.ImageOptimizationProperties;
 import kusitms.spin.tikitak.global.config.R2Properties;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -12,19 +11,6 @@ public class ImageUrlResolver {
 
 	private final R2Properties r2Properties;
 	private final ImageOptimizationProperties properties;
-
-	@PostConstruct
-	void validateConfiguration() {
-		if (!properties.isEnabled()) {
-			return;
-		}
-		if (isBlank(r2Properties.getPublicBaseUrl())) {
-			throw new IllegalStateException("r2.public-base-url is required when image optimization is enabled.");
-		}
-		if (isBlank(properties.getPresetQueryParam())) {
-			throw new IllegalStateException("image.optimization.preset-query-param is required when image optimization is enabled.");
-		}
-	}
 
 	public String resolve(String originalUrl, ImagePreset preset) {
 		if (originalUrl == null || originalUrl.isBlank()) {

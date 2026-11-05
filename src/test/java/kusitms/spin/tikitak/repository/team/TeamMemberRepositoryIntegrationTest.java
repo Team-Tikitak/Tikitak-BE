@@ -1,7 +1,7 @@
 package kusitms.spin.tikitak.repository.team;
 
-import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
+import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;

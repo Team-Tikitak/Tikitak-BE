@@ -1,4 +1,4 @@
-package kusitms.spin.tikitak.service.map.dto;
+package kusitms.spin.tikitak.repository.feed.projection;
 
 import java.math.BigDecimal;
 

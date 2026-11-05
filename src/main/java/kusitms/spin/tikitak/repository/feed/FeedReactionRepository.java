@@ -1,8 +1,8 @@
 package kusitms.spin.tikitak.repository.feed;
 
 import kusitms.spin.tikitak.domain.feed.entity.FeedReaction;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 

@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
-import java.util.Optional;
 import java.net.URI;
+import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.AuthFixture.kakaoUserInfo;
 import static kusitms.spin.tikitak.support.fixture.AuthFixture.tokenResponse;

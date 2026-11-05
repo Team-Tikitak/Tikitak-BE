@@ -250,7 +250,7 @@ class AuthControllerTest extends ApiTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "refreshToken": "body-refresh-token"
+								"refreshToken": "body-refresh-token"
 								}
 								""")
 						.cookie(new jakarta.servlet.http.Cookie("refreshToken", "cookie-refresh-token")))

@@ -22,8 +22,8 @@ class PatchFieldDeserializerTest {
 		DailyQuestionRequestDTO.AnswerUpdateRequestDTO request = objectMapper.readValue(
 				"""
 						{
-						  "content": null,
-						  "mediaPublicId": null
+						"content": null,
+						"mediaPublicId": null
 						}
 						""",
 				DailyQuestionRequestDTO.AnswerUpdateRequestDTO.class
@@ -51,8 +51,8 @@ class PatchFieldDeserializerTest {
 		DailyQuestionRequestDTO.AnswerUpdateRequestDTO request = objectMapper.readValue(
 				"""
 						{
-						  "content": "updated answer",
-						  "mediaPublicId": "%s"
+						"content": "updated answer",
+						"mediaPublicId": "%s"
 						}
 						""".formatted(MEDIA_PUBLIC_ID),
 				DailyQuestionRequestDTO.AnswerUpdateRequestDTO.class

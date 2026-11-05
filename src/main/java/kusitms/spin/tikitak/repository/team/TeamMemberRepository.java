@@ -1,9 +1,9 @@
 package kusitms.spin.tikitak.repository.team;
 
+import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
-import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamMemberRepository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

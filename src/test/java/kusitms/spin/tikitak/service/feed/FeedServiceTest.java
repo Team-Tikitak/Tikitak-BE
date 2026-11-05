@@ -7,23 +7,25 @@ import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
-import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
+import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
+import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.place.PlaceRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.feed.dto.FeedRequestDTO;
 import kusitms.spin.tikitak.service.feed.dto.FeedResponseDTO;
+import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -81,6 +83,12 @@ class FeedServiceTest extends UnitTest {
 	private FeedCommentRepository feedCommentRepository;
 
 	@Mock
+	private FeedImageRepository feedImageRepository;
+
+	@Mock
+	private FeedTagRepository feedTagRepository;
+
+	@Mock
 	private PlaceRepository placeRepository;
 
 	@Mock
@@ -105,6 +113,8 @@ class FeedServiceTest extends UnitTest {
 				feedRepository,
 				feedReactionRepository,
 				feedCommentRepository,
+				feedImageRepository,
+				feedTagRepository,
 				placeRepository,
 				mediaRepository,
 				teamRepository,
@@ -592,6 +602,7 @@ class FeedServiceTest extends UnitTest {
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(feedImageRepository.findActiveByFeedIds(List.of(FEED_ID))).thenReturn(feed.getImages());
 		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
 
 		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
@@ -622,6 +633,7 @@ class FeedServiceTest extends UnitTest {
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
+		when(feedTagRepository.findByFeedIds(List.of(FEED_ID))).thenReturn(feed.getTags());
 		when(defaultProfileImageResolver.resolveForTeamMember(author)).thenReturn(author.getProfileImgUrl());
 		when(defaultProfileImageResolver.resolveForTeamMember(taggedWithoutImg)).thenReturn(defaultImgUrl);
 

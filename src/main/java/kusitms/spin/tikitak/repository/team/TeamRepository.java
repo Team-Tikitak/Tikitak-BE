@@ -1,9 +1,9 @@
 package kusitms.spin.tikitak.repository.team;
 
+import jakarta.persistence.LockModeType;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.repository.dailyquestion.DailyQuestionTeamRepository;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -18,19 +18,19 @@ import java.util.Optional;
 @Repository
 public interface TeamRepository extends JpaRepository<Team, Long>, DailyQuestionTeamRepository {
 
-    @Override
-    default Optional<Team> findDailyQuestionTeamById(Long teamId) {
-        return findById(teamId);
-    }
+	@Override
+	default Optional<Team> findDailyQuestionTeamById(Long teamId) {
+		return findById(teamId);
+	}
 
-    @EntityGraph(attributePaths = {"teamMembers", "teamMembers.member"})
-    Optional<Team> findTeamWithTeamMembersById(Long teamId);
+	@EntityGraph(attributePaths = {"teamMembers", "teamMembers.member"})
+	Optional<Team> findTeamWithTeamMembersById(Long teamId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select t from Team t where t.id = :teamId")
-    Optional<Team> findByIdForUpdate(@Param("teamId") Long teamId);
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select t from Team t where t.id = :teamId")
+	Optional<Team> findByIdForUpdate(@Param("teamId") Long teamId);
 
-    @Modifying
-    @Query("DELETE FROM Team t WHERE t.status = :status AND t.deletedAt < :cutoff")
-    void bulkDeleteInactiveTeams(@Param("status") TeamStatus status, @Param("cutoff") LocalDateTime cutoff);
+	@Modifying
+	@Query("DELETE FROM Team t WHERE t.status = :status AND t.deletedAt < :cutoff")
+	void bulkDeleteInactiveTeams(@Param("status") TeamStatus status, @Param("cutoff") LocalDateTime cutoff);
 }

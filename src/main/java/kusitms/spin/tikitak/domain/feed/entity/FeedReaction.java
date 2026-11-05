@@ -2,6 +2,8 @@ package kusitms.spin.tikitak.domain.feed.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -47,7 +49,7 @@ public class FeedReaction {
 	@JoinColumn(name = "team_member_id", nullable = false)
 	private TeamMember teamMember;
 
-	@jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+	@Enumerated(EnumType.STRING)
 	@Column(name = "reaction_type", nullable = false, length = 50)
 	private FeedReactionType reactionType;
 
