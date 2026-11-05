@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #161
 - **브랜치**: `Fix/#161-external-api-tx-separation` (Orca worktree, develop 09fcdf4 기준)
-- **상태**: 승인됨 (2026-11-05)
+- **상태**: 완료 (2026-11-06, PR #178)
 
 ## 목표
 - OAuth 로그인, 알림 전송, 업로드 완료에서 외부 네트워크 호출(카카오/구글 API, FCM, R2 `headObject`)이 DB 트랜잭션·비관적 락 밖에서 실행되게 한다.
