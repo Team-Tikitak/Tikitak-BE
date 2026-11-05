@@ -15,6 +15,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
@@ -83,6 +84,7 @@ public class FeedService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
 	private final ImageUrlResolver imageUrlResolver;
+	private final KstDateProvider kstDateProvider;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
 		Long memberId,
@@ -163,9 +165,9 @@ public class FeedService {
 	public List<FeedResponseDTO.FeedListItemDTO> getEveryonePickItems(Long memberId, Long teamId) {
 		TeamMember viewer = getActiveTeamMember(memberId, teamId);
 
-		YearMonth currentMonth = YearMonth.now();
-		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
-		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+		YearMonth currentMonth = kstDateProvider.currentMonth();
+		LocalDateTime startOfMonth = kstDateProvider.startOfMonth(currentMonth);
+		LocalDateTime startOfNextMonth = kstDateProvider.startOfMonth(currentMonth.plusMonths(1));
 
 		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
 		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
@@ -203,9 +205,9 @@ public class FeedService {
 	public Optional<FeedResponseDTO.FeedThumbnailItemDTO> getEveryonePickThumbnailItem(Long memberId, Long teamId) {
 		getActiveTeamMember(memberId, teamId);
 
-		YearMonth currentMonth = YearMonth.now();
-		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
-		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+		YearMonth currentMonth = kstDateProvider.currentMonth();
+		LocalDateTime startOfMonth = kstDateProvider.startOfMonth(currentMonth);
+		LocalDateTime startOfNextMonth = kstDateProvider.startOfMonth(currentMonth.plusMonths(1));
 
 		long feedCount = feedRepository.countActiveByTeamAndMonth(teamId, startOfMonth, startOfNextMonth);
 		if (feedCount < EVERYONE_PICK_MIN_FEEDS) {
