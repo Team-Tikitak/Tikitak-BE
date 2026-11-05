@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.media;
 
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,7 +20,7 @@ public class MediaCleanupBatchService {
 
 	private final MediaService mediaService;
 
-	@Scheduled(cron = "0 0 4 * * *")
+	@Scheduled(cron = "0 0 4 * * *", zone = KstDateProvider.KST_ZONE_ID)
 	public void deleteExpiredPendingMedia() {
 		LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
 		LocalDateTime deletedCutoff = LocalDateTime.now().minusDays(DELETED_RETENTION_DAYS);

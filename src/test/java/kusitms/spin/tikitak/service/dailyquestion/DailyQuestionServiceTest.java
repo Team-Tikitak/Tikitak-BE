@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.question.entity.Question;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
+import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.dto.PatchField;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
@@ -33,6 +34,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static kusitms.spin.tikitak.support.fixture.ImageUrlResolverFixture.disabledImageUrlResolver;
@@ -82,7 +84,7 @@ class DailyQuestionServiceTest extends UnitTest {
 				questionRepository,
 				feedRepository,
 				mediaRepository,
-				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul"))),
+				kstSystemZoneDateProvider(),
 				disabledImageUrlResolver(),
 				eventPublisher
 		);
@@ -145,7 +147,7 @@ class DailyQuestionServiceTest extends UnitTest {
 				questionRepository,
 				feedRepository,
 				mediaRepository,
-				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul"))),
+				kstSystemZoneDateProvider(),
 				disabledImageUrlResolver(),
 				eventPublisher
 		);
@@ -308,6 +310,46 @@ class DailyQuestionServiceTest extends UnitTest {
 
 		assertThat(response.getAnswer().getImageUrl()).isEqualTo(newMedia.getUrl());
 		assertThat(newMedia.getStatus()).isEqualTo(MediaStatus.USED);
+	}
+
+	@Test
+	@DisplayName("시스템 zone이 UTC이면 팀 생성 시각을 UTC로 해석해 KST 생성일 기준 순번의 질문을 반환한다")
+	void getTodayQuestionUsesKstCreatedDateWhenSystemZoneIsUtc() {
+		Long utcTeamId = 20L;
+		Long utcMemberId = 3L;
+		Team utcTeam = Team.builder()
+				.id(utcTeamId)
+				.name("UTC team")
+				.status(TeamStatus.ACTIVE)
+				.createdAt(LocalDateTime.of(2026, 3, 3, 16, 0))
+				.updatedAt(LocalDateTime.of(2026, 3, 3, 16, 0))
+				.build();
+		teamRepository.save(utcTeam);
+		teamMemberRepository.save(activeMember(200L, activeMember(utcMemberId), utcTeam));
+		questionRepository.save(question(2L, 2, "Second question"));
+		DailyQuestionService utcService = new DailyQuestionService(
+				teamRepository,
+				teamMemberRepository,
+				questionRepository,
+				feedRepository,
+				mediaRepository,
+				new KstDateProvider(Clock.fixed(Instant.parse("2026-03-04T03:00:00Z"), ZoneOffset.UTC), ZoneOffset.UTC),
+				disabledImageUrlResolver(),
+				eventPublisher
+		);
+
+		DailyQuestionResponseDTO.TodayQuestionResponseDTO response =
+				utcService.getTodayQuestion(utcMemberId, utcTeamId);
+
+		assertThat(response.getDate()).isEqualTo(TODAY);
+		assertThat(response.getQuestionId()).isEqualTo(QUESTION_ID);
+		assertThat(response.getContent()).isEqualTo("Today question");
+	}
+
+	private KstDateProvider kstSystemZoneDateProvider() {
+		return new KstDateProvider(
+				Clock.fixed(Instant.parse("2026-03-04T12:00:00Z"), ZoneId.of("Asia/Seoul")),
+				ZoneId.of("Asia/Seoul"));
 	}
 
 	private void seedDailyQuestionBaseData() {

@@ -14,6 +14,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
@@ -33,8 +34,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,6 +75,11 @@ class FeedServiceTest extends UnitTest {
 	private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 	private static final UUID NEXT_MEDIA_PUBLIC_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 	private static final UUID NEW_MEDIA_PUBLIC_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+	// KST 2026-12-01 00:30. 시스템 zone은 UTC로 고정해 JVM 기본 타임존에 의존하지 않는다.
+	private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-11-30T15:30:00Z"), ZoneOffset.UTC);
+	// KST 2026-12-01 00:00 / 2027-01-01 00:00을 UTC 벽시계로 바꾼 값
+	private static final LocalDateTime MONTH_START = LocalDateTime.of(2026, 11, 30, 15, 0);
+	private static final LocalDateTime NEXT_MONTH_START = LocalDateTime.of(2026, 12, 31, 15, 0);
 
 	@Mock
 	private FeedRepository feedRepository;
@@ -120,7 +128,8 @@ class FeedServiceTest extends UnitTest {
 				teamRepository,
 				teamMemberRepository,
 				defaultProfileImageResolver,
-				disabledImageUrlResolver()
+				disabledImageUrlResolver(),
+				new KstDateProvider(FIXED_CLOCK, ZoneOffset.UTC)
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
@@ -174,9 +183,8 @@ class FeedServiceTest extends UnitTest {
 	@Test
 	@DisplayName("당월 피드가 3개 미만이면 빈 목록을 반환한다")
 	void getEveryonePickItemsReturnsEmptyWhenFeedCountLessThan3() {
-		YearMonth now = YearMonth.now();
-		LocalDateTime start = now.atDay(1).atStartOfDay();
-		LocalDateTime end = now.plusMonths(1).atDay(1).atStartOfDay();
+		LocalDateTime start = MONTH_START;
+		LocalDateTime end = NEXT_MONTH_START;
 
 		stubActiveAuthor();
 		when(feedRepository.countActiveByTeamAndMonth(eq(TEAM_ID), eq(start), eq(end))).thenReturn(2L);
@@ -185,11 +193,36 @@ class FeedServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("시스템 zone이 UTC여도 KST 12월 1일 00:30이면 모두의 픽은 KST 12월 범위로 조회한다")
+	void getEveryonePickItemsQueriesKstMonthRangeAtMonthBoundary() {
+		stubActiveAuthor();
+		when(feedRepository.countActiveByTeamAndMonth(any(), any(), any())).thenReturn(5L);
+		when(feedRepository.findEveryonePickFeedIds(any(), any(), any())).thenReturn(List.of());
+
+		feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID);
+
+		verify(feedRepository).countActiveByTeamAndMonth(TEAM_ID, MONTH_START, NEXT_MONTH_START);
+		verify(feedRepository).findEveryonePickFeedIds(TEAM_ID, MONTH_START, NEXT_MONTH_START);
+	}
+
+	@Test
+	@DisplayName("시스템 zone이 UTC여도 KST 12월 1일 00:30이면 모두의 픽 썸네일은 KST 12월 범위로 조회한다")
+	void getEveryonePickThumbnailItemQueriesKstMonthRangeAtMonthBoundary() {
+		stubActiveAuthor();
+		when(feedRepository.countActiveByTeamAndMonth(any(), any(), any())).thenReturn(5L);
+		when(feedRepository.findEveryonePickFeedIds(any(), any(), any())).thenReturn(List.of());
+
+		assertThat(feedService.getEveryonePickThumbnailItem(MEMBER_ID, TEAM_ID)).isEmpty();
+
+		verify(feedRepository).countActiveByTeamAndMonth(TEAM_ID, MONTH_START, NEXT_MONTH_START);
+		verify(feedRepository).findEveryonePickFeedIds(TEAM_ID, MONTH_START, NEXT_MONTH_START);
+	}
+
+	@Test
 	@DisplayName("피드가 3개 이상이면 랭킹 순서대로 FeedListItemDTO 목록을 반환한다")
 	void getEveryonePickItemsReturnsOrderedFeedListItemDTOs() {
-		YearMonth now = YearMonth.now();
-		LocalDateTime start = now.atDay(1).atStartOfDay();
-		LocalDateTime end = now.plusMonths(1).atDay(1).atStartOfDay();
+		LocalDateTime start = MONTH_START;
+		LocalDateTime end = NEXT_MONTH_START;
 
 		Long feedId1 = 201L;
 		Long feedId2 = 202L;
@@ -560,9 +593,8 @@ class FeedServiceTest extends UnitTest {
 	@Test
 	@DisplayName("피드 목록 조회 시 작성자의 profileImgUrl이 없으면 캐릭터 기본 이미지로 fallback된다")
 	void getEveryonePickItemsUsesDefaultProfileImageWhenProfileImgUrlIsNull() {
-		YearMonth now = YearMonth.now();
-		LocalDateTime start = now.atDay(1).atStartOfDay();
-		LocalDateTime end = now.plusMonths(1).atDay(1).atStartOfDay();
+		LocalDateTime start = MONTH_START;
+		LocalDateTime end = NEXT_MONTH_START;
 
 		Member memberWithCharacter = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
 		TeamMember authorWithoutImg = activeMemberWithoutProfileImg(TEAM_MEMBER_ID, memberWithCharacter, team);
