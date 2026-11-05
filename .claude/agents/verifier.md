@@ -30,7 +30,8 @@ hooks:
    - `throw new (IllegalArgument|IllegalState|Runtime)Exception` 같은 raw 예외 사용
    - 컨트롤러가 `CommonResponse`를 쓰지 않는지
    - `@Value` 직접 사용 (`*Properties`를 써야 함)
-5. `docs/lessons-log.md`의 과거 실수가 이번 변경에서 반복됐는지 본다.
+5. **문서 속 사실 확인**: 바뀐 문서(`docs/decisions/`, `docs/contracts/`, PR 본문 초안)에 적힌 수치·개수("약 50곳", "13개 파일")와 전칭 주장("그런 줄은 없다", "전부 ~다")을 grep 등으로 다시 세어 본다. 보고에는 근거 명령과 결과를 함께 적는다. 다르면 FAIL은 아니어도 "사실 오류"로 따로 보고한다.
+6. `docs/lessons-log.md`의 과거 실수가 이번 변경에서 반복됐는지 본다.
 
 ## 보고 형식
 ```
