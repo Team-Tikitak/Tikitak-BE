@@ -34,6 +34,10 @@
 | 무효 토큰 삭제 쿼리 수 | 영속 엔티티 `delete` → DELETE N | 별도 트랜잭션 `deleteAllById` → SELECT N + DELETE N (N = UNREGISTERED 토큰 수, 보통 0~1) |
 | 푸시 수신 직후 알림 목록 조회 | `send()` 자체 트랜잭션의 커밋 전에 푸시가 나감(리스너의 AFTER_COMMIT은 원 트랜잭션 기준). FCM 응답 직후 커밋되므로 목록에 안 보이는 창은 수십~수백 ms | 알림 커밋 후 푸시라 창 없음 (부수 효과) |
 
+| 업로드 완료에서 파일 여러 개가 서로 다른 오류를 동시에 가짐 (예: 한 파일은 R2에 없음, 다른 파일은 PENDING 아님) | 파일마다 검증 → headObject를 번갈아 해서 먼저 걸린 쪽 코드 (media 조회에 ORDER BY가 없어 원래도 비결정적) | 모든 상태 검증을 먼저 하므로 상태 오류(MEDIA014 등)가 R2 오류(MEDIA012/013/017)보다 우선 (2026-11-05 사용자 허용) |
+| 업로드 완료 중 `headObject` 도중에 만료 시각이 지남 | 시작 시 한 번만 확인해서 성공 | 락 단계 재검증에서 MEDIA014 + EXPIRED 커밋 (7일 만료 경계의 수 초에만 해당) |
+| 같은 upload로 completeUpload 중복 요청이 겹쳐서 실행됨 | 뒤 요청은 락 대기 후 MEDIA014, R2 호출 안 함 | 응답·DB 같음, 두 요청 모두 R2 호출 (앞 요청 커밋 뒤에 도착하면 지금처럼 사전 단계에서 MEDIA014, R2 호출 없음) |
+
 - 그 밖의 경로(정상 로그인, OAuth 외부 호출 실패, 회원 생성 후 토큰 발급 실패 시 롤백, 업로드 완료의 모든 에러 코드 MEDIA012/013/014/017과 롤백·만료 저장 동작)는 응답과 DB 결과가 바뀌지 않는다.
 
 ## 범위: 건드려도 되는 파일
@@ -42,6 +46,7 @@
   - `service/notification/NotificationService.java`, `service/notification/NotificationPersistService.java`(신규)
   - `repository/notification/` 의 device token 리포지토리 (ID 기반 삭제 메서드가 필요할 때만)
   - `service/media/MediaService.java`, `service/media/MediaUploadCompletionService.java`(신규), headObject 입력용 값 record가 필요하면 같은 패키지에 신규 1개
+  - `repository/media/MediaUploadRepository.java`(`findByPublicId` 추가), `repository/media/MediaRepository.java`(`findByUploadId` 추가). 락 없는 파생 쿼리만 (2026-11-05 사용자 승인)
 - test
   - `service/auth/AuthServiceTest.java`, `property/auth/AuthServicePropertyTest.java`, 새 빈의 단위 테스트
   - `service/notification/NotificationServiceTest.java`, 새 빈의 단위 테스트

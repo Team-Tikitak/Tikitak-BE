@@ -15,6 +15,8 @@ import java.util.UUID;
 
 public interface MediaUploadRepository extends JpaRepository<MediaUpload, Long> {
 
+	Optional<MediaUpload> findByPublicId(UUID publicId);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select mu from MediaUpload mu where mu.publicId = :publicId")
 	Optional<MediaUpload> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
