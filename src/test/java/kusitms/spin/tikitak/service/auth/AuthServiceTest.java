@@ -1,19 +1,18 @@
 package kusitms.spin.tikitak.service.auth;
 
-import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.service.auth.dto.LoginCodePayload;
 import kusitms.spin.tikitak.service.auth.dto.LoginResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
-import kusitms.spin.tikitak.service.me.ActiveTeamService;
+import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
@@ -22,11 +21,13 @@ import java.util.Optional;
 
 import static kusitms.spin.tikitak.support.fixture.AuthFixture.kakaoUserInfo;
 import static kusitms.spin.tikitak.support.fixture.AuthFixture.tokenResponse;
-import static kusitms.spin.tikitak.support.fixture.MemberFixture.activeMemberWithActiveTeam;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,10 +49,7 @@ class AuthServiceTest extends UnitTest {
 	private TokenService tokenService;
 
 	@Mock
-	private MemberRepository memberRepository;
-
-	@Mock
-	private ActiveTeamService activeTeamService;
+	private OAuthMemberLoginService oauthMemberLoginService;
 
 	@Mock
 	private LoginCodeStore loginCodeStore;
@@ -95,74 +93,59 @@ class AuthServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("기존 회원 OAuth 로그인은 토큰과 실제 활성 팀 ID를 반환한다")
-	void loginWithOAuthReturnsActiveTeamIdForExistingMember() {
+	@DisplayName("OAuth 로그인은 외부 사용자 정보를 받은 뒤 회원 로그인 처리를 OAuthMemberLoginService에 위임한다")
+	void loginWithOAuthDelegatesMemberLoginAfterFetchingUserInfo() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
-		Member member = activeMemberWithActiveTeam(1L, 10L);
-		TokenResponse token = tokenResponse();
+		LoginResponse loginResponse = new LoginResponse("access-token", "refresh-token", false, true, 10L);
 		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
-		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
-				SocialProvider.KAKAO,
-				"kakao-provider-id",
-				kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE
-		))
-				.thenReturn(Optional.of(member));
-		when(tokenService.issueToken(1L)).thenReturn(token);
-		when(activeTeamService.resolveActiveTeamId(member)).thenReturn(10L);
+		when(oauthMemberLoginService.loginWithToken(userInfo)).thenReturn(loginResponse);
 
 		LoginResponse response = authService.loginWithOAuth("kakao", "code", "state", "state");
 
-		assertThat(response.accessToken()).isEqualTo("access-token");
-		assertThat(response.refreshToken()).isEqualTo("refresh-token");
-		assertThat(response.isNewMember()).isFalse();
-		assertThat(response.activeTeamId()).isEqualTo(10L);
-		assertThat(member.getEmail()).isEqualTo("user@example.com");
-		assertThat(member.getName()).isEqualTo("Kakao User");
-		assertThat(member.getProfileImgUrl()).isEqualTo("https://example.com/profile.png");
+		assertThat(response).isEqualTo(loginResponse);
+		InOrder inOrder = inOrder(oauthStateStore, kakaoOAuthService, oauthMemberLoginService);
+		inOrder.verify(oauthStateStore).consume("state", SocialProvider.KAKAO.name());
+		inOrder.verify(kakaoOAuthService).getUserInfo("code");
+		inOrder.verify(oauthMemberLoginService).loginWithToken(userInfo);
 	}
 
 	@Test
-	@DisplayName("신규 OAuth 회원은 기본 정보로 저장되고 신규 회원으로 응답한다")
-	void loginWithOAuthCreatesNewMember() {
+	@DisplayName("OAuth 외부 인증이 실패하면 AUTH104 예외가 발생하고 회원 로그인 처리를 하지 않는다")
+	void loginWithOAuthThrowsAuth104WhenOAuthAuthenticationFails() {
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenThrow(new OAuthAuthenticationException("kakao failed"));
+
+		assertThatThrownBy(() -> authService.loginWithOAuth("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH104));
+		verify(oauthMemberLoginService, never()).loginWithToken(any());
+	}
+
+	@Test
+	@DisplayName("회원 로그인 처리가 BusinessException을 던지면 그대로 전파한다")
+	void loginWithOAuthRethrowsBusinessExceptionFromMemberLogin() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
-		TokenResponse token = tokenResponse();
 		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
-		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
-				SocialProvider.KAKAO,
-				"kakao-provider-id",
-				kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE
-		))
-				.thenReturn(Optional.empty());
-		when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> {
-			Member saved = invocation.getArgument(0);
-			return Member.builder()
-					.id(1L)
-					.email(saved.getEmail())
-					.name(saved.getName())
-					.nickname(saved.getNickname())
-					.profileImgUrl(saved.getProfileImgUrl())
-					.socialProvider(saved.getSocialProvider())
-					.providerId(saved.getProviderId())
-					.status(saved.getStatus())
-					.termsAgreed(saved.isTermsAgreed())
-					.privacyAgreed(saved.isPrivacyAgreed())
-					.termsAgreedAt(saved.getTermsAgreedAt())
-					.activeTeamId(saved.getActiveTeamId())
-					.createdAt(saved.getCreatedAt())
-					.updatedAt(saved.getUpdatedAt())
-					.build();
-		});
-		when(tokenService.issueToken(1L)).thenReturn(token);
-		when(activeTeamService.resolveActiveTeamId(any(Member.class))).thenReturn(null);
+		when(oauthMemberLoginService.loginWithToken(userInfo)).thenThrow(new BusinessException(ErrorCode.AUTH007));
 
-		LoginResponse response = authService.loginWithOAuth("kakao", "code", "state", "state");
+		assertThatThrownBy(() -> authService.loginWithOAuth("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH007));
+	}
 
-		assertThat(response.isNewMember()).isTrue();
-		assertThat(response.hasAgreedRequiredTerms()).isFalse();
-		assertThat(response.activeTeamId()).isNull();
-		verify(memberRepository).save(any(Member.class));
+	@Test
+	@DisplayName("회원 로그인 처리가 그 밖의 예외를 던지면 AUTH105 예외로 바꾼다")
+	void loginWithOAuthWrapsUnexpectedExceptionFromMemberLogin() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.loginWithToken(userInfo)).thenThrow(new RuntimeException("db failed"));
+
+		assertThatThrownBy(() -> authService.loginWithOAuth("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
 	}
 
 	@Test
@@ -179,26 +162,61 @@ class AuthServiceTest extends UnitTest {
 		assertThatThrownBy(() -> authService.loginWithOAuth("kakao", "code", "state", "other-state"))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH103));
+		verify(kakaoOAuthService, never()).getUserInfo(any());
+		verify(oauthMemberLoginService, never()).loginWithToken(any());
 	}
 
 	@Test
-	@DisplayName("앱 OAuth 로그인은 loginCode를 발급하고 저장한다")
+	@DisplayName("앱 OAuth 로그인은 회원 로그인 처리가 끝난 뒤 loginCode를 발급하고 저장한다")
 	void issueAppLoginCodeSavesLoginCodeAndReturnsCode() {
 		OAuthUserInfo userInfo = kakaoUserInfo();
-		Member member = activeMemberWithActiveTeam(1L, 10L);
+		LoginCodePayload payload = LoginCodePayload.builder()
+				.memberId(1L)
+				.newMember(false)
+				.agreedRequiredTerms(true)
+				.activeTeamId(10L)
+				.build();
 		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
 		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
-		when(memberRepository.findBySocialProviderAndProviderIdAndStatus(
-				SocialProvider.KAKAO,
-				"kakao-provider-id",
-				kusitms.spin.tikitak.domain.member.enums.MemberStatus.ACTIVE
-		)).thenReturn(Optional.of(member));
-		when(activeTeamService.resolveActiveTeamId(member)).thenReturn(10L);
+		when(oauthMemberLoginService.prepareLoginCode(userInfo)).thenReturn(payload);
 
 		String loginCode = authService.issueAppLoginCode("kakao", "code", "state", "state");
 
 		assertThat(loginCode).isNotBlank().hasSize(64);
-		verify(loginCodeStore).save(eq(loginCode), any(LoginCodePayload.class));
+		InOrder inOrder = inOrder(kakaoOAuthService, oauthMemberLoginService, loginCodeStore);
+		inOrder.verify(kakaoOAuthService).getUserInfo("code");
+		inOrder.verify(oauthMemberLoginService).prepareLoginCode(userInfo);
+		inOrder.verify(loginCodeStore).save(loginCode, payload);
+		verify(tokenService, never()).issueToken(any());
+	}
+
+	@Test
+	@DisplayName("앱 OAuth 로그인에서 loginCode 저장이 실패하면 AUTH105 예외가 발생한다")
+	void issueAppLoginCodeThrowsAuth105WhenLoginCodeSaveFails() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		LoginCodePayload payload = LoginCodePayload.builder().memberId(1L).build();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.prepareLoginCode(userInfo)).thenReturn(payload);
+		doThrow(new RuntimeException("redis failed")).when(loginCodeStore).save(any(), eq(payload));
+
+		assertThatThrownBy(() -> authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
+	}
+
+	@Test
+	@DisplayName("앱 OAuth 로그인에서 회원 로그인 처리가 실패하면 loginCode를 저장하지 않는다")
+	void issueAppLoginCodeDoesNotSaveLoginCodeWhenMemberLoginFails() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.prepareLoginCode(userInfo)).thenThrow(new RuntimeException("commit failed"));
+
+		assertThatThrownBy(() -> authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
+		verify(loginCodeStore, never()).save(any(), any());
 	}
 
 	@Test

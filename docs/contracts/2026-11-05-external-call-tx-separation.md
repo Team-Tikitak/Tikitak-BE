@@ -15,7 +15,7 @@
 | 항목 | 작업 |
 |---|---|
 | 1. 카카오 타임아웃 | `KakaoOAuthService`의 `HttpClient`를 builder + `connectTimeout(3s)`로 만들고, 두 요청에 `.timeout(5s)`를 건다. 값은 Google처럼 `private static final` 상수로 둔다(Properties 바인딩 안 함). IO/타임아웃 실패 로그 문구를 Google처럼 "request failed"로 고친다(현재 "response parsing failed"). |
-| 2. OAuth 로그인 | `AuthService.loginWithOAuth`(4·5인자), `issueAppLoginCode`(4·5인자)에서 `@Transactional`을 뺀다. 순서: Redis state consume → 외부 호출(Google/Kakao/Apple) → 새 빈 `service/auth/OAuthMemberLoginService`의 `@Transactional` 메서드 하나에서 회원 조회/생성 + `updateSocialProfile` + `resolveActiveTeamId` + `issueToken` → (앱) 커밋 후 트랜잭션 밖에서 `loginCodeStore.save`. |
+| 2. OAuth 로그인 | `AuthService.loginWithOAuth`(4·5인자), `issueAppLoginCode`(4·5인자)에서 `@Transactional`을 뺀다. 순서: Redis state consume → 외부 호출(Google/Kakao/Apple) → 새 빈 `service/auth/OAuthMemberLoginService`의 `@Transactional` 메서드에서 회원 조회/생성 + `updateSocialProfile` + `resolveActiveTeamId` (+ 웹 경로만 `issueToken`, 앱 경로는 기존처럼 토큰 미발급) → (앱) 커밋 후 트랜잭션 밖에서 `loginCodeStore.save`. 새 빈 메서드는 웹용·앱용 2개. |
 | 3. 알림 전송 | `NotificationService.send()`는 `@Transactional(propagation = NOT_SUPPORTED)`를 명시한다(클래스 수준 readOnly 트랜잭션을 물려받지 않게). 순서: 새 빈 `service/notification/NotificationPersistService`의 트랜잭션에서 회원 확인 + 알림 저장 + 토큰 조회(토큰 ID·값만 반환) → FCM `sendEach`(트랜잭션 없음) → UNREGISTERED 토큰은 같은 새 빈의 별도 트랜잭션에서 ID 기반으로 삭제. |
 | 4. 업로드 완료 | `MediaService.completeUpload`에서 `@Transactional`을 뺀다. 순서: 새 빈 `service/media/MediaUploadCompletionService`의 readOnly 트랜잭션에서 락 없이 upload·media를 읽고 기존 검증을 수행, `headObject`에 필요한 값(key, contentType, size)만 반환 → `headObject` 전부(트랜잭션 없음) → 같은 새 빈의 `@Transactional(noRollbackFor = ExpiredUploadException.class)` 메서드에서 지금처럼 PESSIMISTIC_WRITE 락을 잡고 **모든 검증을 다시 수행**(존재, 소유자, PENDING, 만료, media 수·publicId, 각 media PENDING, 타입·크기)한 뒤 상태 전환. 사전 단계에서 만료를 발견하면 `headObject`를 건너뛰고 락 단계로 넘겨 `expire()` 저장과 MEDIA014가 지금과 같게 나오게 한다. |
 
@@ -24,7 +24,8 @@
 | 경우 | 이전 | 이후 |
 |---|---|---|
 | 카카오 API 응답 지연 | 무한 대기, 그동안 DB 커넥션 점유 | connect 3s / request 5s 후 AUTH104(401), 커넥션 점유 없음 |
-| 앱 로그인(`issueAppLoginCode`)에서 Redis login code 저장 실패 | 회원 생성까지 롤백, AUTH105 | 회원 생성·refresh token 저장은 커밋된 채로 남고 응답은 AUTH105(같음). 다음 로그인은 기존 회원으로 처리됨 |
+| 앱 로그인(`issueAppLoginCode`)에서 Redis login code 저장 실패 | 회원 생성까지 롤백, AUTH105 | 회원 생성·프로필 갱신은 커밋된 채로 남고 응답은 AUTH105(같음). 앱 경로는 원래 토큰을 발급하지 않음(발급은 `exchangeLoginCode`). 다음 로그인은 기존 회원으로 처리됨 |
+| OAuth 로그인 중 트랜잭션 시작 실패(커넥션 획득 타임아웃 등) 또는 커밋 실패 | COMMON004(500). 시작 실패는 state 소비 전 | AUTH105(500). 트랜잭션이 `AuthService`의 `catch (Exception)` 안으로 들어감. 시작 실패는 state 소비·외부 호출 이후 (2026-11-05 사용자 허용) |
 | 앱 로그인에서 DB 커밋 실패 | Redis에 login code가 남을 수 있음 | 커밋 실패 시 login code를 저장하지 않음 |
 | FCM이 `FirebaseMessagingException` 외 RuntimeException을 던짐 | 알림 레코드 롤백(남지 않음) | 알림 레코드가 남음. 리스너는 지금처럼 catch 후 로그 |
 | 무효 토큰 삭제 실패 | 알림 레코드까지 롤백 | 알림 레코드는 남고 토큰 삭제만 실패 |

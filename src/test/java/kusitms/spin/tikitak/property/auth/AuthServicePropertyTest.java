@@ -2,15 +2,14 @@ package kusitms.spin.tikitak.property.auth;
 
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.service.auth.AppleOAuthService;
 import kusitms.spin.tikitak.service.auth.AuthService;
 import kusitms.spin.tikitak.service.auth.GoogleOAuthService;
 import kusitms.spin.tikitak.service.auth.KakaoOAuthService;
 import kusitms.spin.tikitak.service.auth.LoginCodeStore;
+import kusitms.spin.tikitak.service.auth.OAuthMemberLoginService;
 import kusitms.spin.tikitak.service.auth.OAuthStateStore;
 import kusitms.spin.tikitak.service.auth.TokenService;
-import kusitms.spin.tikitak.service.me.ActiveTeamService;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.Assume;
@@ -30,8 +29,7 @@ class AuthServicePropertyTest {
 			mock(AppleOAuthService.class),
 			mock(OAuthStateStore.class),
 			mock(TokenService.class),
-			mock(MemberRepository.class),
-			mock(ActiveTeamService.class),
+			mock(OAuthMemberLoginService.class),
 			mock(LoginCodeStore.class)
 	);
 
