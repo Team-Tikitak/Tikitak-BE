@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #183
 - **브랜치**: `Refactor/#183-base-time-entity-2` (Orca worktree, develop e9f9d92 기준)
-- **상태**: 승인됨 (2026-11-06)
+- **상태**: 완료 (2026-11-06, PR #185)
 
 ## 목표
 - 남은 6개 엔티티(Feed, FeedComment, Member, MemberDeviceToken, Notification, RefreshToken)를 1단계 상위 클래스로 옮기고, 엔티티 안의 시각 세팅(팩토리 now, `@PrePersist`/`@PreUpdate`)을 없앤다.
