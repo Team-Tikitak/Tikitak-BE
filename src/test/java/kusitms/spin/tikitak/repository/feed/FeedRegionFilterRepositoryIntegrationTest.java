@@ -46,8 +46,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			Place gangnam = persist(place(GANGNAM));
 			Place bundang = persist(place(BUNDANG));
 
-			Feed gangnamFeed = persist(feed(team, authorTm, gangnam, BASE_TIME));
-			persist(feed(team, authorTm, bundang, BASE_TIME.plusHours(1)));
+			Feed gangnamFeed = persistWithCreatedAt(feed(team, authorTm, gangnam, BASE_TIME), BASE_TIME);
+			persistWithCreatedAt(feed(team, authorTm, bundang, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
 
 			flushAndClear();
 
@@ -65,7 +65,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			Team team = persist(team("rf-first-noplace"));
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-			persist(feed(team, authorTm, null, BASE_TIME));
+			persistWithCreatedAt(feed(team, authorTm, null, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -86,7 +86,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 					.content("삭제됨").meetingDate(IN_MAY)
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
-			persist(deleted);
+			persistWithCreatedAt(deleted, BASE_TIME);
 
 			flushAndClear();
 
@@ -102,8 +102,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place(GANGNAM));
 
-			Feed older = persist(feed(team, authorTm, place, BASE_TIME));
-			Feed newer = persist(feed(team, authorTm, place, BASE_TIME.plusHours(1)));
+			Feed older = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME), BASE_TIME);
+			Feed newer = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
 
 			flushAndClear();
 
@@ -124,7 +124,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			Place place = persist(place(GANGNAM));
 
 			for (int i = 0; i < 5; i++) {
-				persist(feed(team, authorTm, place, BASE_TIME.plusMinutes(i)));
+				persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME.plusMinutes(i)), BASE_TIME.plusMinutes(i));
 			}
 
 			flushAndClear();
@@ -144,7 +144,7 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place(GANGNAM));
 
-			persist(feed(otherTeam, otherAuthor, place, BASE_TIME));
+			persistWithCreatedAt(feed(otherTeam, otherAuthor, place, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -167,9 +167,9 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place(GANGNAM));
 
-			Feed feed1 = persist(feed(team, authorTm, place, BASE_TIME));
-			Feed feed2 = persist(feed(team, authorTm, place, BASE_TIME.plusHours(1)));
-			Feed feed3 = persist(feed(team, authorTm, place, BASE_TIME.plusHours(2)));
+			Feed feed1 = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME), BASE_TIME);
+			Feed feed2 = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
+			Feed feed3 = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME.plusHours(2)), BASE_TIME.plusHours(2));
 
 			flushAndClear();
 
@@ -192,9 +192,9 @@ feed3.getCreatedAt(), feed3.getId(),
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place(GANGNAM));
 
-			Feed feed1 = persist(feed(team, authorTm, place, BASE_TIME));
-			Feed feed2 = persist(feed(team, authorTm, place, BASE_TIME));
-			Feed feed3 = persist(feed(team, authorTm, place, BASE_TIME));
+			Feed feed1 = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME), BASE_TIME);
+			Feed feed2 = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME), BASE_TIME);
+			Feed feed3 = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -218,9 +218,9 @@ feed2.getCreatedAt(), feed2.getId(),
 			Place gangnam = persist(place(GANGNAM));
 			Place bundang = persist(place(BUNDANG));
 
-			Feed gangnamFeed = persist(feed(team, authorTm, gangnam, BASE_TIME));
-			Feed bundangFeed = persist(feed(team, authorTm, bundang, BASE_TIME.plusHours(1)));
-			Feed cursor = persist(feed(team, authorTm, gangnam, BASE_TIME.plusHours(2)));
+			Feed gangnamFeed = persistWithCreatedAt(feed(team, authorTm, gangnam, BASE_TIME), BASE_TIME);
+			Feed bundangFeed = persistWithCreatedAt(feed(team, authorTm, bundang, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
+			Feed cursor = persistWithCreatedAt(feed(team, authorTm, gangnam, BASE_TIME.plusHours(2)), BASE_TIME.plusHours(2));
 
 			flushAndClear();
 
@@ -246,9 +246,9 @@ cursor.getCreatedAt(), cursor.getId(),
 					.content("삭제됨").meetingDate(IN_MAY)
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
-			persist(deleted);
+			persistWithCreatedAt(deleted, BASE_TIME);
 
-			Feed cursor = persist(feed(team, authorTm, place, BASE_TIME.plusHours(1)));
+			Feed cursor = persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
 
 			flushAndClear();
 
@@ -274,11 +274,11 @@ cursor.getCreatedAt(), cursor.getId(),
 
 		Feed gangnamTagged = feed(team, authorTm, gangnam, BASE_TIME.plusHours(1));
 		gangnamTagged.addTag(FeedTag.builder().teamMember(taggedTm).build());
-		persist(gangnamTagged);
+		persistWithCreatedAt(gangnamTagged, BASE_TIME.plusHours(1));
 
 		Feed bundangTagged = feed(team, authorTm, bundang, BASE_TIME.plusHours(2));
 		bundangTagged.addTag(FeedTag.builder().teamMember(taggedTm).build());
-		persist(bundangTagged);
+		persistWithCreatedAt(bundangTagged, BASE_TIME.plusHours(2));
 
 		flushAndClear();
 

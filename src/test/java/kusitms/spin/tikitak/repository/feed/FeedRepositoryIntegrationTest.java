@@ -39,18 +39,18 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 		// placeA: 오래된 피드
 		Feed olderFeed = feed(team, tm, placeA, BASE_TIME);
 		olderFeed.addImage(feedImage("https://old.jpg", 0));
-		persist(olderFeed);
+		persistWithCreatedAt(olderFeed, BASE_TIME);
 
 		// placeA: 최신 피드 (이미지 2장 — orderIndex=0이 썸네일)
 		Feed newerFeed = feed(team, tm, placeA, BASE_TIME.plusHours(1));
 		newerFeed.addImage(feedImage("https://new-thumb.jpg", 0));
 		newerFeed.addImage(feedImage("https://new-second.jpg", 1));
-		persist(newerFeed);
+		persistWithCreatedAt(newerFeed, BASE_TIME.plusHours(1));
 
 		// placeB: 피드 1개
 		Feed feedB = feed(team, tm, placeB, BASE_TIME);
 		feedB.addImage(feedImage("https://b.jpg", 0));
-		persist(feedB);
+		persistWithCreatedAt(feedB, BASE_TIME);
 
 		flushAndClear();
 
@@ -82,7 +82,7 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed deletedFeed = feed(team, tm, place, BASE_TIME, BASE_TIME);
 		deletedFeed.addImage(feedImage("https://deleted.jpg", 0));
-		persist(deletedFeed);
+		persistWithCreatedAt(deletedFeed, BASE_TIME);
 
 		flushAndClear();
 
@@ -102,7 +102,7 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 				.createdAt(BASE_TIME).updatedAt(BASE_TIME)
 				.build();
 		noPlaceFeed.addImage(feedImage("https://noplace.jpg", 0));
-		persist(noPlaceFeed);
+		persistWithCreatedAt(noPlaceFeed, BASE_TIME);
 
 		flushAndClear();
 
@@ -120,7 +120,7 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed otherFeed = feed(otherTeam, otherTm, place, BASE_TIME);
 		otherFeed.addImage(feedImage("https://other.jpg", 0));
-		persist(otherFeed);
+		persistWithCreatedAt(otherFeed, BASE_TIME);
 
 		flushAndClear();
 
@@ -144,16 +144,16 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 		Feed bothTagged = feed(team, author, place, BASE_TIME.plusMinutes(3));
 		bothTagged.addTag(FeedTag.builder().teamMember(tagA).build());
 		bothTagged.addTag(FeedTag.builder().teamMember(tagB).build());
-		persist(bothTagged);
+		persistWithCreatedAt(bothTagged, BASE_TIME.plusMinutes(3));
 
 		Feed onlyATagged = feed(team, author, place, BASE_TIME.plusMinutes(2));
 		onlyATagged.addTag(FeedTag.builder().teamMember(tagA).build());
-		persist(onlyATagged);
+		persistWithCreatedAt(onlyATagged, BASE_TIME.plusMinutes(2));
 
 		Feed otherTagged = feed(team, author, place, BASE_TIME.plusMinutes(1));
 		otherTagged.addTag(FeedTag.builder().teamMember(tagA).build());
 		otherTagged.addTag(FeedTag.builder().teamMember(tagC).build());
-		persist(otherTagged);
+		persistWithCreatedAt(otherTagged, BASE_TIME.plusMinutes(1));
 
 		flushAndClear();
 

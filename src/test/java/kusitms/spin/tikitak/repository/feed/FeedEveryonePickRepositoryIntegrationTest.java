@@ -45,7 +45,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 
 		// feedA (older): 반응 2개 → score 2
 		Feed feedA = feedWithCreatedAt(team, authorTm, MAY_TIME);
-		persist(feedA);
+		persistWithCreatedAt(feedA, MAY_TIME);
 		addReaction(feedA, tm1, FeedReactionType.TAK_LEADER);
 		addReaction(feedA, tm2, FeedReactionType.TAK_SPARK);
 
@@ -53,7 +53,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		Feed feedB = feedWithCreatedAt(team, authorTm, MAY_TIME.plusHours(1));
 		FeedImage imgB = feedImage("https://b.jpg");
 		feedB.addImage(imgB);
-		persist(feedB);
+		persistWithCreatedAt(feedB, MAY_TIME.plusHours(1));
 		addReaction(feedB, tm1, FeedReactionType.TAK_LEADER);
 		addComment(feedB, imgB, tm1);
 
@@ -61,7 +61,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		Feed feedC = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		FeedImage imgC = feedImage("https://c.jpg");
 		feedC.addImage(imgC);
-		persist(feedC);
+		persistWithCreatedAt(feedC, MAY_TIME);
 		addComment(feedC, imgC, tm1);
 
 		flushAndClear();
@@ -85,7 +85,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		Feed feed = feedWithCreatedAt(team, authorTm, APRIL_TIME);
-		persist(feed);
+		persistWithCreatedAt(feed, APRIL_TIME);
 		addReaction(feed, tm, FeedReactionType.TAK_LEADER);
 
 		flushAndClear();
@@ -108,7 +108,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 				.content("삭제된 피드")
 				.createdAt(MAY_TIME).updatedAt(MAY_TIME).deletedAt(MAY_TIME)
 				.build();
-		persist(deletedFeed);
+		persistWithCreatedAt(deletedFeed, MAY_TIME);
 		addReaction(deletedFeed, tm, FeedReactionType.TAK_LEADER);
 
 		flushAndClear();
@@ -130,7 +130,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		Feed feed = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		FeedImage img = feedImage("https://img.jpg");
 		feed.addImage(img);
-		persist(feed);
+		persistWithCreatedAt(feed, MAY_TIME);
 		addComment(feed, img, tm);
 		addDeletedComment(feed, img, tm);
 
@@ -153,7 +153,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 
 		for (int i = 0; i < 11; i++) {
 			Feed feed = feedWithCreatedAt(team, authorTm, MAY_TIME.plusMinutes(i));
-			persist(feed);
+			persistWithCreatedAt(feed, MAY_TIME.plusMinutes(i));
 			addReaction(feed, reactorTm, FeedReactionType.TAK_LEADER);
 		}
 
@@ -174,7 +174,7 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		Feed otherFeed = feedWithCreatedAt(otherTeam, otherAuthor, MAY_TIME);
-		persist(otherFeed);
+		persistWithCreatedAt(otherFeed, MAY_TIME);
 		addReaction(otherFeed, otherTm, FeedReactionType.TAK_LEADER);
 
 		flushAndClear();
@@ -191,8 +191,8 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed feed1 = feedWithCreatedAt(team, authorTm, MAY_TIME);
 		Feed feed2 = feedWithCreatedAt(team, authorTm, MAY_TIME.plusHours(1));
-		persist(feed1);
-		persist(feed2);
+		persistWithCreatedAt(feed1, MAY_TIME);
+		persistWithCreatedAt(feed2, MAY_TIME.plusHours(1));
 
 		flushAndClear();
 
@@ -215,8 +215,8 @@ class FeedEveryonePickRepositoryIntegrationTest extends IntegrationTest {
 				.content("삭제됨")
 				.createdAt(MAY_TIME).updatedAt(MAY_TIME).deletedAt(MAY_TIME)
 				.build();
-		persist(active);
-		persist(deleted);
+		persistWithCreatedAt(active, MAY_TIME);
+		persistWithCreatedAt(deleted, MAY_TIME);
 
 		flushAndClear();
 
