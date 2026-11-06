@@ -37,7 +37,7 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		Feed feed = feed(team, authorTm, IN_MAY, BASE_TIME);
-		persist(feed);
+		persistWithCreatedAt(feed, BASE_TIME);
 		tag(feed, tm1);
 		tag(feed, tm2);
 		tag(feed, authorTm);
@@ -60,7 +60,7 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		Feed feed = feed(team, authorTm, IN_MAY, BASE_TIME);
-		persist(feed);
+		persistWithCreatedAt(feed, BASE_TIME);
 		tag(feed, tm1); // tm2, authorTm 미태그
 
 		flushAndClear();
@@ -82,7 +82,7 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 
 		// 활성 팀원(tm1, authorTm) 2명만 태그 → 활성 팀원 수(2명)와 일치
 		Feed feed = feed(team, authorTm, IN_MAY, BASE_TIME);
-		persist(feed);
+		persistWithCreatedAt(feed, BASE_TIME);
 		tag(feed, tm1);
 		tag(feed, authorTm);
 
@@ -103,7 +103,7 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 				.content("삭제된 피드").meetingDate(IN_MAY)
 				.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 				.build();
-		persist(deleted);
+		persistWithCreatedAt(deleted, BASE_TIME);
 		tag(deleted, authorTm);
 
 		flushAndClear();
@@ -121,7 +121,7 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		Feed otherFeed = feed(otherTeam, otherAuthor, IN_MAY, BASE_TIME);
-		persist(otherFeed);
+		persistWithCreatedAt(otherFeed, BASE_TIME);
 		tag(otherFeed, otherAuthor);
 
 		flushAndClear();
@@ -138,8 +138,8 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed older = feed(team, authorTm, IN_MAY, BASE_TIME);
 		Feed newer = feed(team, authorTm, IN_MAY, BASE_TIME.plusHours(1));
-		persist(older);
-		persist(newer);
+		persistWithCreatedAt(older, BASE_TIME);
+		persistWithCreatedAt(newer, BASE_TIME.plusHours(1));
 		tag(older, authorTm);
 		tag(newer, authorTm);
 
@@ -160,7 +160,7 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 
 		for (int i = 0; i < 11; i++) {
 			Feed feed = feed(team, authorTm, IN_MAY, BASE_TIME.plusMinutes(i));
-			persist(feed);
+			persistWithCreatedAt(feed, BASE_TIME.plusMinutes(i));
 			tag(feed, authorTm);
 		}
 
@@ -182,13 +182,13 @@ class FeedAllTaggedRepositoryIntegrationTest extends IntegrationTest {
 		TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 		Feed full = feed(team, authorTm, IN_MAY, BASE_TIME.plusHours(1));
-		persist(full);
+		persistWithCreatedAt(full, BASE_TIME.plusHours(1));
 		tag(full, tm1);
 		tag(full, tm2);
 		tag(full, authorTm);
 
 		Feed partial = feed(team, authorTm, IN_MAY, BASE_TIME);
-		persist(partial);
+		persistWithCreatedAt(partial, BASE_TIME);
 		tag(partial, tm1);
 
 		flushAndClear();

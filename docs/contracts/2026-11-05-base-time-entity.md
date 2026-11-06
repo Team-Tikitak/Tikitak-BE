@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #159
 - **브랜치**: `Refactor/#159-base-time-entity` (Orca worktree, develop a25010b 기준)
-- **상태**: 승인됨 (2026-11-05)
+- **상태**: 완료 (2026-11-06, PR #184)
 
 ## 목표
 - `createdAt`/`updatedAt`의 선언과 값 세팅을 `@MappedSuperclass` 상위 클래스와 Spring Data auditing(`AuditingEntityListener`)으로 모은다.

@@ -148,12 +148,12 @@ class TeamMemberRepositoryIntegrationTest extends IntegrationTest {
 		persist(teamMember(member, emptyTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 		TeamMember otherTargetMembership = persist(teamMember(other, targetTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
 
-		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(1), null));
-		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(2), null));
-		persist(feed(targetTeam, targetMembership, BASE_TIME.plusMinutes(3), null));
-		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.minusMinutes(1), null));
-		persist(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(4), BASE_TIME.plusMinutes(5)));
-		persist(feed(selectedTeam, selectedMembership, BASE_TIME.plusMinutes(1), null));
+		persistWithCreatedAt(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(1), null), BASE_TIME.plusMinutes(1));
+		persistWithCreatedAt(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(2), null), BASE_TIME.plusMinutes(2));
+		persistWithCreatedAt(feed(targetTeam, targetMembership, BASE_TIME.plusMinutes(3), null), BASE_TIME.plusMinutes(3));
+		persistWithCreatedAt(feed(targetTeam, otherTargetMembership, BASE_TIME.minusMinutes(1), null), BASE_TIME.minusMinutes(1));
+		persistWithCreatedAt(feed(targetTeam, otherTargetMembership, BASE_TIME.plusMinutes(4), BASE_TIME.plusMinutes(5)), BASE_TIME.plusMinutes(4));
+		persistWithCreatedAt(feed(selectedTeam, selectedMembership, BASE_TIME.plusMinutes(1), null), BASE_TIME.plusMinutes(1));
 		flushAndClear();
 
 		List<Object[]> counts = teamMemberRepository.countNewActivitiesByMemberTeams(

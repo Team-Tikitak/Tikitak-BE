@@ -46,15 +46,15 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		feed1.addTag(FeedTag.builder().teamMember(tmDaDa).build());
 		feed1.addTag(FeedTag.builder().teamMember(tmNaNa).build());
 		feed1.addTag(FeedTag.builder().teamMember(tmGaGa).build());
-		persist(feed1);
+		persistWithCreatedAt(feed1, MAY_TIME);
 
 		Feed feed2 = feedWithCreatedAt(team, authorTm);
 		feed2.addTag(FeedTag.builder().teamMember(tmDaDa).build());
-		persist(feed2);
+		persistWithCreatedAt(feed2, MAY_TIME);
 
 		Feed feed3 = feedWithCreatedAt(team, authorTm);
 		feed3.addTag(FeedTag.builder().teamMember(tmDaDa).build());
-		persist(feed3);
+		persistWithCreatedAt(feed3, MAY_TIME);
 
 		flushAndClear();
 
@@ -82,7 +82,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed feed = feedWithCreatedAt(team, authorTm, APRIL_TIME);
 		feed.addTag(FeedTag.builder().teamMember(tagged).build());
-		persist(feed);
+		persistWithCreatedAt(feed, APRIL_TIME);
 
 		flushAndClear();
 
@@ -108,7 +108,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 				.createdAt(MAY_TIME).updatedAt(MAY_TIME).deletedAt(MAY_TIME)
 				.build();
 		deletedFeed.addTag(FeedTag.builder().teamMember(tagged).build());
-		persist(deletedFeed);
+		persistWithCreatedAt(deletedFeed, MAY_TIME);
 
 		flushAndClear();
 
@@ -130,7 +130,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed feed = feedWithCreatedAt(team, authorTm);
 		feed.addTag(FeedTag.builder().teamMember(leftMember).build());
-		persist(feed);
+		persistWithCreatedAt(feed, MAY_TIME);
 
 		flushAndClear();
 
@@ -153,7 +153,7 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 
 		Feed otherFeed = feedWithCreatedAt(otherTeam, otherAuthor);
 		otherFeed.addTag(FeedTag.builder().teamMember(otherTagged).build());
-		persist(otherFeed);
+		persistWithCreatedAt(otherFeed, MAY_TIME);
 
 		flushAndClear();
 
@@ -178,15 +178,15 @@ class FeedTagRepositoryIntegrationTest extends IntegrationTest {
 		Feed feed1 = feedWithCreatedAt(team, authorTm);
 		feed1.addTag(FeedTag.builder().teamMember(tagged1).build());
 		feed1.addTag(FeedTag.builder().teamMember(tagged2).build());
-		persist(feed1);
+		persistWithCreatedAt(feed1, MAY_TIME);
 
 		Feed feed2 = feedWithCreatedAt(team, authorTm);
 		feed2.addTag(FeedTag.builder().teamMember(tagged1).build());
-		persist(feed2);
+		persistWithCreatedAt(feed2, MAY_TIME);
 
 		Feed feed3 = feedWithCreatedAt(team, authorTm);
 		feed3.addTag(FeedTag.builder().teamMember(tagged2).build());
-		persist(feed3);
+		persistWithCreatedAt(feed3, MAY_TIME);
 
 		flushAndClear();
 
