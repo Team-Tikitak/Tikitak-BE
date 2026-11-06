@@ -87,7 +87,7 @@ public class MediaService {
 				.build());
 
 		List<Media> medias = request.getFiles().stream()
-				.map(file -> {
+				.<Media>map(file -> {
 					UUID publicId = UUID.randomUUID();
 					return Media.builder()
 							.publicId(publicId)

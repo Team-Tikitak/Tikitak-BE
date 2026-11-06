@@ -5,24 +5,21 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.common.BaseCreatedTimeEntity;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "place")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class Place {
+public class Place extends BaseCreatedTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -46,17 +43,7 @@ public class Place {
 	@Column(columnDefinition = "text")
 	private String region;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
 	public void updateRegion(String region) {
 		this.region = region;
-	}
-
-	@PrePersist
-	protected void onCreate() {
-		if (createdAt == null) {
-			createdAt = LocalDateTime.now();
-		}
 	}
 }

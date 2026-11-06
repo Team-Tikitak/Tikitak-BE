@@ -8,24 +8,20 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.common.BaseTimeEntity;
 import kusitms.spin.tikitak.domain.media.enums.ObjectDeleteStatus;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
+import lombok.experimental.SuperBuilder;
 
 @Entity
 @Table(name = "object_delete_outbox")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class ObjectDeleteOutbox {
+public class ObjectDeleteOutbox extends BaseTimeEntity {
 
 	public static final int MAX_RETRY_COUNT = 5;
 
@@ -52,12 +48,6 @@ public class ObjectDeleteOutbox {
 	@Column(columnDefinition = "text")
 	private String lastError;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
-
 	public void markFailed(String lastError) {
 		this.retryCount++;
 		this.status = retryCount >= MAX_RETRY_COUNT
@@ -71,12 +61,5 @@ public class ObjectDeleteOutbox {
 		if (status == null) {
 			status = ObjectDeleteStatus.PENDING;
 		}
-		createdAt = LocalDateTime.now();
-		updatedAt = LocalDateTime.now();
-	}
-
-	@PreUpdate
-	protected void onUpdate() {
-		updatedAt = LocalDateTime.now();
 	}
 }

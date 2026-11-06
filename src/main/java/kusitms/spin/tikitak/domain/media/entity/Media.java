@@ -1,13 +1,14 @@
 package kusitms.spin.tikitak.domain.media.entity;
 
 import jakarta.persistence.*;
+import kusitms.spin.tikitak.domain.common.BaseTimeEntity;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -15,10 +16,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "media")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class Media {
+public class Media extends BaseTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -56,12 +56,6 @@ public class Media {
 
 	@Column
 	private LocalDateTime deletedAt;
-
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
 
 	@Column
 	private Long teamId;
@@ -108,12 +102,5 @@ public class Media {
 		if (publicId == null) {
 			publicId = UUID.randomUUID();
 		}
-		createdAt = LocalDateTime.now();
-		updatedAt = LocalDateTime.now();
-	}
-
-	@PreUpdate
-	protected void onUpdate() {
-		updatedAt = LocalDateTime.now();
 	}
 }
