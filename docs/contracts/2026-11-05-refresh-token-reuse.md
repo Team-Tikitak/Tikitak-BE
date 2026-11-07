@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #163
 - **브랜치**: `Fix/#163-refresh_token_reuse` (Orca worktree, develop fa9f1f5 기준)
-- **상태**: 승인됨 (2026-11-07)
+- **상태**: 완료 (2026-11-07, PR #187)
 
 ## 목표
 - revoke된 refresh token이 다시 오거나 같은 토큰으로 동시에 재발급하면, 이를 재사용으로 보고 그 회원의 refresh token을 모두 revoke한다. 재발급은 한 번만 성공한다.
