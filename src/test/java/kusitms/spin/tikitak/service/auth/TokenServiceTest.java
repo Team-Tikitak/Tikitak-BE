@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.service.auth;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kusitms.spin.tikitak.domain.auth.entity.RefreshToken;
 import kusitms.spin.tikitak.domain.member.entity.Member;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 
+import java.util.Base64;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -145,6 +148,30 @@ class TokenServiceTest extends UnitTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.AUTH009);
+	}
+
+	@Test
+	@DisplayName("같은 회원으로 연속 두 번 발급하면 refresh 토큰이 서로 다르고 payload에 jti가 있다")
+	void issueTokenTwiceProducesDistinctRefreshTokensWithJti() throws Exception {
+		TokenService tokenService = tokenService(SECRET, 3600L, 604800L);
+		stubActiveMember();
+
+		TokenResponse first = tokenService.issueToken(MEMBER_ID);
+		TokenResponse second = tokenService.issueToken(MEMBER_ID);
+
+		assertThat(first.refreshToken()).isNotEqualTo(second.refreshToken());
+		Object firstJti = payload(first.refreshToken()).get("jti");
+		Object secondJti = payload(second.refreshToken()).get("jti");
+		assertThat(firstJti).isInstanceOf(String.class);
+		assertThat((String) firstJti).isNotBlank();
+		assertThat(secondJti).isInstanceOf(String.class).isNotEqualTo(firstJti);
+		assertThat(payload(first.accessToken())).containsKey("jti");
+	}
+
+	private Map<String, Object> payload(String token) throws Exception {
+		String[] parts = token.split("\\.");
+		return new ObjectMapper().readValue(Base64.getUrlDecoder().decode(parts[1]), new TypeReference<>() {
+		});
 	}
 
 	private void stubActiveMember() {

@@ -24,6 +24,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -98,7 +99,7 @@ public class TokenService {
 			}
 
 			String unsignedToken = parts[0] + "." + parts[1];
-			if (!Objects.equals(sign(unsignedToken), parts[2])) {
+			if (!signatureMatches(unsignedToken, parts[2])) {
 				throw new BusinessException(ErrorCode.AUTH007);
 			}
 
@@ -146,7 +147,7 @@ public class TokenService {
 			}
 
 			String unsignedToken = parts[0] + "." + parts[1];
-			if (!Objects.equals(sign(unsignedToken), parts[2])) {
+			if (!signatureMatches(unsignedToken, parts[2])) {
 				throw new BusinessException(ErrorCode.AUTH009);
 			}
 
@@ -187,6 +188,7 @@ public class TokenService {
 		payload.put("type", tokenType);
 		payload.put("iat", now.getEpochSecond());
 		payload.put("exp", now.plusSeconds(expiresInSeconds).getEpochSecond());
+		payload.put("jti", UUID.randomUUID().toString());
 
 		String unsignedToken = base64Url(toJson(header)) + "." + base64Url(toJson(payload));
 		return unsignedToken + "." + sign(unsignedToken);
@@ -198,6 +200,13 @@ public class TokenService {
 		} catch (JsonProcessingException e) {
 			throw new BusinessException(ErrorCode.AUTH010, e);
 		}
+	}
+
+	private boolean signatureMatches(String unsignedToken, String signature) {
+		return MessageDigest.isEqual(
+				sign(unsignedToken).getBytes(StandardCharsets.US_ASCII),
+				signature.getBytes(StandardCharsets.US_ASCII)
+		);
 	}
 
 	private String sign(String value) {
