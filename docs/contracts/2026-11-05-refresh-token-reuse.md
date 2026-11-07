@@ -34,7 +34,7 @@
 |---|---|---|
 | revoke된 refresh token으로 재발급 | 401 AUTH007 | 401 AUTH007 + **그 회원의 유효한 refresh token 전부 revoke** |
 | 같은 토큰으로 동시에 재발급 2건 | 둘 다 200, 토큰 쌍 2개 발급 | 1건 200, 1건 401 AUTH007. 이긴 쪽이 받은 새 refresh token까지 전부 revoke |
-| 같은 회원이 같은 초에 토큰을 두 번 발급(로그인/재발급) | 500 AUTH008 (`token_hash` unique 위반) | 200 |
+| 같은 회원이 같은 초에 토큰을 두 번 발급 (`token_hash` unique 위반) | 재발급 500 AUTH008, OAuth 웹 로그인 500 AUTH105, 앱 loginCode 교환 500 COMMON004 (2026-11-07 verifier가 정정) | 200 |
 | DB에서 만료됐지만 revoke되지 않은 토큰 | 401 AUTH007 | 변화 없음(revoke-all 하지 않음) |
 | secret이 비었거나 null | 정상 기동, 첫 서명 시점에 500 AUTH010 | 기동 실패 |
 | secret이 1~31바이트 | 정상 기동, 정상 서명 | 기동 실패 |
