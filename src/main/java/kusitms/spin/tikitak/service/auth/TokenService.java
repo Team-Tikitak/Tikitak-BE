@@ -13,6 +13,7 @@ import kusitms.spin.tikitak.repository.auth.RefreshTokenRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,7 @@ import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TokenService {
@@ -61,10 +63,17 @@ public class TokenService {
 		);
 	}
 
-	@Transactional
+	/**
+	 * refresh token을 한 번만 쓸 수 있게 재발급한다. revoke된 토큰이 다시 오거나 동시 재발급에서 지면 재사용으로 보고
+	 * 그 회원의 refresh token을 모두 revoke한 뒤 AUTH007을 던진다. 이때 revoke-all은 롤백되지 않고 커밋된다.
+	 */
+	@Transactional(noRollbackFor = RefreshTokenReuseException.class)
 	public TokenResponse reissueToken(String refreshToken) {
 		Long memberId = validateRefreshToken(refreshToken);
-		revokeRefreshToken(refreshToken);
+		// clearAutomatically로 영속성 컨텍스트가 비워진다. issueToken은 member를 다시 조회하므로 이전 엔티티를 쓰지 않는다.
+		if (refreshTokenRepository.revokeIfActive(hash(refreshToken), LocalDateTime.now()) == 0) {
+			throw refreshTokenReused(memberId, "concurrent reissue");
+		}
 		return issueToken(memberId);
 	}
 
@@ -118,13 +127,16 @@ public class TokenService {
 				throw new BusinessException(ErrorCode.AUTH007);
 			}
 
+			Long memberId = Long.valueOf(String.valueOf(payload.get("sub")));
 			RefreshToken savedToken = refreshTokenRepository.findByTokenHash(hash(refreshToken))
 					.orElseThrow(() -> new BusinessException(ErrorCode.AUTH007));
-			if (!savedToken.isUsable(LocalDateTime.now())) {
+			if (savedToken.isRevoked()) {
+				throw refreshTokenReused(memberId, "revoked token");
+			}
+			if (savedToken.isExpired(LocalDateTime.now())) {
 				throw new BusinessException(ErrorCode.AUTH007);
 			}
 
-			Long memberId = Long.valueOf(String.valueOf(payload.get("sub")));
 			memberRepository.findByIdAndStatus(memberId, MemberStatus.ACTIVE)
 					.orElseThrow(() -> new BusinessException(ErrorCode.AUTH007));
 			return memberId;
@@ -133,6 +145,15 @@ public class TokenService {
 		} catch (Exception e) {
 			throw new BusinessException(ErrorCode.AUTH007);
 		}
+	}
+
+	/**
+	 * 재사용을 기록하고 그 회원의 refresh token을 모두 revoke한다. 로그에는 토큰 원문/해시를 남기지 않는다.
+	 */
+	private RefreshTokenReuseException refreshTokenReused(Long memberId, String reason) {
+		log.warn("Refresh token reuse detected. memberId={}, reason={}", memberId, reason);
+		revokeAllRefreshTokens(memberId);
+		return new RefreshTokenReuseException();
 	}
 
 	private Long validateAccessToken(String accessToken) {
@@ -234,6 +255,13 @@ public class TokenService {
 			return builder.toString();
 		} catch (Exception e) {
 			throw new BusinessException(ErrorCode.AUTH010, e);
+		}
+	}
+
+	/** 재사용 탐지로 던지는 AUTH007. {@link #reissueToken}이 이 예외에서는 롤백하지 않아 revoke-all이 커밋된다. */
+	private static class RefreshTokenReuseException extends BusinessException {
+		RefreshTokenReuseException() {
+			super(ErrorCode.AUTH007);
 		}
 	}
 }

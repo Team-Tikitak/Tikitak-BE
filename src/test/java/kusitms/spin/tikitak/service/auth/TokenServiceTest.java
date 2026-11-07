@@ -17,15 +17,22 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 
+import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -77,22 +84,96 @@ class TokenServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("정상 refresh 토큰이면 재발급에 성공하고 기존 refresh 토큰은 폐기된다")
+	@DisplayName("정상 refresh 토큰이면 조건부 revoke 1회 후 재발급에 성공하고 새 refresh 토큰을 저장한다")
 	void reissueTokenSucceedsWithValidRefreshToken() {
 		TokenService tokenService = tokenService(SECRET, 3600L, 604800L);
 		stubActiveMember();
 		TokenResponse issued = tokenService.issueToken(MEMBER_ID);
-		ArgumentCaptor<RefreshToken> savedCaptor = ArgumentCaptor.forClass(RefreshToken.class);
-		verify(refreshTokenRepository).save(savedCaptor.capture());
-		RefreshToken saved = savedCaptor.getValue();
+		RefreshToken saved = capturedSavedToken();
+		clearInvocations(refreshTokenRepository);
 		when(refreshTokenRepository.findByTokenHash(saved.getTokenHash())).thenReturn(Optional.of(saved));
+		when(refreshTokenRepository.revokeIfActive(eq(saved.getTokenHash()), any(LocalDateTime.class))).thenReturn(1);
 
 		TokenResponse reissued = tokenService.reissueToken(issued.refreshToken());
 
 		assertThat(reissued.accessToken()).isNotBlank();
-		assertThat(reissued.refreshToken()).isNotBlank();
+		assertThat(reissued.refreshToken()).isNotBlank().isNotEqualTo(issued.refreshToken());
 		assertThat(tokenService.getMemberIdFromAccessToken(reissued.accessToken())).isEqualTo(MEMBER_ID);
-		assertThat(saved.isRevoked()).isTrue();
+		verify(refreshTokenRepository, times(1)).revokeIfActive(eq(saved.getTokenHash()), any(LocalDateTime.class));
+		RefreshToken newlySaved = capturedSavedToken();
+		assertThat(newlySaved.getTokenHash()).isNotEqualTo(saved.getTokenHash());
+		assertThat(newlySaved.isRevoked()).isFalse();
+		verify(refreshTokenRepository, never()).findAllByMemberIdAndRevokedFalse(anyLong());
+	}
+
+	@Test
+	@DisplayName("revoke된 refresh 토큰이 다시 오면 AUTH007이고 그 회원의 유효한 refresh 토큰을 모두 revoke한다")
+	void reissueTokenRevokesAllWhenRevokedTokenReused() {
+		TokenService tokenService = tokenService(SECRET, 3600L, 604800L);
+		stubActiveMember();
+		TokenResponse issued = tokenService.issueToken(MEMBER_ID);
+		RefreshToken saved = capturedSavedToken();
+		saved.revoke();
+		clearInvocations(refreshTokenRepository);
+		when(refreshTokenRepository.findByTokenHash(saved.getTokenHash())).thenReturn(Optional.of(saved));
+		List<RefreshToken> activeTokens = activeTokens();
+		when(refreshTokenRepository.findAllByMemberIdAndRevokedFalse(MEMBER_ID)).thenReturn(activeTokens);
+
+		assertThatThrownBy(() -> tokenService.reissueToken(issued.refreshToken()))
+				.isInstanceOf(BusinessException.class)
+				.extracting("errorCode")
+				.isEqualTo(ErrorCode.AUTH007);
+		assertThat(activeTokens).allMatch(RefreshToken::isRevoked);
+		verify(refreshTokenRepository).findAllByMemberIdAndRevokedFalse(MEMBER_ID);
+		verify(refreshTokenRepository, never()).revokeIfActive(anyString(), any(LocalDateTime.class));
+		verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+	}
+
+	@Test
+	@DisplayName("조건부 revoke가 0행이면(동시 재발급에서 짐) AUTH007이고 그 회원의 refresh 토큰을 모두 revoke한다")
+	void reissueTokenRevokesAllWhenConditionalRevokeAffectsNoRow() {
+		TokenService tokenService = tokenService(SECRET, 3600L, 604800L);
+		stubActiveMember();
+		TokenResponse issued = tokenService.issueToken(MEMBER_ID);
+		RefreshToken saved = capturedSavedToken();
+		clearInvocations(refreshTokenRepository);
+		when(refreshTokenRepository.findByTokenHash(saved.getTokenHash())).thenReturn(Optional.of(saved));
+		when(refreshTokenRepository.revokeIfActive(eq(saved.getTokenHash()), any(LocalDateTime.class))).thenReturn(0);
+		List<RefreshToken> activeTokens = activeTokens();
+		when(refreshTokenRepository.findAllByMemberIdAndRevokedFalse(MEMBER_ID)).thenReturn(activeTokens);
+
+		assertThatThrownBy(() -> tokenService.reissueToken(issued.refreshToken()))
+				.isInstanceOf(BusinessException.class)
+				.extracting("errorCode")
+				.isEqualTo(ErrorCode.AUTH007);
+		assertThat(activeTokens).allMatch(RefreshToken::isRevoked);
+		verify(refreshTokenRepository).findAllByMemberIdAndRevokedFalse(MEMBER_ID);
+		verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+	}
+
+	@Test
+	@DisplayName("DB에서 만료됐지만 revoke되지 않은 refresh 토큰이면 AUTH007이고 revoke-all은 하지 않는다")
+	void reissueTokenThrowsAuth007WithoutRevokeAllWhenStoredTokenExpired() {
+		TokenService tokenService = tokenService(SECRET, 3600L, 604800L);
+		stubActiveMember();
+		TokenResponse issued = tokenService.issueToken(MEMBER_ID);
+		RefreshToken saved = capturedSavedToken();
+		clearInvocations(refreshTokenRepository);
+		RefreshToken expiredInDb = RefreshToken.issue(
+				mock(Member.class),
+				saved.getTokenHash(),
+				LocalDateTime.now().minusSeconds(1)
+		);
+		when(refreshTokenRepository.findByTokenHash(saved.getTokenHash())).thenReturn(Optional.of(expiredInDb));
+
+		assertThatThrownBy(() -> tokenService.reissueToken(issued.refreshToken()))
+				.isInstanceOf(BusinessException.class)
+				.extracting("errorCode")
+				.isEqualTo(ErrorCode.AUTH007);
+		verify(refreshTokenRepository).findByTokenHash(saved.getTokenHash());
+		verify(refreshTokenRepository, never()).findAllByMemberIdAndRevokedFalse(anyLong());
+		verify(refreshTokenRepository, never()).revokeIfActive(anyString(), any(LocalDateTime.class));
+		verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
 	}
 
 	@Test
@@ -166,6 +247,20 @@ class TokenServiceTest extends UnitTest {
 		assertThat((String) firstJti).isNotBlank();
 		assertThat(secondJti).isInstanceOf(String.class).isNotEqualTo(firstJti);
 		assertThat(payload(first.accessToken())).containsKey("jti");
+	}
+
+	private RefreshToken capturedSavedToken() {
+		ArgumentCaptor<RefreshToken> savedCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+		verify(refreshTokenRepository).save(savedCaptor.capture());
+		return savedCaptor.getValue();
+	}
+
+	private List<RefreshToken> activeTokens() {
+		LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
+		return List.of(
+				RefreshToken.issue(mock(Member.class), "a".repeat(64), expiresAt),
+				RefreshToken.issue(mock(Member.class), "b".repeat(64), expiresAt)
+		);
 	}
 
 	private Map<String, Object> payload(String token) throws Exception {

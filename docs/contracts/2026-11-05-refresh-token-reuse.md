@@ -41,6 +41,8 @@
 | 만료된 `refresh_token` 행 | 계속 남음 | 매일 04:45 KST에 삭제 |
 | 서명 비교, access 검증, 로그아웃, 탈퇴(`MeService`) | — | 변화 없음 |
 | `reissueToken` 커밋 실패 (트랜잭션 경계는 옮기지 않음) | `AuthService` catch → 500 AUTH008 | 변화 없음 |
+| 재사용 처리 후 커밋 실패 (2026-11-07 verifier가 찾음) | 경로 없음 (rollback으로 끝나 항상 401 AUTH007) | 500 AUTH008, revoke-all 미적용 |
+| 재사용 처리 중 revoke-all 조회 DB 오류 (2026-11-07 verifier가 찾음) | 경로 없음 | ③ revoke된 토큰: try 안이라 401 AUTH007 + rollback. ⑥ 동시 재발급: 500 AUTH008. 둘 다 revoke-all 미적용 |
 
 - 이미 발급된 토큰(jti 없음)도 계속 검증을 통과한다.
 
