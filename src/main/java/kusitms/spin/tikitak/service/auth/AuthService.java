@@ -11,17 +11,21 @@ import kusitms.spin.tikitak.service.auth.dto.TokenResponse;
 import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuthService {
+
+	private static final String MEMBER_SOCIAL_ACTIVE_UNIQUE = "uk_member_social_provider_active";
 
 	private final GoogleOAuthService googleOAuthService;
 	private final KakaoOAuthService kakaoOAuthService;
@@ -70,11 +74,12 @@ public class AuthService {
 
 	/**
 	 * 외부 OAuth 호출은 트랜잭션 밖에서 하고, DB 작업은 {@link OAuthMemberLoginService}의 트랜잭션 하나에서 한다.
+	 * 같은 계정의 첫 로그인이 동시에 들어와 회원 생성이 unique 제약에 걸리면 DB 작업만 한 번 다시 한다.
 	 */
 	public LoginResponse loginWithOAuth(String provider, String code, String state, String savedState, String idToken) {
 		try {
 			OAuthUserInfo userInfo = fetchOAuthUserInfo(provider, code, state, savedState, idToken);
-			return oauthMemberLoginService.loginWithToken(userInfo);
+			return retryOnMemberRace(userInfo.provider(), () -> oauthMemberLoginService.loginWithToken(userInfo));
 		} catch (OAuthAuthenticationException e) {
 			log.warn("OAuth authentication failed. provider={}, reason={}", provider, e.getMessage());
 			throw new BusinessException(ErrorCode.AUTH104);
@@ -92,11 +97,15 @@ public class AuthService {
 	/**
 	 * 외부 OAuth 호출은 트랜잭션 밖에서 하고, DB 작업은 {@link OAuthMemberLoginService}의 트랜잭션 하나에서 한다.
 	 * loginCode는 그 트랜잭션이 커밋된 뒤에 저장한다.
+	 * 같은 계정의 첫 로그인이 동시에 들어와 회원 생성이 unique 제약에 걸리면 DB 작업만 한 번 다시 한다.
 	 */
 	public String issueAppLoginCode(String provider, String code, String state, String savedState, String idToken) {
 		try {
 			OAuthUserInfo userInfo = fetchOAuthUserInfo(provider, code, state, savedState, idToken);
-			LoginCodePayload payload = oauthMemberLoginService.prepareLoginCode(userInfo);
+			LoginCodePayload payload = retryOnMemberRace(
+					userInfo.provider(),
+					() -> oauthMemberLoginService.prepareLoginCode(userInfo)
+			);
 			String loginCode = generateLoginCode();
 			loginCodeStore.save(loginCode, payload);
 			return loginCode;
@@ -126,6 +135,35 @@ public class AuthService {
 			loginCodeStore.save(code, payload);
 			throw e;
 		}
+	}
+
+	/**
+	 * 동시에 들어온 첫 로그인 중 진 쪽은 회원 INSERT가 {@value #MEMBER_SOCIAL_ACTIVE_UNIQUE} 위반으로 실패하고 트랜잭션이 롤백된다.
+	 * 이긴 쪽이 커밋한 뒤이므로 새 트랜잭션으로 한 번 더 부르면 기존 회원 경로로 간다.
+	 * 다른 예외와 두 번째 호출의 예외는 그대로 던진다.
+	 */
+	private <T> T retryOnMemberRace(SocialProvider provider, Supplier<T> memberLogin) {
+		try {
+			return memberLogin.get();
+		} catch (DataIntegrityViolationException e) {
+			if (!isMemberSocialDuplicate(e)) {
+				throw e;
+			}
+			log.info("Member social unique conflict on first login, retrying once. provider={}", provider);
+			return memberLogin.get();
+		}
+	}
+
+	private boolean isMemberSocialDuplicate(Throwable exception) {
+		Throwable current = exception;
+		while (current != null) {
+			String message = current.getMessage();
+			if (message != null && message.contains(MEMBER_SOCIAL_ACTIVE_UNIQUE)) {
+				return true;
+			}
+			current = current.getCause();
+		}
+		return false;
 	}
 
 	private OAuthUserInfo fetchOAuthUserInfo(String provider, String code, String state, String savedState, String idToken) {

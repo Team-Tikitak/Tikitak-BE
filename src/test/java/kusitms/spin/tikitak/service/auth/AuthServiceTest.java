@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.net.URI;
 import java.util.Optional;
@@ -28,10 +29,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthServiceTest extends UnitTest {
+
+	private static final String MEMBER_SOCIAL_ACTIVE_UNIQUE = "uk_member_social_provider_active";
+	private static final String OTHER_CONSTRAINT = "uk_other_constraint";
 
 	@Mock
 	private GoogleOAuthService googleOAuthService;
@@ -220,6 +225,114 @@ class AuthServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("OAuth 로그인에서 회원 생성이 소셜 계정 unique 제약에 걸리면 회원 로그인 처리만 한 번 다시 해 그 결과를 반환한다")
+	void loginWithOAuthRetriesMemberLoginOnceOnMemberSocialDuplicate() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		LoginResponse loginResponse = new LoginResponse("access-token", "refresh-token", false, true, 10L);
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.loginWithToken(userInfo))
+				.thenThrow(constraintViolation(MEMBER_SOCIAL_ACTIVE_UNIQUE))
+				.thenReturn(loginResponse);
+
+		LoginResponse response = authService.loginWithOAuth("kakao", "code", "state", "state");
+
+		assertThat(response).isEqualTo(loginResponse);
+		verify(oauthMemberLoginService, times(2)).loginWithToken(userInfo);
+		verify(oauthStateStore, times(1)).consume("state", SocialProvider.KAKAO.name());
+		verify(kakaoOAuthService, times(1)).getUserInfo("code");
+	}
+
+	@Test
+	@DisplayName("OAuth 로그인에서 다른 제약의 DataIntegrityViolationException은 다시 하지 않고 AUTH105 예외로 바꾼다")
+	void loginWithOAuthDoesNotRetryOnOtherConstraintViolation() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.loginWithToken(userInfo)).thenThrow(constraintViolation(OTHER_CONSTRAINT));
+
+		assertThatThrownBy(() -> authService.loginWithOAuth("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
+		verify(oauthMemberLoginService, times(1)).loginWithToken(userInfo);
+	}
+
+	@Test
+	@DisplayName("OAuth 로그인에서 다시 한 회원 로그인 처리도 소셜 계정 unique 제약에 걸리면 AUTH105 예외가 발생한다")
+	void loginWithOAuthThrowsAuth105WhenRetryAlsoHitsMemberSocialDuplicate() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.loginWithToken(userInfo))
+				.thenThrow(constraintViolation(MEMBER_SOCIAL_ACTIVE_UNIQUE))
+				.thenThrow(constraintViolation(MEMBER_SOCIAL_ACTIVE_UNIQUE));
+
+		assertThatThrownBy(() -> authService.loginWithOAuth("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
+		verify(oauthMemberLoginService, times(2)).loginWithToken(userInfo);
+		verify(kakaoOAuthService, times(1)).getUserInfo("code");
+	}
+
+	@Test
+	@DisplayName("앱 OAuth 로그인에서 회원 생성이 소셜 계정 unique 제약에 걸리면 회원 로그인 처리만 한 번 다시 하고 loginCode는 한 번 저장한다")
+	void issueAppLoginCodeRetriesMemberLoginOnceOnMemberSocialDuplicate() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		LoginCodePayload payload = LoginCodePayload.builder()
+				.memberId(1L)
+				.newMember(false)
+				.agreedRequiredTerms(true)
+				.activeTeamId(10L)
+				.build();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.prepareLoginCode(userInfo))
+				.thenThrow(constraintViolation(MEMBER_SOCIAL_ACTIVE_UNIQUE))
+				.thenReturn(payload);
+
+		String loginCode = authService.issueAppLoginCode("kakao", "code", "state", "state");
+
+		assertThat(loginCode).isNotBlank().hasSize(64);
+		verify(oauthMemberLoginService, times(2)).prepareLoginCode(userInfo);
+		verify(oauthStateStore, times(1)).consume("state", SocialProvider.KAKAO.name());
+		verify(kakaoOAuthService, times(1)).getUserInfo("code");
+		verify(loginCodeStore, times(1)).save(loginCode, payload);
+	}
+
+	@Test
+	@DisplayName("앱 OAuth 로그인에서 다른 제약의 DataIntegrityViolationException은 다시 하지 않고 AUTH105 예외로 바꾼다")
+	void issueAppLoginCodeDoesNotRetryOnOtherConstraintViolation() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.prepareLoginCode(userInfo)).thenThrow(constraintViolation(OTHER_CONSTRAINT));
+
+		assertThatThrownBy(() -> authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
+		verify(oauthMemberLoginService, times(1)).prepareLoginCode(userInfo);
+		verify(loginCodeStore, never()).save(any(), any());
+	}
+
+	@Test
+	@DisplayName("앱 OAuth 로그인에서 다시 한 회원 로그인 처리도 소셜 계정 unique 제약에 걸리면 AUTH105 예외가 발생하고 loginCode를 저장하지 않는다")
+	void issueAppLoginCodeThrowsAuth105WhenRetryAlsoHitsMemberSocialDuplicate() {
+		OAuthUserInfo userInfo = kakaoUserInfo();
+		when(oauthStateStore.consume("state", SocialProvider.KAKAO.name())).thenReturn(true);
+		when(kakaoOAuthService.getUserInfo("code")).thenReturn(userInfo);
+		when(oauthMemberLoginService.prepareLoginCode(userInfo))
+				.thenThrow(constraintViolation(MEMBER_SOCIAL_ACTIVE_UNIQUE))
+				.thenThrow(constraintViolation(MEMBER_SOCIAL_ACTIVE_UNIQUE));
+
+		assertThatThrownBy(() -> authService.issueAppLoginCode("kakao", "code", "state", "state"))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH105));
+		verify(oauthMemberLoginService, times(2)).prepareLoginCode(userInfo);
+		verify(kakaoOAuthService, times(1)).getUserInfo("code");
+		verify(loginCodeStore, never()).save(any(), any());
+	}
+
+	@Test
 	@DisplayName("유효한 loginCode 교환은 access token과 refresh token을 반환한다")
 	void exchangeLoginCodeReturnsTokensForValidCode() {
 		LoginCodePayload payload = LoginCodePayload.builder()
@@ -289,5 +402,15 @@ class AuthServiceTest extends UnitTest {
 				.isInstanceOf(RuntimeException.class);
 
 		verify(loginCodeStore).save("validcode", payload);
+	}
+
+	/**
+	 * 리포지토리 프록시가 Postgres unique 위반을 바꾼 형태처럼, 제약 이름은 cause 메시지에만 둔다.
+	 */
+	private DataIntegrityViolationException constraintViolation(String constraintName) {
+		return new DataIntegrityViolationException(
+				"could not execute statement",
+				new RuntimeException("ERROR: duplicate key value violates unique constraint \"" + constraintName + "\"")
+		);
 	}
 }
