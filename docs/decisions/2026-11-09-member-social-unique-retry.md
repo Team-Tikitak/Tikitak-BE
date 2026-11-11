@@ -79,11 +79,14 @@
 
 ## 남은 리스크
 - **재시도는 1회뿐이라, 재시도에서도 이 위반이 나면 500 `AUTH105`다.** 계약은 이 경우를 "이론상, 3건 이상 동시 등"으로 적었다. 다만 진 요청의 INSERT는 이긴 트랜잭션이 커밋한 뒤에야 위반으로 끝나므로(동시성 테스트가 확인한 락 대기), 3건 이상이어도 진 요청들은 재시도 조회에서 이긴 회원을 볼 것으로 본다. 3건 이상 경쟁은 테스트하지 않았다. `AUTH105`를 받더라도 다시 로그인하면 기존 회원 경로로 간다.
-- **배포 전에 ACTIVE 중복이 없는지 사람이 확인해야 한다.** 중복이 있으면 V25가 실패해 앱이 기동하지 않는다(트랜잭션 안이라 인덱스는 남지 않는다). dev와 prod에서 아래 결과가 0건이어야 한다. 중복 정리 SQL은 마이그레이션에 넣지 않았다.
+- **배포 전에 ACTIVE 중복이 없는지 사람이 확인해야 한다.** 중복이 있으면 V25가 실패해 새 앱이 기동하지 않는다(트랜잭션 안이라 인덱스는 남지 않는다). dev와 prod에서 아래 결과가 0건이어야 한다. NULL은 인덱스가 중복으로 보지 않으므로 제외한다. 중복 정리 SQL은 마이그레이션에 넣지 않았다.
   ```sql
   SELECT social_provider, provider_id, count(*) FROM member
-  WHERE status = 'ACTIVE' GROUP BY 1, 2 HAVING count(*) > 1;
+  WHERE status = 'ACTIVE' AND provider_id IS NOT NULL
+  GROUP BY 1, 2 HAVING count(*) > 1;
   ```
+  - dev는 develop 머지 시 바로 배포되므로 PR 머지 직전에, prod는 main 반영 직전에 확인한다.
+  - 확인 후 V25 적용 전 사이에 구 버전에서 경쟁이 겹치면 중복이 새로 생길 수 있다. 회원 생성을 멈추는 수단이 없어 중지 대신 실패 시 절차로 통제한다. prod는 `cd.yml`이 새 색상 헬스체크 실패 시 트래픽을 전환하지 않아 기존 색상이 계속 서비스하고, dev는 앱이 기동하지 못한다. 중복을 정리한 뒤 배포 job을 다시 실행한다.
 - **커밋 시점에 나는 위반의 재시도는 테스트가 없다.** IDENTITY라 INSERT가 `save` 시점에 나가므로 위반은 거의 항상 INSERT 시점에 난다(동시성 테스트가 확인한 경로). 커밋 시점 위반이 `DataIntegrityViolationException`으로 번역돼 재시도되는지는 확인하지 않았다.
 - **동시성 integration 테스트는 웹 경로(`loginWithOAuth`)만 실제 DB로 확인한다.** 앱 경로(`issueAppLoginCode`)의 재시도는 `AuthServiceTest`의 mock으로만 확인한다. 두 경로는 같은 `retryOnMemberRace`를 쓴다.
 - **H2 단위 테스트 스키마에는 이 인덱스가 없다.** 테스트용 H2는 Flyway를 끄고 `ddl-auto: create-drop`으로 엔티티에서 스키마를 만들며, 엔티티는 바꾸지 않았다. 제약 동작은 Postgres integration 테스트에서만 확인된다.

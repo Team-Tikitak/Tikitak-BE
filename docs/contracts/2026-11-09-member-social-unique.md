@@ -3,6 +3,7 @@
 - **관련 이슈**: #181
 - **브랜치**: `Fix/#181-social_provider_unique` (Orca worktree, develop a93e26e 기준)
 - **상태**: 완료 (2026-11-09, PR #189)
+- **수정**: 2026-11-11 PR 리뷰 반영. 성공 응답 코드를 실제 동작(302)으로 정정, 배포 전 확인 쿼리에서 NULL 제외, 확인 시점과 실패 시 절차 추가
 
 ## 목표
 - 같은 소셜 계정으로 ACTIVE 회원이 두 명 생기지 않게 DB에서 막는다.
@@ -35,8 +36,8 @@
 
 | 경우 | 진입점 | 이전 | 이후 |
 |---|---|---|---|
-| 같은 계정의 첫 로그인 2건이 동시에 들어옴 | 웹 | 둘 다 200, ACTIVE 회원 2행 | 둘 다 200, 회원 1행. 이긴 쪽 `isNewMember=true`, 진 쪽 `false`. 두 응답의 회원은 같다 |
-| 같음 | 앱 | 둘 다 loginCode 발급, 회원 2행 | 둘 다 loginCode 발급, 회원 1행. 진 쪽 payload `newMember=false` |
+| 같은 계정의 첫 로그인 2건이 동시에 들어옴 | 웹 | 둘 다 302(프런트 redirect URI), ACTIVE 회원 2행 | 둘 다 302, 회원 1행. redirect 쿼리 `isNewMember`는 이긴 쪽 `true`, 진 쪽 `false`. 두 응답의 회원은 같다 |
+| 같음 | 앱 | 둘 다 302(딥링크, loginCode 발급), 회원 2행 | 둘 다 302(딥링크, loginCode 발급), 회원 1행. 진 쪽 payload `newMember=false` |
 | ACTIVE 중복이 이미 있는 계정으로 로그인 | 4개 모두 | 500 AUTH105 (`Optional` 결과 2건 예외) | 변화 없음. 배포 전 확인으로 이런 데이터가 없게 한다 |
 | 재시도에서도 이 제약 위반이 또 남 (이론상, 3건 이상 동시 등) | 웹/앱 | 경로 없음 | 500 AUTH105 |
 | 다른 제약의 `DataIntegrityViolationException` | 웹/앱 | 500 AUTH105 | 변화 없음(재시도 안 함) |
@@ -48,8 +49,17 @@
 dev와 prod에서 아래 쿼리 결과가 0건이어야 V25가 통과한다. 결과가 있으면 V25가 실패해 앱이 기동하지 않는다.
 ```sql
 SELECT social_provider, provider_id, count(*) FROM member
-WHERE status = 'ACTIVE' GROUP BY 1, 2 HAVING count(*) > 1;
+WHERE status = 'ACTIVE' AND provider_id IS NOT NULL
+GROUP BY 1, 2 HAVING count(*) > 1;
 ```
+
+- `provider_id IS NOT NULL`: PostgreSQL unique 인덱스는 NULL끼리 중복으로 보지 않으므로 NULL 행은 V25를 막지 않는다. `GROUP BY`는 NULL을 한 그룹으로 묶어 오탐을 내므로 제외한다.
+- **확인 시점**: dev는 develop에 머지하면 `cd.yml`이 바로 배포하므로 **이 PR을 머지하기 직전**에, prod는 main 반영 직전에 다시 돌린다.
+- **확인 후 V25 적용 전 사이의 경쟁**: 그 사이 구 버전에서 같은 계정의 동시 첫 로그인이 겹치면 중복이 새로 생길 수 있다. 회원 생성을 멈추는 수단(점검 모드·기능 플래그)은 없고 이번 범위 밖이라, 중지 대신 아래 절차로 통제한다.
+  - V25는 트랜잭션 안에서 실행되므로 실패하면 롤백되고 인덱스는 남지 않는다.
+  - prod: `cd.yml`은 새 색상의 `/__deploy/health/<color>` 확인이 실패하면 `exit 1`로 끝나 트래픽 전환 단계에 가지 않는다. 기존 색상이 계속 서비스한다.
+  - dev: blue/green이 아니라 dev 앱이 기동하지 못한다.
+  - 복구: 위 쿼리로 중복을 찾아 사람이 남길 행을 정해 정리한 뒤 배포 job을 다시 실행한다.
 
 ## 범위: 건드려도 되는 파일
 - `src/main/resources/db/migration/V25__add_member_social_provider_active_unique.sql` (신규)
@@ -72,7 +82,7 @@ WHERE status = 'ACTIVE' GROUP BY 1, 2 HAVING count(*) > 1;
   - 두 번 모두 이 제약 DIVE: AUTH105, `times(2)`
   - 앱 경로: 재시도해서 성공하면 `loginCodeStore.save`가 1회 불린다.
 - [ ] `OAuthMemberLoginConcurrencyIntegrationTest`(Postgres, 테스트 트랜잭션 끔, 프록시가 붙은 실제 `AuthService`·`OAuthMemberLoginService`, OAuth 서비스·state store·loginCode store는 mock)
-  - **결정적 재현**: 스레드 A가 `TransactionTemplate` 안에서 같은 계정의 ACTIVE 회원을 INSERT하고 커밋하지 않은 채 기다린다. 그동안 스레드 B가 `loginWithOAuth`를 호출하면, B의 조회는 A의 행을 못 보고 B의 INSERT는 A를 기다리며 막힌다. 이때 A가 커밋하면 B는 200 응답(예외 없음)을 받고, `isNewMember=false`이며, 회원 ID가 A가 만든 회원과 같다. B가 막혔는지는 A 커밋 전에 B가 끝나지 않았음으로 확인한다.
+  - **결정적 재현**: 스레드 A가 `TransactionTemplate` 안에서 같은 계정의 ACTIVE 회원을 INSERT하고 커밋하지 않은 채 기다린다. 그동안 스레드 B가 `loginWithOAuth`를 호출하면, B의 조회는 A의 행을 못 보고 B의 INSERT는 A를 기다리며 막힌다. 이때 A가 커밋하면 B는 예외 없이 `LoginResponse`를 받고(컨트롤러 응답은 302), `isNewMember=false`이며, 회원 ID가 A가 만든 회원과 같다. B가 막혔는지는 A 커밋 전에 B가 끝나지 않았음으로 확인한다.
   - 끝난 뒤 그 `(provider, providerId)`의 ACTIVE 행은 1건이다.
   - **재시도를 끄면 실패하는지** 확인한다: 같은 시나리오에서 `OAuthMemberLoginService`를 직접 호출하면(AuthService 재시도 없음) 이 제약의 DIVE가 난다.
   - `AopUtils.isAopProxy`로 프록시가 붙었는지 확인하고, 만든 데이터는 테스트 안에서 정리한다.
