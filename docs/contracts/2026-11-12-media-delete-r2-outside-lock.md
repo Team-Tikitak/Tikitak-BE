@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #180
 - **브랜치**: `Refactor/#180-media-r2-outside-lock` (Orca worktree, develop 147cb7d 기준)
-- **상태**: 승인됨 (2026-11-12)
+- **상태**: 완료 (2026-11-12, PR #192)
 
 ## 목표
 - `deleteUnusedMedia`와 정리 배치(`deleteExpired{Pending,Uploaded,Deleted}Media`)에서 R2 `headObject`/`deleteObject`가 DB 트랜잭션·PESSIMISTIC_WRITE 락 밖에서 실행되게 한다.
