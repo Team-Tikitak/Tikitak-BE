@@ -32,5 +32,5 @@ OAuth 로그인(카카오/구글/애플 API), 알림 전송(FCM `sendEach`), 업
 ## 트레이드오프 / 남은 리스크
 - 업로드 완료는 사전 단계 트랜잭션 하나(upload·media 조회 2회)가 늘고, 중복 완료 요청이 겹쳐서 실행되면 둘 다 `headObject`를 부른 뒤 늦은 쪽이 락 단계에서 MEDIA014로 끝난다(앞 요청 커밋 뒤에 도착한 요청은 사전 단계에서 MEDIA014, R2 호출 없음).
 - 커넥션은 잡지 않지만 요청 자체는 외부 응답만큼 오래 걸린다. Apple JWKS·FCM(`FirebaseOptions`)·R2 `S3Client`에는 아직 타임아웃이 없다(후속 이슈).
-- `deleteUnusedMedia`와 정리 배치(`deleteExpired*Media`)는 여전히 락 안에서 R2를 호출한다(후속 이슈).
+- `deleteUnusedMedia`와 정리 배치(`deleteExpired*Media`)는 여전히 락 안에서 R2를 호출한다(후속 이슈). → #180에서 해소: [DB 전이 커밋 뒤 락 밖에서 R2 삭제](2026-11-12-media-delete-r2-after-commit.md).
 - 같은 소셜 계정의 동시 첫 로그인에서 회원이 중복 생성될 수 있는 위험은 분리 전후 모두 있다(조회 후 생성, 락·unique 제약 없음). 회원 unique 제약은 후속 이슈.

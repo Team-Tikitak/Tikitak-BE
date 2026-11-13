@@ -48,6 +48,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 
@@ -329,6 +331,91 @@ class ExternalCallConnectionTest {
 				.isEqualTo(MediaStatus.PENDING);
 	}
 
+	@Test
+	@DisplayName("미사용 미디어 삭제: R2 deleteObject는 DELETED 전이 커밋 뒤 트랜잭션·DB 커넥션 없이 실행된다")
+	void deleteUnusedMediaCallsDeleteObjectAfterCommit() {
+		Member member = saveMember(MEDIA_PROVIDER_ID);
+		MediaUpload upload = saveUpload(member.getId(), LocalDateTime.now().plusDays(1));
+		Media media = saveMedia(upload, member.getId(), MediaStatus.UPLOADED);
+		List<DeleteObjectCall> duringDeleteObject = stubDeleteObject();
+
+		mediaService.deleteUnusedMedia(member.getId(), media.getPublicId());
+
+		assertDeleteObjectCalledOutsideTransaction(duringDeleteObject, media);
+		assertThat(mediaRepository.findById(media.getId()))
+				.get()
+				.extracting(Media::getStatus)
+				.isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("만료 PENDING 정리: R2 deleteObject는 DELETED 전이 커밋 뒤 트랜잭션·DB 커넥션 없이 실행된다")
+	void deleteExpiredPendingMediaCallsDeleteObjectAfterCommit() {
+		Member member = saveMember(MEDIA_PROVIDER_ID);
+		MediaUpload upload = saveUpload(member.getId(), LocalDateTime.now().plusDays(1));
+		Media media = saveMedia(upload, member.getId(), MediaStatus.PENDING);
+		List<DeleteObjectCall> duringDeleteObject = stubDeleteObject();
+
+		boolean deleted = mediaService.deleteExpiredPendingMedia(media.getId());
+
+		assertThat(deleted).isTrue();
+		assertDeleteObjectCalledOutsideTransaction(duringDeleteObject, media);
+		assertThat(mediaRepository.findById(media.getId()))
+				.get()
+				.extracting(Media::getStatus)
+				.isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("만료 UPLOADED 정리: R2 deleteObject는 DELETED 전이 커밋 뒤 트랜잭션·DB 커넥션 없이 실행된다")
+	void deleteExpiredUploadedMediaCallsDeleteObjectAfterCommit() {
+		Member member = saveMember(MEDIA_PROVIDER_ID);
+		MediaUpload upload = saveUpload(member.getId(), LocalDateTime.now().plusDays(1));
+		Media media = saveMedia(upload, member.getId(), MediaStatus.UPLOADED);
+		List<DeleteObjectCall> duringDeleteObject = stubDeleteObject();
+
+		boolean deleted = mediaService.deleteExpiredUploadedMedia(media.getId());
+
+		assertThat(deleted).isTrue();
+		assertDeleteObjectCalledOutsideTransaction(duringDeleteObject, media);
+		assertThat(mediaRepository.findById(media.getId()))
+				.get()
+				.extracting(Media::getStatus)
+				.isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("만료 DELETED 하드 삭제: R2 deleteObject는 트랜잭션·DB 커넥션 없이 실행되고, 그 뒤 행이 삭제된다")
+	void deleteExpiredDeletedMediaCallsDeleteObjectOutsideTransaction() {
+		Member member = saveMember(MEDIA_PROVIDER_ID);
+		MediaUpload upload = saveUpload(member.getId(), LocalDateTime.now().plusDays(1));
+		Media media = saveMedia(upload, member.getId(), MediaStatus.DELETED);
+		List<DeleteObjectCall> duringDeleteObject = stubDeleteObject();
+
+		boolean deleted = mediaService.deleteExpiredDeletedMedia(media.getId());
+
+		assertThat(deleted).isTrue();
+		assertDeleteObjectCalledOutsideTransaction(duringDeleteObject, media);
+		assertThat(mediaRepository.findById(media.getId())).isEmpty();
+	}
+
+	/** deleteObject answer 안에서 트랜잭션·커넥션 상태와 요청 key를 캡처한다. 단언은 answer 밖에서 한다. */
+	private List<DeleteObjectCall> stubDeleteObject() {
+		List<DeleteObjectCall> calls = Collections.synchronizedList(new ArrayList<>());
+		when(s3Client.deleteObject(any(DeleteObjectRequest.class))).thenAnswer(invocation -> {
+			DeleteObjectRequest request = invocation.getArgument(0);
+			calls.add(new DeleteObjectCall(snapshot(), request.key()));
+			return DeleteObjectResponse.builder().build();
+		});
+		return calls;
+	}
+
+	private void assertDeleteObjectCalledOutsideTransaction(List<DeleteObjectCall> calls, Media media) {
+		verify(s3Client, times(1)).deleteObject(any(DeleteObjectRequest.class));
+		verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+		assertThat(calls).containsExactly(new DeleteObjectCall(new ConnectionSnapshot(false, 0), media.getKey()));
+	}
+
 	private Member saveMember(String providerId) {
 		return memberRepository.save(Member.createSocialMember(
 				providerId + "@example.com",
@@ -350,11 +437,15 @@ class ExternalCallConnectionTest {
 	}
 
 	private Media saveMedia(MediaUpload upload, Long memberId) {
+		return saveMedia(upload, memberId, MediaStatus.PENDING);
+	}
+
+	private Media saveMedia(MediaUpload upload, Long memberId, MediaStatus status) {
 		UUID publicId = UUID.randomUUID();
 		return mediaRepository.save(Media.builder()
 				.publicId(publicId)
 				.purpose(MediaPurpose.FEED_IMAGE)
-				.status(MediaStatus.PENDING)
+				.status(status)
 				.fileName(publicId + ".png")
 				.contentType(MEDIA_CONTENT_TYPE)
 				.size(MEDIA_SIZE)
@@ -425,5 +516,8 @@ class ExternalCallConnectionTest {
 	}
 
 	private record ConnectionSnapshot(boolean transactionActive, int activeConnections) {
+	}
+
+	private record DeleteObjectCall(ConnectionSnapshot snapshot, String key) {
 	}
 }

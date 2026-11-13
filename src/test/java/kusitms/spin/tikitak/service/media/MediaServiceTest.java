@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.TransactionSystemException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
@@ -38,7 +39,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -78,11 +81,18 @@ class MediaServiceTest extends UnitTest {
 	@Mock
 	private S3Client s3Client;
 
+	private MediaDeletionService mediaDeletionService;
+
 	private MediaService mediaService;
 
 	@BeforeEach
 	void setUp() {
-		mediaService = new MediaService(
+		mediaDeletionService = spy(new MediaDeletionService(mediaRepository));
+		mediaService = mediaService(Optional.of(s3Client));
+	}
+
+	private MediaService mediaService(Optional<S3Client> client) {
+		return new MediaService(
 				r2Properties,
 				mediaRepository,
 				mediaUploadRepository,
@@ -90,8 +100,9 @@ class MediaServiceTest extends UnitTest {
 				teamRepository,
 				memberRepository,
 				new MediaUploadCompletionService(mediaRepository, mediaUploadRepository, r2Properties),
+				mediaDeletionService,
 				Optional.of(s3Presigner),
-				Optional.of(s3Client)
+				client
 		);
 	}
 
@@ -160,19 +171,60 @@ class MediaServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("R2 삭제 실패 시 MEDIA010 예외가 발생한다")
-	void deleteUnusedMediaThrowsWhenObjectDeleteFails() {
+	@DisplayName("R2 삭제가 실패해도 DB 전이는 커밋된 상태이므로 예외 없이 DELETED로 끝난다")
+	void deleteUnusedMediaSucceedsWhenObjectDeleteFails() {
 		Media media = media(MediaStatus.PENDING, MEMBER_ID);
 		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
 		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
 		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
 				.thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
 
-		assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
-				.isInstanceOfSatisfying(BusinessException.class, exception ->
-						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+		mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
 
-		assertThat(media.getStatus()).isEqualTo(MediaStatus.PENDING);
+		verify(mediaDeletionService).markUnusedMediaDeleted(MEMBER_ID, MEDIA_PUBLIC_ID);
+		verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("UPLOADED 미디어도 R2 삭제가 실패하면 예외 없이 DELETED로 끝나고 headObject는 호출하지 않는다")
+	void deleteUnusedUploadedMediaSucceedsWhenObjectDeleteFails() {
+		Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
+		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+				.thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
+
+		mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
+
+		verify(mediaDeletionService).markUnusedMediaDeleted(MEMBER_ID, MEDIA_PUBLIC_ID);
+		verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("S3Client가 없어도 예외 없이 DELETED로 끝난다")
+	void deleteUnusedMediaSucceedsWhenS3ClientMissing() {
+		Media media = media(MediaStatus.PENDING, MEMBER_ID);
+		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
+
+		mediaService(Optional.empty()).deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
+
+		verify(mediaDeletionService).markUnusedMediaDeleted(MEMBER_ID, MEDIA_PUBLIC_ID);
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("DB 전이 단계가 실패하면(커밋 실패 가정) R2를 호출하지 않는다")
+	void deleteUnusedMediaDoesNotCallR2WhenTransitionFails() {
+		doThrow(new TransactionSystemException("commit failed"))
+				.when(mediaDeletionService).markUnusedMediaDeleted(MEMBER_ID, MEDIA_PUBLIC_ID);
+
+		assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
+				.isInstanceOf(TransactionSystemException.class);
+
+		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+		verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
 	}
 
 	@Test
@@ -190,36 +242,32 @@ class MediaServiceTest extends UnitTest {
 	}
 
 	@Test
-	@DisplayName("UPLOADED 미디어 삭제 시 R2 객체가 없으면 MEDIA010 예외가 발생한다")
-	void deleteUnusedUploadedMediaThrowsWhenObjectDeleteReturnsNotFoundError() {
+	@DisplayName("UPLOADED 미디어 삭제 시 R2 객체가 없으면(404) 성공으로 보고 DELETED로 끝난다")
+	void deleteUnusedUploadedMediaIgnoresObjectNotFound() {
 		Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
 		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
 		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
 		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
 				.thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
 
-		assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
-				.isInstanceOfSatisfying(BusinessException.class, exception ->
-						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+		mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
 
-		assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
+		verify(mediaDeletionService).markUnusedMediaDeleted(MEMBER_ID, MEDIA_PUBLIC_ID);
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
 	}
 
 	@Test
-	@DisplayName("UPLOADED 미디어 삭제 전 R2 객체가 없으면 MEDIA010 예외가 발생한다")
-	void deleteUnusedUploadedMediaThrowsWhenObjectHeadReturnsNotFound() {
+	@DisplayName("UPLOADED 미디어 삭제 시 headObject 없이 R2 delete만 호출하고 DELETED로 바꾼다")
+	void deleteUnusedUploadedMediaDoesNotCallHeadObject() {
 		Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
 		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(media));
 		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
-		when(s3Client.headObject(any(HeadObjectRequest.class)))
-				.thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
 
-		assertThatThrownBy(() -> mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID))
-				.isInstanceOfSatisfying(BusinessException.class, exception ->
-						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+		mediaService.deleteUnusedMedia(MEMBER_ID, MEDIA_PUBLIC_ID);
 
-		assertThat(media.getStatus()).isEqualTo(MediaStatus.UPLOADED);
-		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+		verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+		verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
 	}
 
 	@Test
@@ -305,9 +353,104 @@ class MediaServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("만료 PENDING 미디어가 없으면 R2를 호출하지 않는다")
+	void deleteExpiredPendingMediaSkipsWhenNotFound() {
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.empty());
+
+		boolean deleted = mediaService.deleteExpiredPendingMedia(MEDIA_ID);
+
+		assertThat(deleted).isFalse();
+		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+	}
+
+	@Test
+	@DisplayName("만료 PENDING 미디어의 R2 삭제가 실패해도 DB 전이는 끝났으므로 true를 반환한다")
+	void deleteExpiredPendingMediaReturnsTrueWhenObjectDeleteFails() {
+		Media media = media(MediaStatus.PENDING, MEMBER_ID);
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+				.thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
+
+		boolean deleted = mediaService.deleteExpiredPendingMedia(MEDIA_ID);
+
+		assertThat(deleted).isTrue();
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("만료 PENDING 미디어의 DB 전이 단계가 실패하면(커밋 실패 가정) R2를 호출하지 않는다")
+	void deleteExpiredPendingMediaDoesNotCallR2WhenTransitionFails() {
+		doThrow(new TransactionSystemException("commit failed"))
+				.when(mediaDeletionService).markExpiredMediaDeleted(MEDIA_ID, MediaStatus.PENDING);
+
+		assertThatThrownBy(() -> mediaService.deleteExpiredPendingMedia(MEDIA_ID))
+				.isInstanceOf(TransactionSystemException.class);
+
+		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+	}
+
+	@Test
+	@DisplayName("만료된 UPLOADED 미디어를 headObject 없이 R2에서 삭제하고 DB 상태를 DELETED로 변경한다")
+	void deleteExpiredUploadedMedia() {
+		Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+
+		boolean deleted = mediaService.deleteExpiredUploadedMedia(MEDIA_ID);
+
+		assertThat(deleted).isTrue();
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+		verify(mediaDeletionService).markExpiredMediaDeleted(MEDIA_ID, MediaStatus.UPLOADED);
+		verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+		verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+	}
+
+	@Test
+	@DisplayName("만료 UPLOADED 대상이 UPLOADED 상태가 아니면 R2를 호출하지 않는다")
+	void deleteExpiredUploadedMediaSkipsWhenNotUploaded() {
+		Media media = media(MediaStatus.USED, MEMBER_ID);
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+
+		boolean deleted = mediaService.deleteExpiredUploadedMedia(MEDIA_ID);
+
+		assertThat(deleted).isFalse();
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.USED);
+		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+	}
+
+	@Test
+	@DisplayName("만료 UPLOADED 미디어의 R2 삭제가 실패해도 true를 반환한다")
+	void deleteExpiredUploadedMediaReturnsTrueWhenObjectDeleteFails() {
+		Media media = media(MediaStatus.UPLOADED, MEMBER_ID);
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+				.thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
+
+		boolean deleted = mediaService.deleteExpiredUploadedMedia(MEDIA_ID);
+
+		assertThat(deleted).isTrue();
+		assertThat(media.getStatus()).isEqualTo(MediaStatus.DELETED);
+	}
+
+	@Test
+	@DisplayName("만료 UPLOADED 미디어의 DB 전이 단계가 실패하면(커밋 실패 가정) R2를 호출하지 않는다")
+	void deleteExpiredUploadedMediaDoesNotCallR2WhenTransitionFails() {
+		doThrow(new TransactionSystemException("commit failed"))
+				.when(mediaDeletionService).markExpiredMediaDeleted(MEDIA_ID, MediaStatus.UPLOADED);
+
+		assertThatThrownBy(() -> mediaService.deleteExpiredUploadedMedia(MEDIA_ID))
+				.isInstanceOf(TransactionSystemException.class);
+
+		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+	}
+
+	@Test
 	@DisplayName("만료된 DELETED 미디어를 R2에서 삭제하고 DB row를 제거한다")
 	void deleteExpiredDeletedMedia() {
 		Media media = media(MediaStatus.DELETED, MEMBER_ID);
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.of(media));
 		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
 		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
 
@@ -321,12 +464,84 @@ class MediaServiceTest extends UnitTest {
 	@Test
 	@DisplayName("만료 대상 미디어가 DELETED 상태가 아니면 삭제하지 않는다")
 	void deleteExpiredDeletedMediaSkipsWhenNotDeleted() {
-		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.USED, MEMBER_ID)));
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.USED, MEMBER_ID)));
 
 		boolean deleted = mediaService.deleteExpiredDeletedMedia(MEDIA_ID);
 
 		assertThat(deleted).isFalse();
 		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+		verify(mediaRepository, never()).findByIdForUpdate(any(Long.class));
+		verify(mediaRepository, never()).delete(any(Media.class));
+	}
+
+	@Test
+	@DisplayName("만료 DELETED 대상이 없으면 R2와 행 삭제를 하지 않는다")
+	void deleteExpiredDeletedMediaSkipsWhenNotFound() {
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.empty());
+
+		boolean deleted = mediaService.deleteExpiredDeletedMedia(MEDIA_ID);
+
+		assertThat(deleted).isFalse();
+		verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+		verify(mediaDeletionService, never()).deleteRowIfStillDeleted(any(Long.class));
+	}
+
+	@Test
+	@DisplayName("만료 DELETED 미디어의 R2 삭제가 실패하면(404 외) MEDIA010이고 행을 삭제하지 않는다")
+	void deleteExpiredDeletedMediaThrowsWhenObjectDeleteFails() {
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.DELETED, MEMBER_ID)));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+				.thenThrow(S3Exception.builder().statusCode(500).message("server error").build());
+
+		assertThatThrownBy(() -> mediaService.deleteExpiredDeletedMedia(MEDIA_ID))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+
+		verify(mediaDeletionService, never()).deleteRowIfStillDeleted(any(Long.class));
+		verify(mediaRepository, never()).delete(any(Media.class));
+	}
+
+	@Test
+	@DisplayName("S3Client가 없으면 만료 DELETED 미디어는 MEDIA010이고 행을 삭제하지 않는다")
+	void deleteExpiredDeletedMediaThrowsWhenS3ClientMissing() {
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.DELETED, MEMBER_ID)));
+
+		assertThatThrownBy(() -> mediaService(Optional.empty()).deleteExpiredDeletedMedia(MEDIA_ID))
+				.isInstanceOfSatisfying(BusinessException.class, exception ->
+						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEDIA010));
+
+		verify(mediaDeletionService, never()).deleteRowIfStillDeleted(any(Long.class));
+		verify(mediaRepository, never()).delete(any(Media.class));
+	}
+
+	@Test
+	@DisplayName("만료 DELETED 미디어의 R2 오브젝트가 이미 없으면(404) 행을 삭제한다")
+	void deleteExpiredDeletedMediaIgnoresObjectNotFound() {
+		Media media = media(MediaStatus.DELETED, MEMBER_ID);
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.of(media));
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+		when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+				.thenThrow(S3Exception.builder().statusCode(404).message("not found").build());
+
+		boolean deleted = mediaService.deleteExpiredDeletedMedia(MEDIA_ID);
+
+		assertThat(deleted).isTrue();
+		verify(mediaRepository).delete(media);
+	}
+
+	@Test
+	@DisplayName("R2 삭제 후 락 단계에서 DELETED가 아니게 됐으면 행을 삭제하지 않고 false를 반환한다")
+	void deleteExpiredDeletedMediaSkipsRowDeleteWhenChangedAfterObjectDelete() {
+		when(mediaRepository.findById(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.DELETED, MEMBER_ID)));
+		when(mediaRepository.findByIdForUpdate(MEDIA_ID)).thenReturn(Optional.of(media(MediaStatus.USED, MEMBER_ID)));
+		when(r2Properties.getBucketName()).thenReturn(BUCKET_NAME);
+
+		boolean deleted = mediaService.deleteExpiredDeletedMedia(MEDIA_ID);
+
+		assertThat(deleted).isFalse();
+		verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
 		verify(mediaRepository, never()).delete(any(Media.class));
 	}
 

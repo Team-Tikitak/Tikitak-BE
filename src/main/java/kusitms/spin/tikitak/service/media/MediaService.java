@@ -69,6 +69,7 @@ public class MediaService {
 	private final TeamRepository teamRepository;
 	private final MemberRepository memberRepository;
 	private final MediaUploadCompletionService mediaUploadCompletionService;
+	private final MediaDeletionService mediaDeletionService;
 	private final Optional<S3Presigner> s3Presigner;
 	private final Optional<S3Client> s3Client;
 
@@ -141,23 +142,14 @@ public class MediaService {
 		return mediaUploadCompletionService.complete(memberId, uploadId, request.getItems(), uploadedObjects);
 	}
 
-	@Transactional
+	/**
+	 * 사용하지 않은 미디어 삭제. 트랜잭션을 두지 않고 DB 전이 커밋({@link MediaDeletionService#markUnusedMediaDeleted})
+	 * → R2 삭제(트랜잭션 밖) 순서로 실행한다. R2 삭제가 실패해도 DB 전이는 이미 커밋됐으므로 로그만 남기고,
+	 * 오브젝트는 DELETED 하드 삭제 배치가 다시 지운다.
+	 */
 	public void deleteUnusedMedia(Long memberId, UUID mediaPublicId) {
-		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA009));
-
-		if (media.getStatus() == MediaStatus.DELETED) {
-			throw new BusinessException(ErrorCode.MEDIA009);
-		}
-		if (!media.getMemberId().equals(memberId)) {
-			throw new BusinessException(ErrorCode.MEDIA008);
-		}
-		if (media.getStatus() == MediaStatus.USED) {
-			throw new BusinessException(ErrorCode.MEDIA007);
-		}
-
-		deleteObject(media, media.getStatus() == MediaStatus.PENDING);
-		media.updateStatus(MediaStatus.DELETED);
+		MediaDeleteTarget target = mediaDeletionService.markUnusedMediaDeleted(memberId, mediaPublicId);
+		deleteObjectOrDefer(target);
 	}
 
 	public List<Long> findExpiredPendingMediaIds(LocalDateTime cutoff, int limit) {
@@ -184,28 +176,29 @@ public class MediaService {
 		);
 	}
 
-	@Transactional
 	public boolean deleteExpiredPendingMedia(Long mediaId) {
 		return deleteExpiredMedia(mediaId, MediaStatus.PENDING);
 	}
 
-	@Transactional
 	public boolean deleteExpiredUploadedMedia(Long mediaId) {
 		return deleteExpiredMedia(mediaId, MediaStatus.UPLOADED);
 	}
 
-	@Transactional
+	/**
+	 * 보관 기간이 지난 DELETED 미디어 하드 삭제. 락 없이 상태를 확인하고({@code findById}는 리포지토리 자체의 짧은 읽기 트랜잭션)
+	 * → R2 삭제(트랜잭션 밖, 404는 성공. 그 밖의 실패는 MEDIA010을 던지고 행을 남겨 다음 배치에서 다시 시도)
+	 * → 락을 잡고 DELETED인지 다시 확인한 뒤 행을 삭제한다({@link MediaDeletionService#deleteRowIfStillDeleted}).
+	 */
 	public boolean deleteExpiredDeletedMedia(Long mediaId) {
-		Media media = mediaRepository.findByIdForUpdate(mediaId)
-				.orElse(null);
-
-		if (media == null || media.getStatus() != MediaStatus.DELETED) {
+		Optional<MediaDeleteTarget> target = mediaRepository.findById(mediaId)
+				.filter(media -> media.getStatus() == MediaStatus.DELETED)
+				.map(MediaDeleteTarget::from);
+		if (target.isEmpty()) {
 			return false;
 		}
 
-		deleteObject(media, true);
-		mediaRepository.delete(media);
-		return true;
+		deleteObject(target.get());
+		return mediaDeletionService.deleteRowIfStillDeleted(mediaId);
 	}
 
 	public List<Long> findExpiredMediaUploadIds(LocalDateTime now, int limit) {
@@ -228,16 +221,17 @@ public class MediaService {
 		return true;
 	}
 
+	/**
+	 * 만료 PENDING/UPLOADED 정리. DB 전이 커밋 → R2 삭제(트랜잭션 밖) 순서이며, R2 삭제가 실패해도
+	 * DB 전이는 끝났으므로 true를 돌려준다. 오브젝트는 DELETED 하드 삭제 배치가 다시 지운다.
+	 */
 	private boolean deleteExpiredMedia(Long mediaId, MediaStatus status) {
-		Media media = mediaRepository.findByIdForUpdate(mediaId)
-				.orElse(null);
-
-		if (media == null || media.getStatus() != status) {
+		Optional<MediaDeleteTarget> target = mediaDeletionService.markExpiredMediaDeleted(mediaId, status);
+		if (target.isEmpty()) {
 			return false;
 		}
 
-		deleteObject(media, status == MediaStatus.PENDING);
-		media.updateStatus(MediaStatus.DELETED);
+		deleteObjectOrDefer(target.get());
 		return true;
 	}
 
@@ -339,56 +333,54 @@ public class MediaService {
 		}
 	}
 
-	private void deleteObject(Media media, boolean ignoreNotFound) {
-		S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA010));
-		if (!ignoreNotFound) {
-			headObjectForDelete(client, media);
+	/**
+	 * DB 전이가 이미 커밋된 뒤의 R2 삭제. 실패(s3Client 없음 포함)해도 예외를 던지지 않고 로그만 남긴다.
+	 * 남은 오브젝트는 DELETED 하드 삭제 배치({@link #deleteExpiredDeletedMedia})가 다시 지운다.
+	 */
+	private void deleteObjectOrDefer(MediaDeleteTarget target) {
+		try {
+			deleteObject(target);
+		} catch (BusinessException e) {
+			log.warn(
+					"Media object delete deferred to hard-delete batch. mediaId={}, mediaPublicId={}, key={}",
+					target.mediaId(), target.publicId(), target.key()
+			);
 		}
+	}
+
+	/** R2 오브젝트 삭제. 404는 이미 없는 것으로 보고 성공 처리하고, 그 밖의 실패나 s3Client 없음은 MEDIA010을 던진다. */
+	private void deleteObject(MediaDeleteTarget target) {
+		if (s3Client.isEmpty()) {
+			log.error(
+					"S3Client is not configured; cannot delete media object. mediaId={}, mediaPublicId={}, key={}",
+					target.mediaId(), target.publicId(), target.key()
+			);
+			throw new BusinessException(ErrorCode.MEDIA010);
+		}
+		S3Client client = s3Client.get();
 		try {
 			DeleteObjectRequest request = DeleteObjectRequest.builder()
 					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
+					.key(target.key())
 					.build();
 			client.deleteObject(request);
 		} catch (S3Exception e) {
-			if (ignoreNotFound && e.statusCode() == 404) {
+			if (e.statusCode() == 404) {
 				log.info(
 						"Media object already absent. mediaId={}, mediaPublicId={}, key={}",
-						media.getId(), media.getPublicId(), media.getKey()
+						target.mediaId(), target.publicId(), target.key()
 				);
 				return;
 			}
 			log.error(
 					"Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
+					target.mediaId(), target.publicId(), target.key(), e
 			);
 			throw new BusinessException(ErrorCode.MEDIA010, e);
 		} catch (Exception e) {
 			log.error(
 					"Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
-			);
-			throw new BusinessException(ErrorCode.MEDIA010, e);
-		}
-	}
-
-	private void headObjectForDelete(S3Client client, Media media) {
-		try {
-			HeadObjectRequest request = HeadObjectRequest.builder()
-					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
-					.build();
-			client.headObject(request);
-		} catch (S3Exception e) {
-			log.error(
-					"Failed to verify media object before delete. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
-			);
-			throw new BusinessException(ErrorCode.MEDIA010, e);
-		} catch (Exception e) {
-			log.error(
-					"Failed to verify media object before delete. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
+					target.mediaId(), target.publicId(), target.key(), e
 			);
 			throw new BusinessException(ErrorCode.MEDIA010, e);
 		}
