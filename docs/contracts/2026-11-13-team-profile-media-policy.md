@@ -52,7 +52,7 @@
 | 경우 | 이전 (`TeamMemberService.java:64-97, 150-171`) | 이후 |
 |---|---|---|
 | mediaPublicId 없음(null) | 200, 닉네임만 변경, 기존 이미지 유지 | 같음 |
-| 지금 연결된 자기 profileMedia(USED) 재전송 | 200, 닉네임만 변경, 기존 이미지 유지 (UPLOADED 아님 → null) | 같음. 단, media 조회·락을 하지 않는다 |
+| 지금 연결된 자기 profileMedia(USED) 재전송 | 200, 닉네임만 변경, 기존 이미지 유지 (UPLOADED 아님 → null) | 같음. 단, `findByPublicIdForUpdate`(락 조회)를 호출하지 않는다. 현재 media는 LAZY 연관이라 비교할 때 락 없는 SELECT가 1회 나갈 수 있다(`TeamMember.java:52-54`) |
 | media 없음 | 200, 닉네임만 변경, 기존 이미지 유지 | 400 MEDIA018, 닉네임 변경도 롤백 |
 | 타인 소유 / purpose 불일치 / UPLOADED 아님(현재 media가 아닌 것) | 200, 닉네임만 변경, 기존 이미지 유지 | 400 MEDIA018, 닉네임 변경도 롤백 |
 | 본인·PROFILE_IMAGE·UPLOADED | 200, 기존 media DELETED, 새 media USED로 교체 | 같음 |
