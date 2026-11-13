@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #193
 - **브랜치**: `Fix/#193-invite-capacity-order` (develop에서 분기, `ba16604` 기준)
-- **상태**: 승인됨 (2026-11-13)
+- **상태**: 완료 (2026-11-13, PR #197)
 
 ## 목표
 `TeamInvitationService.acceptInviteLink`에서 기존 팀 멤버 조회와 ACTIVE(INVITE006)/BANNED(INVITE007) 검사를 정원 검사(INVITE008)보다 앞으로 옮긴다.
