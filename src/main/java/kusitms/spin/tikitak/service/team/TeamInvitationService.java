@@ -156,11 +156,6 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.MEMBER002);
 		}
 
-		long activeCount = teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMemberStatus.ACTIVE);
-		if (activeCount >= TEAM_MEMBER_LIMIT) {
-			throw new BusinessException(ErrorCode.INVITE008);
-		}
-
 		Optional<TeamMember> existingMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId());
 		existingMember.ifPresent(existing -> {
 			if (existing.getStatus() == TeamMemberStatus.ACTIVE) {
@@ -170,6 +165,11 @@ public class TeamInvitationService {
 				throw new BusinessException(ErrorCode.INVITE007);
 			}
 		});
+
+		long activeCount = teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMemberStatus.ACTIVE);
+		if (activeCount >= TEAM_MEMBER_LIMIT) {
+			throw new BusinessException(ErrorCode.INVITE008);
+		}
 
 		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
