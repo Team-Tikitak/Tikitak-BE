@@ -37,6 +37,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamFixture.activeTeam;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,6 +50,8 @@ class TeamInvitationServiceTest extends UnitTest {
 	private static final String TOKEN = "invite-token";
 	private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("00000000-0000-0000-0000-000000000191");
 	private static final UUID OLD_MEDIA_PUBLIC_ID = UUID.fromString("00000000-0000-0000-0000-000000000190");
+	// TeamInvitationService.TEAM_MEMBER_LIMIT(100)과 같은 값. ACTIVE 인원이 이 값 이상이면 정원 초과다.
+	private static final long FULL_TEAM_ACTIVE_COUNT = 100L;
 
 	@Mock
 	private TeamRepository teamRepository;
@@ -126,6 +129,7 @@ class TeamInvitationServiceTest extends UnitTest {
 	@DisplayName("본인 소유 PROFILE_IMAGE UPLOADED media로 초대를 수락하면 USED로 바뀌고 새 팀 멤버에 연결된다")
 	void acceptInviteLinkLinksUploadedProfileMedia() {
 		Member member = stubAcceptPreconditions();
+		stubActiveMemberCount(1L);
 		Media profileMedia = media(100L, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.PROFILE_IMAGE, MediaStatus.UPLOADED);
 		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.empty());
 		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(profileMedia));
@@ -181,6 +185,7 @@ class TeamInvitationServiceTest extends UnitTest {
 	@DisplayName("재가입 시 현재 연결된 USED 프로필 media를 다시 보내면 MEDIA018 예외가 발생하고 기존 media가 DELETED로 바뀌지 않는다")
 	void acceptInviteLinkRejectsCurrentUsedProfileMediaOnRejoin() {
 		Member member = stubAcceptPreconditions();
+		stubActiveMemberCount(1L);
 		Media currentProfileMedia = media(100L, MEMBER_ID, MEDIA_PUBLIC_ID, MediaPurpose.PROFILE_IMAGE, MediaStatus.USED);
 		TeamMember leftMember = existingTeamMember(member, TeamMemberStatus.LEFT, currentProfileMedia);
 		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.of(leftMember));
@@ -200,6 +205,7 @@ class TeamInvitationServiceTest extends UnitTest {
 	@DisplayName("재가입 시 본인 소유 PROFILE_IMAGE UPLOADED 새 media로 초대를 수락하면 기존 media는 DELETED, 새 media는 USED가 되고 새 media로 연결된다")
 	void acceptInviteLinkReplacesProfileMediaOnRejoin() {
 		Member member = stubAcceptPreconditions();
+		stubActiveMemberCount(1L);
 		Media oldProfileMedia = media(100L, MEMBER_ID, OLD_MEDIA_PUBLIC_ID, MediaPurpose.PROFILE_IMAGE, MediaStatus.USED);
 		Media newProfileMedia = Media.builder()
 				.id(101L)
@@ -258,8 +264,70 @@ class TeamInvitationServiceTest extends UnitTest {
 		verify(teamMemberRepository, never()).save(any(TeamMember.class));
 	}
 
+	@Test
+	@DisplayName("정원이 찬 팀에 이미 ACTIVE인 멤버가 초대를 수락하면 정원 조회 없이 INVITE006 예외가 발생한다")
+	void acceptInviteLinkChecksActiveMemberBeforeCapacity() {
+		Member member = stubAcceptPreconditions();
+		stubFullTeamCountNotExpectedToBeCalled();
+		TeamMember activeMember = existingTeamMember(member, TeamMemberStatus.ACTIVE, null);
+		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.of(activeMember));
+
+		assertThatThrownBy(() -> teamInvitationService.acceptInviteLink(MEMBER_ID, TOKEN, joinRequest(MEDIA_PUBLIC_ID)))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVITE006));
+
+		verify(teamMemberRepository, never()).countByTeamIdAndStatus(any(), any());
+	}
+
+	@Test
+	@DisplayName("정원이 찬 팀에 BANNED 멤버가 초대를 수락하면 정원 조회 없이 INVITE007 예외가 발생한다")
+	void acceptInviteLinkChecksBannedMemberBeforeCapacity() {
+		Member member = stubAcceptPreconditions();
+		stubFullTeamCountNotExpectedToBeCalled();
+		TeamMember bannedMember = existingTeamMember(member, TeamMemberStatus.BANNED, null);
+		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.of(bannedMember));
+
+		assertThatThrownBy(() -> teamInvitationService.acceptInviteLink(MEMBER_ID, TOKEN, joinRequest(MEDIA_PUBLIC_ID)))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVITE007));
+
+		verify(teamMemberRepository, never()).countByTeamIdAndStatus(any(), any());
+	}
+
+	@Test
+	@DisplayName("정원이 찬 팀에 LEFT 멤버가 초대를 수락하면 INVITE008 예외가 발생하고 재가입되지 않는다")
+	void acceptInviteLinkRejectsLeftMemberWhenTeamIsFull() {
+		Member member = stubAcceptPreconditions();
+		stubActiveMemberCount(FULL_TEAM_ACTIVE_COUNT);
+		TeamMember leftMember = existingTeamMember(member, TeamMemberStatus.LEFT, null);
+		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.of(leftMember));
+
+		assertThatThrownBy(() -> teamInvitationService.acceptInviteLink(MEMBER_ID, TOKEN, joinRequest(MEDIA_PUBLIC_ID)))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVITE008));
+
+		assertThat(leftMember.getStatus()).isEqualTo(TeamMemberStatus.LEFT);
+		verify(mediaRepository, never()).findByPublicIdForUpdate(any());
+	}
+
+	@Test
+	@DisplayName("정원이 찬 팀에 신규 멤버가 초대를 수락하면 INVITE008 예외가 발생하고 저장되지 않는다")
+	void acceptInviteLinkRejectsNewMemberWhenTeamIsFull() {
+		stubAcceptPreconditions();
+		stubActiveMemberCount(FULL_TEAM_ACTIVE_COUNT);
+		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> teamInvitationService.acceptInviteLink(MEMBER_ID, TOKEN, joinRequest(MEDIA_PUBLIC_ID)))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVITE008));
+
+		verify(teamMemberRepository, never()).save(any(TeamMember.class));
+		verify(mediaRepository, never()).findByPublicIdForUpdate(any());
+	}
+
 	private void assertRejectedForNewMember(Media requestedMedia, MediaStatus expectedStatus) {
 		stubAcceptPreconditions();
+		stubActiveMemberCount(1L);
 		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.empty());
 		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(requestedMedia));
 
@@ -284,8 +352,18 @@ class TeamInvitationServiceTest extends UnitTest {
 		when(teamInviteRepository.findByInviteToken(TOKEN)).thenReturn(Optional.of(invite));
 		when(teamRepository.findByIdForUpdate(TEAM_ID)).thenReturn(Optional.of(team));
 		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
-		when(teamMemberRepository.countByTeamIdAndStatus(TEAM_ID, TeamMemberStatus.ACTIVE)).thenReturn(1L);
 		return member;
+	}
+
+	private void stubActiveMemberCount(long activeCount) {
+		when(teamMemberRepository.countByTeamIdAndStatus(TEAM_ID, TeamMemberStatus.ACTIVE)).thenReturn(activeCount);
+	}
+
+	// 정원이 찼지만 기존 멤버 상태 검사에서 먼저 끝나 count가 호출되지 않아야 하는 경로용.
+	// 호출되지 않는 것이 기대 동작이므로 strict stubs의 UnnecessaryStubbing을 피하려고 lenient로 둔다.
+	private void stubFullTeamCountNotExpectedToBeCalled() {
+		lenient().when(teamMemberRepository.countByTeamIdAndStatus(TEAM_ID, TeamMemberStatus.ACTIVE))
+				.thenReturn(FULL_TEAM_ACTIVE_COUNT);
 	}
 
 	private TeamMember existingTeamMember(Member member, TeamMemberStatus status, Media profileMedia) {
