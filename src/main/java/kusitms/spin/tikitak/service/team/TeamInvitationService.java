@@ -1,6 +1,8 @@
 package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.media.entity.Media;
+import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
+import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -158,17 +161,21 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.INVITE008);
 		}
 
+		Optional<TeamMember> existingMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId());
+		existingMember.ifPresent(existing -> {
+			if (existing.getStatus() == TeamMemberStatus.ACTIVE) {
+				throw new BusinessException(ErrorCode.INVITE006);
+			}
+			if (existing.getStatus() == TeamMemberStatus.BANNED) {
+				throw new BusinessException(ErrorCode.INVITE007);
+			}
+		});
+
 		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
 
-		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
+		existingMember
 				.ifPresentOrElse(
 						existing -> {
-							if (existing.getStatus() == TeamMemberStatus.ACTIVE) {
-								throw new BusinessException(ErrorCode.INVITE006);
-							}
-							if (existing.getStatus() == TeamMemberStatus.BANNED) {
-								throw new BusinessException(ErrorCode.INVITE007);
-							}
 							if (newProfileMedia != null && existing.getProfileMedia() != null) {
 								existing.getProfileMedia().markDeleted();
 							}
@@ -211,6 +218,11 @@ public class TeamInvitationService {
 		if (mediaPublicId == null) return null;
 		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
+		if (!media.getMemberId().equals(memberId)
+				|| media.getPurpose() != MediaPurpose.PROFILE_IMAGE
+				|| media.getStatus() != MediaStatus.UPLOADED) {
+			throw new BusinessException(ErrorCode.MEDIA018);
+		}
 		media.markUsed();
 		return media;
 	}
