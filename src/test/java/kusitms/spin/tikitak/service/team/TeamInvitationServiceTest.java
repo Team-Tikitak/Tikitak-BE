@@ -20,10 +20,10 @@ import kusitms.spin.tikitak.repository.team.TeamRepository;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamInvitationResponseDTO;
 import kusitms.spin.tikitak.support.UnitTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
 import java.time.LocalDateTime;
@@ -65,8 +65,18 @@ class TeamInvitationServiceTest extends UnitTest {
 	@Mock
 	private MediaRepository mediaRepository;
 
-	@InjectMocks
 	private TeamInvitationService teamInvitationService;
+
+	@BeforeEach
+	void setUp() {
+		teamInvitationService = new TeamInvitationService(
+				teamRepository,
+				memberRepository,
+				teamMemberRepository,
+				teamInviteRepository,
+				new TeamProfileMediaResolver(mediaRepository)
+		);
+	}
 
 	@Test
 	@DisplayName("초대 링크 참여 후 참여한 팀을 활성 팀으로 선택한다")

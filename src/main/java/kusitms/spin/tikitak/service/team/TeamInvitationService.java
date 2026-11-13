@@ -1,8 +1,6 @@
 package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.media.entity.Media;
-import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
-import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
@@ -12,7 +10,6 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -39,7 +36,7 @@ public class TeamInvitationService {
 	private final MemberRepository memberRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamInviteRepository teamInviteRepository;
-	private final MediaRepository mediaRepository;
+	private final TeamProfileMediaResolver teamProfileMediaResolver;
 
 	@Transactional
 	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO generateOrReissueInviteLink(
@@ -171,7 +168,7 @@ public class TeamInvitationService {
 			}
 		});
 
-		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
+		Media newProfileMedia = teamProfileMediaResolver.resolve(memberId, request.getMediaPublicId());
 
 		existingMember
 				.ifPresentOrElse(
@@ -212,18 +209,5 @@ public class TeamInvitationService {
 		if (invite.isExpired()) {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
-	}
-
-	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
-		if (mediaPublicId == null) return null;
-		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
-		if (!media.getMemberId().equals(memberId)
-				|| media.getPurpose() != MediaPurpose.PROFILE_IMAGE
-				|| media.getStatus() != MediaStatus.UPLOADED) {
-			throw new BusinessException(ErrorCode.MEDIA018);
-		}
-		media.markUsed();
-		return media;
 	}
 }
