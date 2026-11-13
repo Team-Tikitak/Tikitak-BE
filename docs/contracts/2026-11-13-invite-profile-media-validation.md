@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #191
 - **브랜치**: `Fix/#191-invite-profile-media-validation` (develop에서 분기)
-- **상태**: 승인됨 (2026-11-13)
+- **상태**: 완료 (2026-11-13, PR #195)
 
 ## 목표
 초대 수락(`POST /api/v1/invitation-links/{token}/accept`)에서 본인 소유가 아니거나, purpose가 `PROFILE_IMAGE`가 아니거나, 상태가 `UPLOADED`가 아닌 media는 400 MEDIA018로 거부한다. `markUsed()`는 호출하지 않는다.
