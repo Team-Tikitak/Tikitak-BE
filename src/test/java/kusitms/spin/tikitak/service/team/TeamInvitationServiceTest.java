@@ -48,6 +48,7 @@ class TeamInvitationServiceTest extends UnitTest {
 	private static final Long TEAM_ID = 10L;
 	private static final String TOKEN = "invite-token";
 	private static final UUID MEDIA_PUBLIC_ID = UUID.fromString("00000000-0000-0000-0000-000000000191");
+	private static final UUID OLD_MEDIA_PUBLIC_ID = UUID.fromString("00000000-0000-0000-0000-000000000190");
 
 	@Mock
 	private TeamRepository teamRepository;
@@ -192,6 +193,38 @@ class TeamInvitationServiceTest extends UnitTest {
 		assertThat(currentProfileMedia.getStatus()).isEqualTo(MediaStatus.USED);
 		assertThat(leftMember.getStatus()).isEqualTo(TeamMemberStatus.LEFT);
 		assertThat(leftMember.getProfileMedia()).isSameAs(currentProfileMedia);
+		verify(teamMemberRepository, never()).save(any(TeamMember.class));
+	}
+
+	@Test
+	@DisplayName("재가입 시 본인 소유 PROFILE_IMAGE UPLOADED 새 media로 초대를 수락하면 기존 media는 DELETED, 새 media는 USED가 되고 새 media로 연결된다")
+	void acceptInviteLinkReplacesProfileMediaOnRejoin() {
+		Member member = stubAcceptPreconditions();
+		Media oldProfileMedia = media(100L, MEMBER_ID, OLD_MEDIA_PUBLIC_ID, MediaPurpose.PROFILE_IMAGE, MediaStatus.USED);
+		Media newProfileMedia = Media.builder()
+				.id(101L)
+				.publicId(MEDIA_PUBLIC_ID)
+				.memberId(MEMBER_ID)
+				.purpose(MediaPurpose.PROFILE_IMAGE)
+				.status(MediaStatus.UPLOADED)
+				.fileName("new-profile.png")
+				.contentType("image/png")
+				.size(1024L)
+				.url("https://example.com/new-profile.png")
+				.key("media/profile-image/" + MEDIA_PUBLIC_ID + ".png")
+				.build();
+		TeamMember leftMember = existingTeamMember(member, TeamMemberStatus.LEFT, oldProfileMedia);
+		when(teamMemberRepository.findByMemberIdAndTeamId(MEMBER_ID, TEAM_ID)).thenReturn(Optional.of(leftMember));
+		when(mediaRepository.findByPublicIdForUpdate(MEDIA_PUBLIC_ID)).thenReturn(Optional.of(newProfileMedia));
+
+		teamInvitationService.acceptInviteLink(MEMBER_ID, TOKEN, joinRequest(MEDIA_PUBLIC_ID));
+
+		assertThat(oldProfileMedia.getStatus()).isEqualTo(MediaStatus.DELETED);
+		assertThat(newProfileMedia.getStatus()).isEqualTo(MediaStatus.USED);
+		assertThat(leftMember.getStatus()).isEqualTo(TeamMemberStatus.ACTIVE);
+		assertThat(leftMember.getProfileMedia()).isSameAs(newProfileMedia);
+		assertThat(leftMember.getProfileImgUrl()).isEqualTo("https://example.com/new-profile.png");
+		assertThat(member.getActiveTeamId()).isEqualTo(TEAM_ID);
 		verify(teamMemberRepository, never()).save(any(TeamMember.class));
 	}
 
