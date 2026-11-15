@@ -1,8 +1,6 @@
 package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.media.entity.Media;
-import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
-import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamInvite;
@@ -12,7 +10,6 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -21,7 +18,6 @@ import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.team.dto.TeamRequestDTO;
 import kusitms.spin.tikitak.service.team.dto.TeamResponseDTO;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +25,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -39,8 +34,8 @@ public class TeamService {
 	private final MemberRepository memberRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamInviteRepository teamInviteRepository;
-	private final MediaRepository mediaRepository;
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
+	private final TeamProfileMediaResolver teamProfileMediaResolver;
 
 	@Transactional
 	public TeamResponseDTO.TeamCreateResponseDTO createTeam(Long memberId, TeamRequestDTO.TeamCreateRequestDTO request) {
@@ -62,13 +57,7 @@ public class TeamService {
 		teamRepository.save(team);
 		member.changeActiveTeam(team.getId());
 
-		log.info("[createTeam] memberId={}, profileImagePublicId={}", memberId, request.getMediaPublicId());
-
-		Media profileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
-
-		log.info("[createTeam] profileMedia={}, url={}",
-				profileMedia != null ? profileMedia.getId() : null,
-				profileMedia != null ? profileMedia.getUrl() : null);
+		Media profileMedia = teamProfileMediaResolver.resolve(memberId, request.getMediaPublicId());
 
 		TeamMember teamMember = TeamMember.builder()
 				.team(team)
@@ -208,28 +197,5 @@ public class TeamService {
 
 		// 팀의 status를 ACTIVE로 변경
 		team.recover();
-	}
-
-	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
-		if (mediaPublicId == null) return null;
-		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-				.orElse(null);
-		if (media == null) {
-			log.warn("[resolveProfileMedia] media not found. publicId={}", mediaPublicId);
-			return null;
-		}
-		log.info("[resolveProfileMedia] found media. id={}, memberId={}, purpose={}, status={}, url={}",
-				media.getId(), media.getMemberId(), media.getPurpose(), media.getStatus(), media.getUrl());
-		log.info("[resolveProfileMedia] filter check. memberIdMatch={}, purposeMatch={}, statusMatch={}",
-				media.getMemberId().equals(memberId),
-				media.getPurpose() == MediaPurpose.PROFILE_IMAGE,
-				media.getStatus() == MediaStatus.UPLOADED);
-		if (!media.getMemberId().equals(memberId)
-				|| media.getPurpose() != MediaPurpose.PROFILE_IMAGE
-				|| media.getStatus() != MediaStatus.UPLOADED) {
-			return null;
-		}
-		media.markUsed();
-		return media;
 	}
 }
