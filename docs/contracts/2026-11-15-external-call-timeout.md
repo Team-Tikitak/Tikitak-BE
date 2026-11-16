@@ -41,7 +41,7 @@
 | 외부 호출 | 진입점 | 이전 | 이후 | 근거 |
 |---|---|---|---|---|
 | Apple JWKS | POST `/api/v1/auth/oauth/apple/callback` 웹 / 앱(`oauthMode=app`) | 실패 시 AUTH104 401. 로그인마다 JWKS 조회, 각 조회 최대 약 1s(500+500ms) | 같은 AUTH104 401. JWKS는 인스턴스 캐시(TTL 5분)가 유지되는 동안 재조회하지 않는다 | `AppleOAuthService.java:89-97`(JwtException·Exception → OAuthAuthenticationException), `AuthService.java:83-90, 112-119` (researcher 보고) |
-| FCM `sendEach` | 알림 이벤트 리스너 3개(`@Async`, AFTER_COMMIT) | 무한 대기 가능. 실패하면 error 로그 | 최대 connect 3s + read 10s(재시도 정책은 미확인)에서 끊기고, 실패는 같은 로그 | `NotificationService.java:60-90`, `NotificationEventListener.java` catch(Exception) |
+| FCM `sendEach` | 알림 이벤트 리스너 3개(`@Async`, AFTER_COMMIT) | 무한 대기 가능. 실패하면 error 로그 | connect 3s / read 10s / write 10s 상한에서 끊기고(재시도 정책은 미확인), 실패는 같은 로그 | `NotificationService.java:60-90`, `NotificationEventListener.java` catch(Exception) |
 | R2 `headObject` | POST 업로드 완료 | `S3Exception` 아닌 실패 → MEDIA017 500 | 같음. `ApiCall(Attempt)TimeoutException`은 `SdkClientException` 하위라 `catch (Exception)` → MEDIA017 | `MediaService.java:292-295`, `javap` 클래스 계층 |
 | R2 `deleteObject` | DELETE 미디어 API / 04:00 정리 배치 / 아웃박스(04:30 afterCommit, 30분 재시도) | MEDIA010 → 각각 200+warn / error 로그·다음 날 재시도 / `markFailed` | 같음 | `MediaService.java:383-388`, `ObjectDeleteOutboxProcessor.java:65` |
 | R2 presign | POST 업로드 URL 발급 | 네트워크 호출 없음(미확인) | 변경 없음 | `S3Presigner`는 수정하지 않음 |
