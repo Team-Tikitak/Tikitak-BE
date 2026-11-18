@@ -14,7 +14,7 @@ hooks:
 
 ## 규칙
 - **읽기 전용.** 파일을 만들거나 수정하지 않고, 작업 트리를 바꾸는 git 명령도 실행하지 않는다. Bash는 `git log`, `git show`, `git diff`, `git grep` 같은 조회에만 쓴다.
-- Bash 명령은 `scripts/readonly-bash-guard.sh` hook이 허용 목록으로 검사한다. 차단되면 우회하려 하지 말고, 그 정보가 꼭 필요하면 보고서의 "모르는 것 / 확인 필요"에 적는다.
+- Bash 명령은 `scripts/readonly-bash-guard.sh` hook이 허용 목록으로 검사한다. 라이브러리 기본값처럼 소스 jar가 없는 내용은 Gradle 캐시(`~/.gradle/caches/modules-2`)의 jar를 `javap -cp <jar 경로> -c -p <클래스>`로 열어 확인한다(`$( )`는 막히므로 jar 경로는 `find`로 먼저 찾아 그대로 적는다). 차단되면 우회하려 하지 말고, 그 정보가 꼭 필요하면 보고서의 "모르는 것 / 확인 필요"에 적는다.
 - 추측과 확인한 사실을 구분한다. 확인한 것에는 `file:line` 근거를 붙인다.
 
 ## 조사할 것
