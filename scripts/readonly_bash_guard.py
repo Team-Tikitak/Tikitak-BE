@@ -28,6 +28,9 @@ READ_COMMANDS = {
     "ls", "cat", "head", "tail", "wc", "grep", "rg", "find", "sort",
     "uniq", "cut", "tr", "pwd", "echo", "cd", "true", "nl", "diff",
 }
+# javap: jar·class 파일을 읽기만 하는 JDK 도구 (라이브러리 기본값 확인용).
+# -J는 JVM 옵션(-J-javaagent 등)을 넘겨 임의 코드를 실행할 수 있어서 막는다. URL 입력도 막는다.
+JAVAP = "javap"
 # find에서 파일을 바꾸거나 다른 명령을 실행할 수 있는 옵션
 FIND_FORBIDDEN = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 
@@ -102,6 +105,12 @@ def check_segment(tokens: list[str], role: str) -> str | None:
         if role != "verifier":
             return "gradle 실행은 verifier만 할 수 있다"
         return check_gradle(args)
+    if name in (JAVAP, JAVAP + ".exe"):
+        if any(a.startswith("-J") for a in args):
+            return "javap의 -J 옵션은 JVM 옵션을 넘겨 코드를 실행할 수 있다"
+        if any("://" in a for a in args):
+            return "javap에 URL을 넘길 수 없다 (로컬 jar·class만)"
+        return None
     if name in READ_COMMANDS:
         if name == "find" and any(a in FIND_FORBIDDEN for a in args):
             return "find의 -delete / -exec 류 옵션은 허용하지 않는다"
