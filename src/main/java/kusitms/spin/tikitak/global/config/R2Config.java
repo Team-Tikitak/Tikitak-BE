@@ -6,17 +6,22 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
+import java.time.Duration;
 
 @Configuration
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "r2", name = "endpoint")
 public class R2Config {
+
+	private static final Duration API_CALL_ATTEMPT_TIMEOUT = Duration.ofSeconds(5);
+	private static final Duration API_CALL_TIMEOUT = Duration.ofSeconds(15);
 
 	private final R2Properties r2Properties;
 
@@ -27,6 +32,10 @@ public class R2Config {
 				.endpointOverride(URI.create(r2Properties.getEndpoint()))
 				.credentialsProvider(createCredentialsProvider())
 				.serviceConfiguration(createS3Configuration())
+				.overrideConfiguration(ClientOverrideConfiguration.builder()
+						.apiCallAttemptTimeout(API_CALL_ATTEMPT_TIMEOUT)
+						.apiCallTimeout(API_CALL_TIMEOUT)
+						.build())
 				.build();
 	}
 

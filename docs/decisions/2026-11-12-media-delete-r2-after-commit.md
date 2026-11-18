@@ -38,5 +38,5 @@
 - R2 삭제가 실패하면 오브젝트가 하드 삭제 배치(DELETED 보관 1일, 매일 04시)까지 public URL로 남는다.
 - 하드 삭제 경로에서 R2 삭제와 행 삭제 사이에는 락이 없다. 그 사이 DELETED가 아니게 되면 행은 지우지 않지만 오브젝트는 이미 없다. DELETED → 다른 상태 전이는 초대 수락 프로필 경로의 상태 검증 누락(#191)에서만 생기며, 그 버그는 분리 전에도 DELETED media를 되살릴 수 있었다.
 - 만료 PENDING/UPLOADED 배치의 삭제 건수는 이제 "DB 전이 건수"다. R2 삭제가 실패한 건도 포함된다.
-- R2 `S3Client` 타임아웃은 아직 없다(#179). 커넥션은 잡지 않지만 요청·배치 자체는 R2 응답만큼 길어질 수 있다.
+- R2 `S3Client` 타임아웃은 아직 없다(#179). 커넥션은 잡지 않지만 요청·배치 자체는 R2 응답만큼 길어질 수 있다. → #179에서 해소: [외부 호출 타임아웃 계약](../contracts/2026-11-15-external-call-timeout.md). SDK 기본값(connect 2s, read 30s)은 원래 있었고, 재시도를 포함한 호출 전체 상한은 기본으로 비어 있었다(빈 값이 "상한 없음"이라는 것은 SDK 문서 기준, 실행으로는 미확인). 그래서 `S3Client`에 시도당 5s(`apiCallAttemptTimeout`) / 호출 전체 15s(`apiCallTimeout`)를 넣었다.
 - 커넥션 미점유 테스트(`ExternalCallConnectionTest`)의 Hikari `activeConnections`는 풀 전체 값이라, 테스트 중 30분 주기 아웃박스 재시도 배치가 돌면 드물게 흔들릴 수 있다(기존 테스트와 같은 위험).
