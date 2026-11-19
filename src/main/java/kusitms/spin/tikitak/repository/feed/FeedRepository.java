@@ -18,7 +18,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestionFeedRepository {
+public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestionFeedRepository, FeedRepositoryCustom {
 
 	@Override
 	default Feed saveDailyQuestionFeed(Feed feed) {
