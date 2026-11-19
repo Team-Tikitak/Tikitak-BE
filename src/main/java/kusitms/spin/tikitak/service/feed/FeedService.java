@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.feed.entity.FeedReaction;
 import kusitms.spin.tikitak.domain.feed.entity.FeedTag;
 import kusitms.spin.tikitak.domain.feed.enums.FeedReactionType;
+import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
@@ -18,6 +19,7 @@ import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
+import kusitms.spin.tikitak.repository.feed.FeedListCondition;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
@@ -31,7 +33,6 @@ import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.media.ImagePreset;
 import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -854,12 +855,8 @@ public class FeedService {
 			FeedTypeFilter feedType,
 			List<Long> taggedTeamMemberIds
 	) {
-		String feedTypeName = feedType.queryValue();
-		if (taggedTeamMemberIds.isEmpty()) {
-			return feedRepository.countActiveFeeds(teamId, placeId, region, feedTypeName);
-		}
-		return feedRepository.countActiveFeedsByTaggedTeamMemberIds(
-				teamId, placeId, region, feedTypeName, taggedTeamMemberIds, taggedTeamMemberIds.size());
+		return feedRepository.countActive(
+				feedListCondition(teamId, placeId, region, feedType, taggedTeamMemberIds, null));
 	}
 
 	private List<FeedImage> sortedImages(Feed feed) {
@@ -885,46 +882,27 @@ public class FeedService {
 		Cursor cursor,
 		int pageSize
 	) {
-		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
-		String feedTypeName = feedType.queryValue();
-
-		if (!taggedTeamMemberIds.isEmpty()) {
-			if (cursor.createdAt() == null) {
-				return feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
-						teamId,
-						placeId,
-						region,
-						feedTypeName,
-						taggedTeamMemberIds,
-						(long) taggedTeamMemberIds.size(),
-						pageRequest
-				);
-			}
-			return feedRepository.findActiveCursorPageByTaggedTeamMemberIds(
-					teamId, placeId, region, feedTypeName, taggedTeamMemberIds, (long) taggedTeamMemberIds.size(),
-					cursor.createdAt(), cursor.feedId(), pageRequest);
-		}
-
-	if (placeId != null) {
-		if (cursor.createdAt() == null) {
-			return feedRepository.findActiveFirstPageByPlaceId(teamId, placeId, feedTypeName, pageRequest);
-		}
-		return feedRepository.findActiveCursorPageByPlaceId(
-				teamId, placeId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+		return feedRepository.findActivePage(
+				feedListCondition(teamId, placeId, region, feedType, taggedTeamMemberIds, cursor), pageSize + 1);
 	}
 
-	if (region != null) {
-		if (cursor.createdAt() == null) {
-			return feedRepository.findActiveFirstPageByRegion(teamId, region, feedTypeName, pageRequest);
-		}
-		return feedRepository.findActiveCursorPageByRegion(
-				teamId, region, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
-	}
-
-	if (cursor.createdAt() == null) {
-		return feedRepository.findActiveFirstPage(teamId, feedTypeName, pageRequest);
-	}
-	return feedRepository.findActiveCursorPage(teamId, feedTypeName, cursor.createdAt(), cursor.feedId(), pageRequest);
+	private FeedListCondition feedListCondition(
+			Long teamId,
+			String placeId,
+			String region,
+			FeedTypeFilter feedType,
+			List<Long> taggedTeamMemberIds,
+			Cursor cursor
+	) {
+		return new FeedListCondition(
+				teamId,
+				placeId,
+				region,
+				feedType.toFeedType(),
+				taggedTeamMemberIds,
+				cursor == null ? null : cursor.createdAt(),
+				cursor == null ? null : cursor.feedId()
+		);
 	}
 
 	private FeedTypeFilter parseFeedType(String type) {
@@ -1066,8 +1044,12 @@ public class FeedService {
 		GENERAL,
 		DAILY_QUESTION;
 
-		private String queryValue() {
-			return this == ALL ? null : name();
+		private FeedType toFeedType() {
+			return switch (this) {
+				case ALL -> null;
+				case GENERAL -> FeedType.GENERAL;
+				case DAILY_QUESTION -> FeedType.DAILY_QUESTION;
+			};
 		}
 	}
 }

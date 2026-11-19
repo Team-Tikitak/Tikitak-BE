@@ -14,7 +14,6 @@ import kusitms.spin.tikitak.support.IntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -129,7 +128,7 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 
 	@Test
 	@DisplayName("태그된 팀 멤버 필터는 요청한 모든 멤버가 태그된 피드만 반환한다")
-	void findActiveFirstPageByTaggedTeamMemberIdsUsesAndCondition() {
+	void findActivePageUsesTaggedTeamMemberIdsAndCondition() {
 		Team team = persist(team("tag-filter"));
 		Member authorMember = persist(member("tag-author"));
 		Member taggedMemberA = persist(member("tag-a"));
@@ -157,14 +156,17 @@ class FeedRepositoryIntegrationTest extends IntegrationTest {
 
 		flushAndClear();
 
-		List<Feed> feeds = feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
-				team.getId(),
-				null,
-				null,
-				null,
-				List.of(tagA.getId(), tagB.getId()),
-				2L,
-				PageRequest.of(0, 10)
+		List<Feed> feeds = feedRepository.findActivePage(
+				new FeedListCondition(
+						team.getId(),
+						null,
+						null,
+						null,
+						List.of(tagA.getId(), tagB.getId()),
+						null,
+						null
+				),
+				10
 		);
 
 		assertThat(feeds).extracting(Feed::getId).containsExactly(bothTagged.getId());

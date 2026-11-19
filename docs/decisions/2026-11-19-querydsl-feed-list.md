@@ -2,7 +2,7 @@
 
 - **날짜**: 2026-11-19
 - **관련 이슈**: #158
-- **상태**: 결정됨 (2026-11-19 계약 승인). 커밋 1(의존성·공용 Bean·ArchUnit 술어) 적용, 피드 목록 전환은 진행 중
+- **상태**: 결정됨 (2026-11-19 계약 승인). `FeedRepository` 피드 목록 10개 메서드 전환 완료
 - **계약**: [2026-11-19-feed-list-querydsl](../contracts/2026-11-19-feed-list-querydsl.md)
 
 ## 상황 (Context)
@@ -48,8 +48,14 @@
 - `NotificationRepository`, `TeamMemberRepository`의 동적 조건(`:x is null or`) 쿼리
 
 ## 트레이드오프 / 남은 리스크
-- **라이브러리 유지보수**: 공식 `com.querydsl`은 5.1.0 이후 업데이트가 정체돼 있다(계약의 사람 판단. 릴리스 이력은 이 기록에서 다시 확인하지 않음). Hibernate 7.2.12와의 호환은 미확인이다(피드 목록 전환 커밋의 integrationTest로 확인한다). 쿼리 생성 오류나 템플릿 문제가 나오면 OpenFeign 포크로 옮기는 것이 대안이며, 옮길지는 사람이 정한다.
-- **템플릿 설정**: Hibernate 7에서 `JPQLTemplates.DEFAULT`를 명시해야 하는지는 미확인이다. 지금 `QuerydslConfig`는 `new JPAQueryFactory(entityManager)`만 쓰며, 피드 목록 전환 커밋의 integrationTest 결과를 보고 정한다. 명시하게 되면 이 Bean 한 곳에서만 바꾼다.
-- **springdoc 3.0.3**: 생성되는 OpenAPI 스펙의 세부 표현(스키마 이름, nullable 표기 등)이 2.8.8과 달라졌는지는 미확인이다. 로컬 기동으로 `/v3/api-docs` 200 응답을 확인하지 않았다(미확인). 3.0.3은 기동 시 `/swagger-ui.html`, `/v3/api-docs`가 기본으로 켜져 있다는 WARN 로그를 남긴다(`SpringDocAppInitializer`, 2.8.8 jar에는 없는 클래스). 운영에서 끌지는 이번 범위가 아니다.
+- **라이브러리 유지보수**: 공식 `com.querydsl`은 5.1.0 이후 업데이트가 정체돼 있다(계약의 사람 판단. 릴리스 이력은 이 기록에서 다시 확인하지 않음). Hibernate 7.2.12와 함께 쓸 때 피드 목록 쿼리(fetch join, 서브쿼리 + group by/having, 복합 커서, countDistinct)는 integrationTest 128건에서 오류나 경고 없이 동작했다(2026-11-19). 이 범위를 벗어난 기능은 아직 쓰지 않았다. 앞으로 쿼리 생성 오류나 템플릿 문제가 나오면 OpenFeign 포크로 옮기는 것이 대안이며, 옮길지는 사람이 정한다.
+- **템플릿 설정**: `QuerydslConfig`는 템플릿을 명시하지 않는다(`new JPAQueryFactory(entityManager)`). 피드 목록 쿼리가 이 설정으로 integrationTest를 통과했기 때문이다. 앞으로 다른 쿼리에서 템플릿 문제가 나오면 `JPQLTemplates.DEFAULT` 명시를 검토하며, 바꾸게 되면 이 Bean 한 곳에서만 바꾼다.
+- **springdoc 3.0.3**: 2026-11-19에 로컬에서 기동해 확인했다(dev 프로필, 로컬 Postgres·Redis, 외부 연동 값은 가짜).
+  - 엔드포인트: `/v3/api-docs` 200, `/swagger-ui.html`은 302로 `/swagger-ui/index.html`(200)에 연결된다.
+  - 같은 DB로 develop(2.8.8)도 띄워 `/v3/api-docs`를 비교했다. `openapi`는 둘 다 3.1.0이고, paths 45개와 schemas 128개도 같다. 차이는 4곳이다(서버 URL 포트 제외).
+    - `LoginResponse.activeTeamId`, `MediaUploadRequest.teamId`, `PageInfoDTO.nextCursor`의 `type`이 단일 타입에서 `[타입, "null"]`로 바뀌었다.
+    - `GET /api/v1/auth/oauth/{provider}/start`의 두 번째 쿼리 파라미터에 `default: false`가 추가됐다.
+  - 이 스펙으로 클라이언트 코드를 생성하는 쪽이 있으면 세 필드의 타입이 nullable로 바뀐다.
+  - 3.0.3은 기동 시 `/swagger-ui.html`, `/v3/api-docs`가 기본으로 켜져 있다는 WARN 로그를 남긴다(`SpringDocAppInitializer`, 2.8.8 jar에는 없는 클래스). 운영에서 끌지는 이번 범위가 아니다.
 - **빌드**: Q-클래스는 컴파일 때마다 생성되므로, IDE가 Gradle 생성 소스 경로를 인식하지 않으면 Q-클래스가 없다고 표시될 수 있다. `./gradlew compileJava`로 생성된다.
 - **ArchUnit**: C5는 `EntityPath`를 구현한 클래스를 모두 뺀다. 엔티티 패키지에 사람이 직접 `EntityPath` 구현 클래스를 두면 C5가 잡지 못한다. 그런 클래스를 손으로 둘 이유는 확인된 것이 없다.

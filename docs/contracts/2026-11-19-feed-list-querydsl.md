@@ -93,8 +93,12 @@
 ## 참고
 - 조사: `FeedRepository.java` 49-314, `FeedService.java` 89-149 / 850-928 / 1061-1072, `ConventionArchTest.java:118-127`(C5), `IntegrationTest.java:24-28`(`@DataJpaTest`, `@Import` 없음)
 - 인덱스: `idx_feed_active_team_created_id ON feed(team_id, created_at DESC, id DESC) WHERE deleted_at IS NULL` (V11:7-9), `idx_feed_tag_team_member_feed` (V11:4-5)
+- 확인된 것 (구현 중):
+  - com.querydsl 5.1.0은 Hibernate 7.2.12에서 이번 쿼리 범위에 대해 동작한다. 커밋 2·3의 integrationTest 128건이 통과했다.
+  - Q-클래스의 `@Generated`(`javax.annotation.processing.Generated`)는 바이트코드에 남지 않는다(javap). 그래서 C5 술어는 `EntityPath` 구현 여부로 판단한다.
+  - `JPQLTemplates.DEFAULT`는 명시하지 않는다. 기본 설정으로 integrationTest가 통과했다.
 - 미확인:
-  - com.querydsl 5.1.0이 Hibernate 7.2.12에서 동작하는지 (커밋 2의 integrationTest로 확인)
-  - Q-클래스의 `@Generated`가 바이트코드에 남는지 (그래서 C5 술어는 `EntityPath` 구현 여부로 판단한다)
   - Spring Boot 4의 `@DataJpaTest`가 사용자 `@Configuration`을 제외하는지 (Boot 3 기준 일반 지식. `@Import`가 있으면 어느 쪽이든 동작한다)
-  - Hibernate 7에서 `JPQLTemplates.DEFAULT`를 명시해야 하는지 (커밋 2의 integrationTest 결과로 정한다)
+- 확인된 것 (2026-11-19 로컬 기동):
+  - `/v3/api-docs` 200, Swagger UI 200
+  - develop(2.8.8)과의 스펙 차이는 결정 기록 "springdoc 3.0.3" 항목에 적었다. nullable 표기 3곳, 파라미터 default 1곳이다.
