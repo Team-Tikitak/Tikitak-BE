@@ -11,9 +11,11 @@ import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.config.QuerydslConfig;
 import org.junit.jupiter.api.Tag;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -25,6 +27,7 @@ import java.time.LocalDateTime;
 @DataJpaTest
 @ActiveProfiles("integration-test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(QuerydslConfig.class)
 public abstract class IntegrationTest {
 
 	private static final PostgreSQLContainer POSTGRESQL = new PostgreSQLContainer("postgres:16-alpine");
