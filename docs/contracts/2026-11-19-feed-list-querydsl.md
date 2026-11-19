@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #158
 - **브랜치**: `Refactor/#158-querydsl` (develop에서 분기)
-- **상태**: 승인됨 (2026-11-19)
+- **상태**: 완료 (2026-11-19, PR #201)
 
 ## 목표
 `FeedRepository`의 피드 목록 `@Query` 8개와 count 2개(필터 조합별 오버로드)를 QueryDSL 동적 쿼리 메서드 2개(`findActivePage`, `countActive`)로 합친다. API 응답과 조회 결과는 바꾸지 않는다.
