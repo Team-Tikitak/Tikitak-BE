@@ -27,3 +27,6 @@ kakao:
   map:
     rest-api-key: test-kakao-map-key
       
+auth:
+  jwt:
+    secret: test-jwt-secret-for-tests-at-least-32-bytes

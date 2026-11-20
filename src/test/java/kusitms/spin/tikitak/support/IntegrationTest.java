@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.support;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.Table;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
@@ -10,9 +11,11 @@ import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.config.QuerydslConfig;
 import org.junit.jupiter.api.Tag;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -24,6 +27,7 @@ import java.time.LocalDateTime;
 @DataJpaTest
 @ActiveProfiles("integration-test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(QuerydslConfig.class)
 public abstract class IntegrationTest {
 
 	private static final PostgreSQLContainer POSTGRESQL = new PostgreSQLContainer("postgres:16-alpine");
@@ -101,6 +105,34 @@ public abstract class IntegrationTest {
 		return entity;
 	}
 
+	/**
+	 * 엔티티를 persist한 뒤 created_at을 주어진 시각으로 바꾼다. {@link #overrideCreatedAt} 참고.
+	 */
+	protected <T> T persistWithCreatedAt(T entity, LocalDateTime createdAt) {
+		return overrideCreatedAt(persist(entity), createdAt);
+	}
+
+	/**
+	 * 이미 persist된 엔티티의 created_at을 DB(native update)와 영속성 컨텍스트 양쪽에서 주어진 시각으로 맞춘다.
+	 * auditing(@CreatedDate)이 persist 시각으로 덮어써도 테스트가 의도한 시각을 쓰게 하기 위한 헬퍼다.
+	 * 엔티티 클래스의 {@code @Table(name)}과 {@code id} 컬럼을 사용한다.
+	 */
+	protected <T> T overrideCreatedAt(T entity, LocalDateTime createdAt) {
+		entityManager.flush();
+		Object id = entityManager.getEntityManagerFactory().getPersistenceUnitUtil().getIdentifier(entity);
+		int updated = entityManager.createNativeQuery(
+				"UPDATE " + tableName(entity) + " SET created_at = :createdAt WHERE id = :id")
+				.setParameter("createdAt", createdAt)
+				.setParameter("id", id)
+				.executeUpdate();
+		if (updated != 1) {
+			throw new IllegalStateException("created_at 갱신 대상이 1건이 아님: " + updated);
+		}
+		// DB 값을 다시 읽어 엔티티 필드와 스냅샷을 함께 맞춘다 (getCreatedAt()을 커서로 쓰는 테스트용).
+		entityManager.refresh(entity);
+		return entity;
+	}
+
 	protected void flushAndClear() {
 		entityManager.flush();
 		entityManager.clear();
@@ -108,6 +140,14 @@ public abstract class IntegrationTest {
 
 	protected EntityManager entityManager() {
 		return entityManager;
+	}
+
+	private String tableName(Object entity) {
+		Table table = entity.getClass().getAnnotation(Table.class);
+		if (table == null || table.name().isBlank()) {
+			throw new IllegalArgumentException("@Table(name)이 없는 엔티티: " + entity.getClass().getName());
+		}
+		return table.name();
 	}
 
 	private String token(String value) {

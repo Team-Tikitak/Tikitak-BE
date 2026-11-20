@@ -7,30 +7,29 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.SendResponse;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
-import kusitms.spin.tikitak.domain.member.entity.Member;
-import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.notification.dto.NotificationPayload;
-import kusitms.spin.tikitak.domain.notification.entity.MemberDeviceToken;
 import kusitms.spin.tikitak.domain.notification.entity.Notification;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
-import kusitms.spin.tikitak.repository.member.MemberRepository;
-import kusitms.spin.tikitak.repository.notification.MemberDeviceTokenRepository;
 import kusitms.spin.tikitak.repository.notification.NotificationRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.media.ImagePreset;
 import kusitms.spin.tikitak.service.media.ImageUrlResolver;
+import kusitms.spin.tikitak.service.notification.NotificationPersistService.DeviceTokenTarget;
+import kusitms.spin.tikitak.service.notification.NotificationPersistService.SavedNotification;
 import kusitms.spin.tikitak.service.notification.dto.NotificationResponseDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,8 +44,7 @@ public class NotificationService {
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 50;
 
-	private final MemberRepository memberRepository;
-	private final MemberDeviceTokenRepository deviceTokenRepository;
+	private final NotificationPersistService notificationPersistService;
 	private final NotificationRepository notificationRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final FeedImageRepository feedImageRepository;
@@ -54,29 +52,33 @@ public class NotificationService {
 	private final ImageUrlResolver imageUrlResolver;
 	private final Optional<FirebaseMessaging> firebaseMessaging;
 
-	@Transactional
+	/**
+	 * 알림 저장(+토큰 조회)은 {@link NotificationPersistService}의 트랜잭션에서 커밋한 뒤, FCM 호출은 트랜잭션·DB 커넥션 없이 실행한다.
+	 * 클래스 수준 readOnly 트랜잭션을 물려받지 않도록 NOT_SUPPORTED를 명시한다.
+	 * 이 메서드 안에서 리포지토리를 직접 쓰지 않는다(트랜잭션 없는 구간의 EntityManager가 메서드 끝까지 커넥션을 잡을 수 있음).
+	 */
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	public void send(Long memberId, NotificationPayload payload) {
-		Optional<Member> activeMember = memberRepository.findById(memberId)
-				.filter(member -> member.getStatus() == MemberStatus.ACTIVE);
-		if (activeMember.isEmpty()) {
+		Optional<SavedNotification> saved =
+				notificationPersistService.saveForActiveMember(memberId, payload, firebaseMessaging.isPresent());
+		if (saved.isEmpty()) {
 			log.warn("존재하지 않거나 탈퇴한 회원에게는 알림을 저장/전송하지 않습니다. memberId={}, type={}", memberId, payload.getType());
 			return;
 		}
-		Notification notification = Notification.create(activeMember.get(), payload);
-		Notification savedNotification = notificationRepository.save(notification);
 
 		if (firebaseMessaging.isEmpty()) {
 			log.warn("FCM이 설정되지 않아 알림을 전송하지 않습니다. memberId={}, type={}", memberId, payload.getType());
 			return;
 		}
 
-		List<MemberDeviceToken> deviceTokens = deviceTokenRepository.findAllByMemberId(memberId);
+		List<DeviceTokenTarget> deviceTokens = saved.get().deviceTokens();
 		if (deviceTokens.isEmpty()) {
 			return;
 		}
 
+		Long notificationId = saved.get().notificationId();
 		List<Message> messages = deviceTokens.stream()
-				.map(deviceToken -> toMessage(deviceToken, payload, savedNotification == null ? null : savedNotification.getId()))
+				.map(deviceToken -> toMessage(deviceToken, payload, notificationId))
 				.toList();
 
 		try {
@@ -87,9 +89,9 @@ public class NotificationService {
 		}
 	}
 
-	private Message toMessage(MemberDeviceToken deviceToken, NotificationPayload payload, Long notificationId) {
+	private Message toMessage(DeviceTokenTarget deviceToken, NotificationPayload payload, Long notificationId) {
 		Message.Builder builder = Message.builder()
-				.setToken(deviceToken.getFcmToken())
+				.setToken(deviceToken.fcmToken())
 				.setNotification(com.google.firebase.messaging.Notification.builder()
 						.setTitle(payload.getTitle())
 						.setBody(payload.getBody())
@@ -249,22 +251,26 @@ public class NotificationService {
 	private record Cursor(LocalDateTime createdAt, Long id) {
 	}
 
-	private void handleResponses(List<MemberDeviceToken> deviceTokens, List<SendResponse> responses) {
+	private void handleResponses(List<DeviceTokenTarget> deviceTokens, List<SendResponse> responses) {
+		List<Long> unregisteredTokenIds = new ArrayList<>();
 		for (int i = 0; i < responses.size(); i++) {
 			SendResponse response = responses.get(i);
-			if (!response.isSuccessful()) {
-				handleFailure(deviceTokens.get(i), response.getException());
+			if (!response.isSuccessful() && isUnregistered(deviceTokens.get(i), response.getException())) {
+				unregisteredTokenIds.add(deviceTokens.get(i).id());
 			}
+		}
+		if (!unregisteredTokenIds.isEmpty()) {
+			notificationPersistService.deleteDeviceTokens(unregisteredTokenIds);
 		}
 	}
 
-	private void handleFailure(MemberDeviceToken deviceToken, FirebaseMessagingException exception) {
+	private boolean isUnregistered(DeviceTokenTarget deviceToken, FirebaseMessagingException exception) {
 		MessagingErrorCode errorCode = exception.getMessagingErrorCode();
 		if (errorCode == MessagingErrorCode.UNREGISTERED) {
-			log.info("유효하지 않은 디바이스 토큰을 삭제합니다. deviceTokenId={}, errorCode={}", deviceToken.getId(), errorCode);
-			deviceTokenRepository.delete(deviceToken);
-			return;
+			log.info("유효하지 않은 디바이스 토큰을 삭제합니다. deviceTokenId={}, errorCode={}", deviceToken.id(), errorCode);
+			return true;
 		}
-		log.warn("FCM 알림 전송에 실패했습니다. deviceTokenId={}, errorCode={}", deviceToken.getId(), errorCode, exception);
+		log.warn("FCM 알림 전송에 실패했습니다. deviceTokenId={}, errorCode={}", deviceToken.id(), errorCode, exception);
+		return false;
 	}
 }

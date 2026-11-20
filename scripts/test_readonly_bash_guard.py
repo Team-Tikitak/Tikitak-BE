@@ -49,6 +49,10 @@ cases = [
  ("verifier","FOO=1 ./gradlew test",False),
  ("verifier","./gradlew bootRun",False),
  ("verifier","git push",False),
+ ("researcher","javap -cp lib.jar -c -p com.example.Foo | grep -n Timeout",True),
+ ("verifier","javap -constants -cp lib.jar com.example.Foo",True),
+ ("verifier","javap -J-javaagent:evil.jar -cp lib.jar com.example.Foo",False),
+ ("researcher","javap jar:http://example.com/x.jar!/Foo.class",False),
 ]
 
 

@@ -6,6 +6,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -39,15 +40,16 @@ public class HomeService {
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
 	private final R2Properties r2Properties;
 	private final ImageUrlResolver imageUrlResolver;
+	private final KstDateProvider kstDateProvider;
 
 	public HomeResponseDTO.BestAttendanceResponse getBestAttendance(Long memberId, Long teamId) {
 		teamMemberRepository.findActiveByMemberIdAndTeamId(
 						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
-		YearMonth currentMonth = YearMonth.now();
-		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
-		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+		YearMonth currentMonth = kstDateProvider.currentMonth();
+		LocalDateTime startOfMonth = kstDateProvider.startOfMonth(currentMonth);
+		LocalDateTime startOfNextMonth = kstDateProvider.startOfMonth(currentMonth.plusMonths(1));
 
 		List<Object[]> rows = feedTagRepository.findTopTaggedMembersByTeamAndMonth(
 				teamId, startOfMonth, startOfNextMonth, TeamMemberStatus.ACTIVE);
@@ -73,37 +75,41 @@ public class HomeService {
 	}
 
 	public HomeResponseDTO.EveryonePickResponse getEveryonePick(Long memberId, Long teamId) {
+		int month = kstDateProvider.currentMonth().getMonthValue();
 		return HomeResponseDTO.EveryonePickResponse.builder()
-				.month(YearMonth.now().getMonthValue())
+				.month(month)
 				.picks(feedService.getEveryonePickItems(memberId, teamId))
 				.build();
 	}
 
 	public HomeResponseDTO.EveryonePickThumbnailResponse getEveryonePickThumbnail(Long memberId, Long teamId) {
+		int month = kstDateProvider.currentMonth().getMonthValue();
 		return feedService.getEveryonePickThumbnailItem(memberId, teamId)
 				.map(item -> HomeResponseDTO.EveryonePickThumbnailResponse.builder()
-						.month(YearMonth.now().getMonthValue())
+						.month(month)
 						.feedId(item.getFeedId())
 						.thumbnailImageUrl(item.getThumbnailImageUrl())
 						.build())
 				.orElse(HomeResponseDTO.EveryonePickThumbnailResponse.builder()
-						.month(YearMonth.now().getMonthValue())
+						.month(month)
 						.feedId(null)
 						.thumbnailImageUrl(null)
 						.build());
 	}
 
 	public HomeResponseDTO.AllTaggedResponse getAllTaggedFeeds(Long memberId, Long teamId) {
+		int month = kstDateProvider.currentMonth().getMonthValue();
 		return HomeResponseDTO.AllTaggedResponse.builder()
-				.month(YearMonth.now().getMonthValue())
+				.month(month)
 				.feeds(feedService.getAllTaggedItems(memberId, teamId))
 				.build();
 	}
 
 	public HomeResponseDTO.CombinationResponse getCombination(Long memberId, Long teamId) {
 		FeedService.CombinationItemsResult result = feedService.getCombinationItems(memberId, teamId);
+		int month = kstDateProvider.currentMonth().getMonthValue();
 		return HomeResponseDTO.CombinationResponse.builder()
-				.month(YearMonth.now().getMonthValue())
+				.month(month)
 				.combination(result.combination())
 				.feeds(result.feeds())
 				.build();
@@ -114,9 +120,9 @@ public class HomeService {
 						memberId, teamId, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TEAM008));
 
-		YearMonth currentMonth = YearMonth.now();
-		LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
-		LocalDateTime startOfNextMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
+		YearMonth currentMonth = kstDateProvider.currentMonth();
+		LocalDateTime startOfMonth = kstDateProvider.startOfMonth(currentMonth);
+		LocalDateTime startOfNextMonth = kstDateProvider.startOfMonth(currentMonth.plusMonths(1));
 
 		if (feedRepository.countActiveFeedsWithRegion(teamId, startOfMonth, startOfNextMonth) < REGION_MIN_FEEDS) {
 			return HomeResponseDTO.RegionResponse.builder()
@@ -159,8 +165,9 @@ public class HomeService {
 		);
 		Collections.shuffle(shuffled);
 
+		int month = kstDateProvider.currentMonth().getMonthValue();
 		return HomeResponseDTO.RecommendedPlacesResponse.builder()
-				.month(YearMonth.now().getMonthValue())
+				.month(month)
 				.places(shuffled.subList(0, 2))
 				.build();
 	}

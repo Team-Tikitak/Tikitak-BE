@@ -10,7 +10,6 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
-import kusitms.spin.tikitak.repository.media.MediaRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamInviteRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
@@ -22,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -36,7 +36,7 @@ public class TeamInvitationService {
 	private final MemberRepository memberRepository;
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamInviteRepository teamInviteRepository;
-	private final MediaRepository mediaRepository;
+	private final TeamProfileMediaResolver teamProfileMediaResolver;
 
 	@Transactional
 	public TeamInvitationResponseDTO.GenerateInviteLinkResponseDTO generateOrReissueInviteLink(
@@ -153,22 +153,26 @@ public class TeamInvitationService {
 			throw new BusinessException(ErrorCode.MEMBER002);
 		}
 
+		Optional<TeamMember> existingMember = teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId());
+		existingMember.ifPresent(existing -> {
+			if (existing.getStatus() == TeamMemberStatus.ACTIVE) {
+				throw new BusinessException(ErrorCode.INVITE006);
+			}
+			if (existing.getStatus() == TeamMemberStatus.BANNED) {
+				throw new BusinessException(ErrorCode.INVITE007);
+			}
+		});
+
 		long activeCount = teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMemberStatus.ACTIVE);
 		if (activeCount >= TEAM_MEMBER_LIMIT) {
 			throw new BusinessException(ErrorCode.INVITE008);
 		}
 
-		Media newProfileMedia = resolveProfileMedia(memberId, request.getMediaPublicId());
+		Media newProfileMedia = teamProfileMediaResolver.resolve(memberId, request.getMediaPublicId());
 
-		teamMemberRepository.findByMemberIdAndTeamId(memberId, team.getId())
+		existingMember
 				.ifPresentOrElse(
 						existing -> {
-							if (existing.getStatus() == TeamMemberStatus.ACTIVE) {
-								throw new BusinessException(ErrorCode.INVITE006);
-							}
-							if (existing.getStatus() == TeamMemberStatus.BANNED) {
-								throw new BusinessException(ErrorCode.INVITE007);
-							}
 							if (newProfileMedia != null && existing.getProfileMedia() != null) {
 								existing.getProfileMedia().markDeleted();
 							}
@@ -205,13 +209,5 @@ public class TeamInvitationService {
 		if (invite.isExpired()) {
 			throw new BusinessException(ErrorCode.INVITE005);
 		}
-	}
-
-	private Media resolveProfileMedia(Long memberId, UUID mediaPublicId) {
-		if (mediaPublicId == null) return null;
-		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA018));
-		media.markUsed();
-		return media;
 	}
 }

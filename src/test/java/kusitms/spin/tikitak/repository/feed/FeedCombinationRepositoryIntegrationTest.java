@@ -45,13 +45,13 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			// tm1, tm2: 3번 함께
 			for (int i = 0; i < 3; i++) {
 				Feed feed = feed(team, authorTm, BASE_TIME.plusMinutes(i));
-				persist(feed);
+				persistWithCreatedAt(feed, BASE_TIME.plusMinutes(i));
 				tag(feed, tm1);
 				tag(feed, tm2);
 			}
 			// tm2, tm3: 1번 함께
 			Feed other = feed(team, authorTm, BASE_TIME.plusHours(1));
-			persist(other);
+			persistWithCreatedAt(other, BASE_TIME.plusHours(1));
 			tag(other, tm2);
 			tag(other, tm3);
 
@@ -74,7 +74,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 			Feed feed = feed(team, authorTm, BASE_TIME);
-			persist(feed);
+			persistWithCreatedAt(feed, BASE_TIME);
 			tag(feed, authorTm);
 
 			flushAndClear();
@@ -98,12 +98,12 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 
 			// (tm1,tm2), (tm1,tm3) 각 1번씩 동점
 			Feed feed1 = feed(team, authorTm, BASE_TIME);
-			persist(feed1);
+			persistWithCreatedAt(feed1, BASE_TIME);
 			tag(feed1, tm1);
 			tag(feed1, tm2);
 
 			Feed feed2 = feed(team, authorTm, BASE_TIME.plusHours(1));
-			persist(feed2);
+			persistWithCreatedAt(feed2, BASE_TIME.plusHours(1));
 			tag(feed2, tm1);
 			tag(feed2, tm3);
 
@@ -136,7 +136,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 					.content("삭제됨")
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
-			persist(deleted);
+			persistWithCreatedAt(deleted, BASE_TIME);
 			tag(deleted, tm1);
 			tag(deleted, tm2);
 
@@ -162,13 +162,13 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			// tm1(탈퇴), tm2: 3번 — 점수 높지만 탈퇴 멤버 포함
 			for (int i = 0; i < 3; i++) {
 				Feed feed = feed(team, authorTm, BASE_TIME.plusMinutes(i));
-				persist(feed);
+				persistWithCreatedAt(feed, BASE_TIME.plusMinutes(i));
 				tag(feed, tm1);
 				tag(feed, tm2);
 			}
 			// tm2, tm3: 1번 — 활성 멤버끼리
 			Feed active = feed(team, authorTm, BASE_TIME.plusHours(1));
-			persist(active);
+			persistWithCreatedAt(active, BASE_TIME.plusHours(1));
 			tag(active, tm2);
 			tag(active, tm3);
 
@@ -197,7 +197,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 			Feed otherFeed = feed(otherTeam, otherAuthor, BASE_TIME);
-			persist(otherFeed);
+			persistWithCreatedAt(otherFeed, BASE_TIME);
 			tag(otherFeed, otherTm1);
 			tag(otherFeed, otherTm2);
 
@@ -230,7 +230,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			// tm1, tm2, tm3 항상 함께
 			for (int i = 0; i < 3; i++) {
 				Feed feed = feed(team, authorTm, BASE_TIME.plusMinutes(i));
-				persist(feed);
+				persistWithCreatedAt(feed, BASE_TIME.plusMinutes(i));
 				tag(feed, tm1);
 				tag(feed, tm2);
 				tag(feed, tm3);
@@ -260,14 +260,14 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 
 			// feed1: tm1, tm2, tm3
 			Feed feed1 = feed(team, authorTm, BASE_TIME);
-			persist(feed1);
+			persistWithCreatedAt(feed1, BASE_TIME);
 			tag(feed1, tm1);
 			tag(feed1, tm2);
 			tag(feed1, tm3);
 
 			// feed2: tm1, tm2만 (tm3 없음)
 			Feed feed2 = feed(team, authorTm, BASE_TIME.plusHours(1));
-			persist(feed2);
+			persistWithCreatedAt(feed2, BASE_TIME.plusHours(1));
 			tag(feed2, tm1);
 			tag(feed2, tm2);
 
@@ -293,7 +293,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 			Feed feed = feed(team, authorTm, BASE_TIME);
-			persist(feed);
+			persistWithCreatedAt(feed, BASE_TIME);
 			tag(feed, tm1);
 			tag(feed, tm2);
 
@@ -325,7 +325,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 			Feed feed = feed(team, authorTm, BASE_TIME);
-			persist(feed);
+			persistWithCreatedAt(feed, BASE_TIME);
 			tag(feed, tm1);
 			tag(feed, tm2);
 
@@ -350,7 +350,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 			Feed onlyTm1 = feed(team, authorTm, BASE_TIME);
-			persist(onlyTm1);
+			persistWithCreatedAt(onlyTm1, BASE_TIME);
 			tag(onlyTm1, tm1);
 
 			flushAndClear();
@@ -376,7 +376,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 					.content("삭제됨")
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
-			persist(deleted);
+			persistWithCreatedAt(deleted, BASE_TIME);
 			tag(deleted, tm1);
 			tag(deleted, tm2);
 
@@ -400,8 +400,8 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 
 			Feed older = feed(team, authorTm, BASE_TIME);
 			Feed newer = feed(team, authorTm, BASE_TIME.plusHours(1));
-			persist(older);
-			persist(newer);
+			persistWithCreatedAt(older, BASE_TIME);
+			persistWithCreatedAt(newer, BASE_TIME.plusHours(1));
 			tag(older, tm1);
 			tag(older, tm2);
 			tag(newer, tm1);
@@ -431,7 +431,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 
 			for (int i = 0; i < 11; i++) {
 				Feed feed = feed(team, authorTm, BASE_TIME.plusMinutes(i));
-				persist(feed);
+				persistWithCreatedAt(feed, BASE_TIME.plusMinutes(i));
 				tag(feed, tm1);
 				tag(feed, tm2);
 			}
@@ -456,7 +456,7 @@ class FeedCombinationRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
 			Feed otherFeed = feed(otherTeam, otherAuthor, BASE_TIME);
-			persist(otherFeed);
+			persistWithCreatedAt(otherFeed, BASE_TIME);
 			tag(otherFeed, otherTm1);
 			tag(otherFeed, otherTm2);
 

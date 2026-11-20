@@ -11,24 +11,23 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.common.BaseCreatedTimeEntity;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.notification.dto.NotificationPayload;
 import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "notification")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class Notification {
+public class Notification extends BaseCreatedTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,9 +61,6 @@ public class Notification {
 
 	private LocalDateTime readAt;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
 	public static Notification create(Member member, NotificationPayload payload) {
 		return Notification.builder()
 				.member(member)
@@ -75,7 +71,6 @@ public class Notification {
 				.feedId(parseLong(payload.getData().get("feedId")))
 				.actorTeamMemberId(payload.getActorTeamMemberId())
 				.isRead(false)
-				.createdAt(LocalDateTime.now())
 				.build();
 	}
 

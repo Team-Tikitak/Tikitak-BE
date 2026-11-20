@@ -5,8 +5,8 @@ import kusitms.spin.tikitak.global.config.AuthProperties;
 import kusitms.spin.tikitak.service.auth.dto.OAuthAuthorizeUrlResponse;
 import kusitms.spin.tikitak.service.auth.dto.OAuthUserInfo;
 import kusitms.spin.tikitak.service.auth.exception.OAuthAuthenticationException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -19,7 +19,6 @@ import java.time.Instant;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AppleOAuthService {
 
@@ -28,6 +27,17 @@ public class AppleOAuthService {
 	private static final String ISSUER = "https://appleid.apple.com";
 
 	private final AuthProperties authProperties;
+	final JwtDecoder jwtDecoder;
+
+	@Autowired
+	public AppleOAuthService(AuthProperties authProperties) {
+		this(authProperties, NimbusJwtDecoder.withJwkSetUri(JWK_SET_URI).build());
+	}
+
+	AppleOAuthService(AuthProperties authProperties, JwtDecoder jwtDecoder) {
+		this.authProperties = authProperties;
+		this.jwtDecoder = jwtDecoder;
+	}
 
 	public OAuthAuthorizeUrlResponse getAuthorizeUrl(String state) {
 		AuthProperties.Apple apple = authProperties.oauth().apple();
@@ -68,7 +78,6 @@ public class AppleOAuthService {
 			AuthProperties.Apple apple = authProperties.oauth().apple();
 			validateAppleClientConfig(apple, false);
 
-			JwtDecoder jwtDecoder = NimbusJwtDecoder.withJwkSetUri(JWK_SET_URI).build();
 			Jwt jwt = jwtDecoder.decode(idToken);
 
 			if (!ISSUER.equals(jwt.getIssuer() == null ? null : jwt.getIssuer().toString())) {

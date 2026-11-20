@@ -11,23 +11,20 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.common.BaseTimeEntity;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.notification.enums.DevicePlatform;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
+import lombok.experimental.SuperBuilder;
 
 @Entity
 @Table(name = "member_device_token")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class MemberDeviceToken {
+public class MemberDeviceToken extends BaseTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,26 +41,16 @@ public class MemberDeviceToken {
 	@Column(nullable = false, length = 20)
 	private DevicePlatform platform;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
-
 	public static MemberDeviceToken register(Member member, String fcmToken, DevicePlatform platform) {
-		LocalDateTime now = LocalDateTime.now();
 		return MemberDeviceToken.builder()
 				.member(member)
 				.fcmToken(fcmToken)
 				.platform(platform)
-				.createdAt(now)
-				.updatedAt(now)
 				.build();
 	}
 
 	public void reassign(Member member, DevicePlatform platform) {
 		this.member = member;
 		this.platform = platform;
-		this.updatedAt = LocalDateTime.now();
 	}
 }

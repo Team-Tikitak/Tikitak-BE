@@ -23,6 +23,9 @@ import kusitms.spin.tikitak.repository.media.MediaUploadRepository;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
+import kusitms.spin.tikitak.service.media.MediaUploadCompletionService.CompletionPlan;
+import kusitms.spin.tikitak.service.media.MediaUploadCompletionService.UploadTarget;
+import kusitms.spin.tikitak.service.media.MediaUploadCompletionService.UploadedObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -41,12 +44,12 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -65,6 +68,8 @@ public class MediaService {
 	private final TeamMemberRepository teamMemberRepository;
 	private final TeamRepository teamRepository;
 	private final MemberRepository memberRepository;
+	private final MediaUploadCompletionService mediaUploadCompletionService;
+	private final MediaDeletionService mediaDeletionService;
 	private final Optional<S3Presigner> s3Presigner;
 	private final Optional<S3Client> s3Client;
 
@@ -83,7 +88,7 @@ public class MediaService {
 				.build());
 
 		List<Media> medias = request.getFiles().stream()
-				.map(file -> {
+				.<Media>map(file -> {
 					UUID publicId = UUID.randomUUID();
 					return Media.builder()
 							.publicId(publicId)
@@ -113,69 +118,38 @@ public class MediaService {
 		return new MediaUploadResponse(upload.getPublicId(), upload.getStatus(), items);
 	}
 
-	@Transactional(noRollbackFor = ExpiredUploadException.class)
+	/**
+	 * 업로드 완료. R2 {@code headObject}가 DB 트랜잭션·락을 잡지 않도록 트랜잭션을 두지 않고 세 단계로 나눈다:
+	 * 락 없는 사전 검증({@link MediaUploadCompletionService#prepare}) → {@code headObject}(트랜잭션 없음)
+	 * → 락을 잡고 전체 재검증 후 상태 전환({@link MediaUploadCompletionService#complete}).
+	 * 이 메서드 안에서 리포지토리를 직접 쓰지 않는다(트랜잭션 없는 구간의 EntityManager가 커넥션을 잡을 수 있음).
+	 */
 	public MediaUploadCompleteResponse completeUpload(Long memberId, UUID uploadId, MediaUploadCompleteRequest request) {
 		if (request.getItems() == null || request.getItems().isEmpty()) {
 			throw new BusinessException(ErrorCode.MEDIA011);
 		}
 
-		MediaUpload upload = mediaUploadRepository.findByPublicIdForUpdate(uploadId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA016));
-		if (!upload.getMemberId().equals(memberId)) {
-			throw new BusinessException(ErrorCode.MEDIA015);
+		CompletionPlan plan = mediaUploadCompletionService.prepare(memberId, uploadId, request.getItems());
+		Map<Long, UploadedObject> uploadedObjects = new HashMap<>();
+		for (UploadTarget target : plan.targets()) {
+			HeadObjectResponse object = headObject(target);
+			UploadedObject uploadedObject = new UploadedObject(object.contentType(), object.contentLength());
+			if (!uploadedObject.matches(target.contentType(), target.size())) {
+				throw new BusinessException(ErrorCode.MEDIA013);
+			}
+			uploadedObjects.put(target.mediaId(), uploadedObject);
 		}
-		if (upload.getStatus() != MediaUploadStatus.PENDING) {
-			throw new BusinessException(ErrorCode.MEDIA014);
-		}
-		if (upload.isExpired(LocalDateTime.now())) {
-			upload.expire();
-			throw new ExpiredUploadException();
-		}
-
-		List<Media> medias = mediaRepository.findByUploadIdForUpdate(upload.getId());
-		if (medias.size() != request.getItems().size()) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-
-		Map<UUID, MediaUploadCompleteRequest.Item> requestItemsByPublicId = request.getItems().stream()
-				.collect(Collectors.toMap(
-						MediaUploadCompleteRequest.Item::getMediaPublicId,
-						item -> item,
-						(left, right) -> {
-							throw new BusinessException(ErrorCode.MEDIA013);
-						}
-				));
-
-		List<MediaUploadCompleteResponse.Item> responseItems = medias.stream()
-				.map(media -> completeMedia(media, requestItemsByPublicId))
-				.toList();
-
-		upload.complete();
-		return new MediaUploadCompleteResponse(
-				upload.getPublicId(),
-				upload.getStatus(),
-				upload.getCompletedAt(),
-				responseItems
-		);
+		return mediaUploadCompletionService.complete(memberId, uploadId, request.getItems(), uploadedObjects);
 	}
 
-	@Transactional
+	/**
+	 * 사용하지 않은 미디어 삭제. 트랜잭션을 두지 않고 DB 전이 커밋({@link MediaDeletionService#markUnusedMediaDeleted})
+	 * → R2 삭제(트랜잭션 밖) 순서로 실행한다. R2 삭제가 실패해도 DB 전이는 이미 커밋됐으므로 로그만 남기고,
+	 * 오브젝트는 DELETED 하드 삭제 배치가 다시 지운다.
+	 */
 	public void deleteUnusedMedia(Long memberId, UUID mediaPublicId) {
-		Media media = mediaRepository.findByPublicIdForUpdate(mediaPublicId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA009));
-
-		if (media.getStatus() == MediaStatus.DELETED) {
-			throw new BusinessException(ErrorCode.MEDIA009);
-		}
-		if (!media.getMemberId().equals(memberId)) {
-			throw new BusinessException(ErrorCode.MEDIA008);
-		}
-		if (media.getStatus() == MediaStatus.USED) {
-			throw new BusinessException(ErrorCode.MEDIA007);
-		}
-
-		deleteObject(media, media.getStatus() == MediaStatus.PENDING);
-		media.updateStatus(MediaStatus.DELETED);
+		MediaDeleteTarget target = mediaDeletionService.markUnusedMediaDeleted(memberId, mediaPublicId);
+		deleteObjectOrDefer(target);
 	}
 
 	public List<Long> findExpiredPendingMediaIds(LocalDateTime cutoff, int limit) {
@@ -202,28 +176,29 @@ public class MediaService {
 		);
 	}
 
-	@Transactional
 	public boolean deleteExpiredPendingMedia(Long mediaId) {
 		return deleteExpiredMedia(mediaId, MediaStatus.PENDING);
 	}
 
-	@Transactional
 	public boolean deleteExpiredUploadedMedia(Long mediaId) {
 		return deleteExpiredMedia(mediaId, MediaStatus.UPLOADED);
 	}
 
-	@Transactional
+	/**
+	 * 보관 기간이 지난 DELETED 미디어 하드 삭제. 락 없이 상태를 확인하고({@code findById}는 리포지토리 자체의 짧은 읽기 트랜잭션)
+	 * → R2 삭제(트랜잭션 밖, 404는 성공. 그 밖의 실패는 MEDIA010을 던지고 행을 남겨 다음 배치에서 다시 시도)
+	 * → 락을 잡고 DELETED인지 다시 확인한 뒤 행을 삭제한다({@link MediaDeletionService#deleteRowIfStillDeleted}).
+	 */
 	public boolean deleteExpiredDeletedMedia(Long mediaId) {
-		Media media = mediaRepository.findByIdForUpdate(mediaId)
-				.orElse(null);
-
-		if (media == null || media.getStatus() != MediaStatus.DELETED) {
+		Optional<MediaDeleteTarget> target = mediaRepository.findById(mediaId)
+				.filter(media -> media.getStatus() == MediaStatus.DELETED)
+				.map(MediaDeleteTarget::from);
+		if (target.isEmpty()) {
 			return false;
 		}
 
-		deleteObject(media, true);
-		mediaRepository.delete(media);
-		return true;
+		deleteObject(target.get());
+		return mediaDeletionService.deleteRowIfStillDeleted(mediaId);
 	}
 
 	public List<Long> findExpiredMediaUploadIds(LocalDateTime now, int limit) {
@@ -246,38 +221,17 @@ public class MediaService {
 		return true;
 	}
 
-	private MediaUploadCompleteResponse.Item completeMedia(
-			Media media,
-			Map<UUID, MediaUploadCompleteRequest.Item> requestItemsByPublicId
-	) {
-		MediaUploadCompleteRequest.Item item = requestItemsByPublicId.get(media.getPublicId());
-		if (item == null) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-		validateCompletableMedia(media, item);
-		HeadObjectResponse object = headObject(media);
-		validateUploadedObject(media, item, object);
-
-		String imageUrl = buildPublicUrl(media);
-		media.completeUpload(imageUrl);
-		return new MediaUploadCompleteResponse.Item(
-				media.getPublicId(),
-				media.getStatus(),
-				MediaUploadStatus.COMPLETED,
-				imageUrl
-		);
-	}
-
+	/**
+	 * 만료 PENDING/UPLOADED 정리. DB 전이 커밋 → R2 삭제(트랜잭션 밖) 순서이며, R2 삭제가 실패해도
+	 * DB 전이는 끝났으므로 true를 돌려준다. 오브젝트는 DELETED 하드 삭제 배치가 다시 지운다.
+	 */
 	private boolean deleteExpiredMedia(Long mediaId, MediaStatus status) {
-		Media media = mediaRepository.findByIdForUpdate(mediaId)
-				.orElse(null);
-
-		if (media == null || media.getStatus() != status) {
+		Optional<MediaDeleteTarget> target = mediaDeletionService.markExpiredMediaDeleted(mediaId, status);
+		if (target.isEmpty()) {
 			return false;
 		}
 
-		deleteObject(media, status == MediaStatus.PENDING);
-		media.updateStatus(MediaStatus.DELETED);
+		deleteObjectOrDefer(target.get());
 		return true;
 	}
 
@@ -321,41 +275,23 @@ public class MediaService {
 		}
 	}
 
-	private void validateCompletableMedia(Media media, MediaUploadCompleteRequest.Item item) {
-		if (media.getStatus() != MediaStatus.PENDING) {
-			throw new BusinessException(ErrorCode.MEDIA014);
-		}
-		if (!media.getContentType().equals(item.getContentType()) || !media.getSize().equals(item.getSize())) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-	}
-
-	private HeadObjectResponse headObject(Media media) {
+	private HeadObjectResponse headObject(UploadTarget target) {
 		S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA017));
 		try {
 			HeadObjectRequest request = HeadObjectRequest.builder()
 					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
+					.key(target.key())
 					.build();
 			return client.headObject(request);
 		} catch (S3Exception e) {
-			log.error("Failed to verify uploaded object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+			log.error("Failed to verify uploaded object. mediaId={}, key={}", target.mediaId(), target.key(), e);
 			if (e.statusCode() == 404) {
 				throw new BusinessException(ErrorCode.MEDIA012, e);
 			}
 			throw new BusinessException(ErrorCode.MEDIA017, e);
 		} catch (Exception e) {
-			log.error("Failed to verify uploaded object. mediaId={}, key={}", media.getId(), media.getKey(), e);
+			log.error("Failed to verify uploaded object. mediaId={}, key={}", target.mediaId(), target.key(), e);
 			throw new BusinessException(ErrorCode.MEDIA017, e);
-		}
-	}
-
-	private void validateUploadedObject(Media media, MediaUploadCompleteRequest.Item item, HeadObjectResponse object) {
-		if (object.contentLength() == null || !object.contentLength().equals(item.getSize())) {
-			throw new BusinessException(ErrorCode.MEDIA013);
-		}
-		if (!media.getContentType().equals(object.contentType())) {
-			throw new BusinessException(ErrorCode.MEDIA013);
 		}
 	}
 
@@ -397,67 +333,57 @@ public class MediaService {
 		}
 	}
 
-	private void deleteObject(Media media, boolean ignoreNotFound) {
-		S3Client client = s3Client.orElseThrow(() -> new BusinessException(ErrorCode.MEDIA010));
-		if (!ignoreNotFound) {
-			headObjectForDelete(client, media);
+	/**
+	 * DB 전이가 이미 커밋된 뒤의 R2 삭제. 실패(s3Client 없음 포함)해도 예외를 던지지 않고 로그만 남긴다.
+	 * 남은 오브젝트는 DELETED 하드 삭제 배치({@link #deleteExpiredDeletedMedia})가 다시 지운다.
+	 */
+	private void deleteObjectOrDefer(MediaDeleteTarget target) {
+		try {
+			deleteObject(target);
+		} catch (BusinessException e) {
+			log.warn(
+					"Media object delete deferred to hard-delete batch. mediaId={}, mediaPublicId={}, key={}",
+					target.mediaId(), target.publicId(), target.key()
+			);
 		}
+	}
+
+	/** R2 오브젝트 삭제. 404는 이미 없는 것으로 보고 성공 처리하고, 그 밖의 실패나 s3Client 없음은 MEDIA010을 던진다. */
+	private void deleteObject(MediaDeleteTarget target) {
+		if (s3Client.isEmpty()) {
+			log.error(
+					"S3Client is not configured; cannot delete media object. mediaId={}, mediaPublicId={}, key={}",
+					target.mediaId(), target.publicId(), target.key()
+			);
+			throw new BusinessException(ErrorCode.MEDIA010);
+		}
+		S3Client client = s3Client.get();
 		try {
 			DeleteObjectRequest request = DeleteObjectRequest.builder()
 					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
+					.key(target.key())
 					.build();
 			client.deleteObject(request);
 		} catch (S3Exception e) {
-			if (ignoreNotFound && e.statusCode() == 404) {
+			if (e.statusCode() == 404) {
 				log.info(
 						"Media object already absent. mediaId={}, mediaPublicId={}, key={}",
-						media.getId(), media.getPublicId(), media.getKey()
+						target.mediaId(), target.publicId(), target.key()
 				);
 				return;
 			}
 			log.error(
 					"Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
+					target.mediaId(), target.publicId(), target.key(), e
 			);
 			throw new BusinessException(ErrorCode.MEDIA010, e);
 		} catch (Exception e) {
 			log.error(
 					"Failed to delete media object. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
+					target.mediaId(), target.publicId(), target.key(), e
 			);
 			throw new BusinessException(ErrorCode.MEDIA010, e);
 		}
-	}
-
-	private void headObjectForDelete(S3Client client, Media media) {
-		try {
-			HeadObjectRequest request = HeadObjectRequest.builder()
-					.bucket(r2Properties.getBucketName())
-					.key(media.getKey())
-					.build();
-			client.headObject(request);
-		} catch (S3Exception e) {
-			log.error(
-					"Failed to verify media object before delete. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
-			);
-			throw new BusinessException(ErrorCode.MEDIA010, e);
-		} catch (Exception e) {
-			log.error(
-					"Failed to verify media object before delete. mediaId={}, mediaPublicId={}, key={}",
-					media.getId(), media.getPublicId(), media.getKey(), e
-			);
-			throw new BusinessException(ErrorCode.MEDIA010, e);
-		}
-	}
-
-	private String buildPublicUrl(Media media) {
-		String publicBaseUrl = r2Properties.getPublicBaseUrl();
-		if (publicBaseUrl == null || publicBaseUrl.isBlank()) {
-			return media.getKey();
-		}
-		return publicBaseUrl.replaceAll("/+$", "") + "/" + media.getKey();
 	}
 
 	private String buildObjectKey(MediaPurpose purpose, UUID publicId, String contentType) {
@@ -486,11 +412,5 @@ public class MediaService {
 			return principal.memberId();
 		}
 		throw new BusinessException(ErrorCode.AUTH009);
-	}
-
-	private static class ExpiredUploadException extends BusinessException {
-		private ExpiredUploadException() {
-			super(ErrorCode.MEDIA014);
-		}
 	}
 }

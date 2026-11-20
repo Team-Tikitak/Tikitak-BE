@@ -48,9 +48,9 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			Place p1 = persist(place("서울 강남구"));
 			Place p2 = persist(place("경기 성남시 분당구"));
 
-			persist(feed(team, authorTm, p1, BASE_TIME));
-			persist(feed(team, authorTm, p1, BASE_TIME.plusHours(1)));
-			persist(feed(team, authorTm, p2, BASE_TIME.plusHours(2)));
+			persistWithCreatedAt(feed(team, authorTm, p1, BASE_TIME), BASE_TIME);
+			persistWithCreatedAt(feed(team, authorTm, p1, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
+			persistWithCreatedAt(feed(team, authorTm, p2, BASE_TIME.plusHours(2)), BASE_TIME.plusHours(2));
 
 			flushAndClear();
 
@@ -64,7 +64,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			Team team = persist(team("rg-cnt-noplace"));
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 
-			persist(feed(team, authorTm, null, BASE_TIME));
+			persistWithCreatedAt(feed(team, authorTm, null, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -85,7 +85,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 					.address("알 수 없는 주소")
 					.build());
 
-			persist(feed(team, authorTm, noRegion, BASE_TIME));
+			persistWithCreatedAt(feed(team, authorTm, noRegion, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -105,7 +105,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 					.content("삭제됨").meetingDate(IN_MAY)
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
-			persist(deleted);
+			persistWithCreatedAt(deleted, BASE_TIME);
 
 			flushAndClear();
 
@@ -120,7 +120,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place("서울 강남구"));
 
-			persist(feed(team, authorTm, place, FEBRUARY_TIME));
+			persistWithCreatedAt(feed(team, authorTm, place, FEBRUARY_TIME), FEBRUARY_TIME);
 
 			flushAndClear();
 
@@ -144,10 +144,10 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			Place gangnam = persist(place("서울 강남구"));
 			Place bundang = persist(place("경기 성남시 분당구"));
 
-			persist(feed(team, authorTm, gangnam, BASE_TIME));
-			persist(feed(team, authorTm, gangnam, BASE_TIME.plusHours(1)));
-			persist(feed(team, authorTm, gangnam, BASE_TIME.plusHours(2)));
-			persist(feed(team, authorTm, bundang, BASE_TIME));
+			persistWithCreatedAt(feed(team, authorTm, gangnam, BASE_TIME), BASE_TIME);
+			persistWithCreatedAt(feed(team, authorTm, gangnam, BASE_TIME.plusHours(1)), BASE_TIME.plusHours(1));
+			persistWithCreatedAt(feed(team, authorTm, gangnam, BASE_TIME.plusHours(2)), BASE_TIME.plusHours(2));
+			persistWithCreatedAt(feed(team, authorTm, bundang, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -170,11 +170,11 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 
 			Feed older = feed(team, authorTm, gangnam, BASE_TIME);
 			older.addImage(feedImage("https://older.jpg"));
-			persist(older);
+			persistWithCreatedAt(older, BASE_TIME);
 
 			Feed newer = feed(team, authorTm, gangnam, BASE_TIME.plusHours(1));
 			newer.addImage(feedImage("https://newer.jpg"));
-			persist(newer);
+			persistWithCreatedAt(newer, BASE_TIME.plusHours(1));
 
 			flushAndClear();
 
@@ -193,7 +193,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place("서울 강남구"));
 
-			persist(feed(team, authorTm, place, BASE_TIME));
+			persistWithCreatedAt(feed(team, authorTm, place, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -216,7 +216,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 					.longitude(new BigDecimal("126.9780"))
 					.address("알 수 없는 주소")
 					.build());
-			persist(feed(team, authorTm, noRegion, BASE_TIME));
+			persistWithCreatedAt(feed(team, authorTm, noRegion, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -236,7 +236,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 					.content("삭제됨").meetingDate(IN_MAY)
 					.createdAt(BASE_TIME).updatedAt(BASE_TIME).deletedAt(BASE_TIME)
 					.build();
-			persist(deleted);
+			persistWithCreatedAt(deleted, BASE_TIME);
 
 			flushAndClear();
 
@@ -252,7 +252,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember otherAuthor = persist(teamMember(author, otherTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place("서울 강남구"));
 
-			persist(feed(otherTeam, otherAuthor, place, BASE_TIME));
+			persistWithCreatedAt(feed(otherTeam, otherAuthor, place, BASE_TIME), BASE_TIME);
 
 			flushAndClear();
 
@@ -267,7 +267,7 @@ class FeedRegionRepositoryIntegrationTest extends IntegrationTest {
 			TeamMember authorTm = persist(teamMember(author, team, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
 			Place place = persist(place("서울 강남구"));
 
-			persist(feed(team, authorTm, place, FEBRUARY_TIME));
+			persistWithCreatedAt(feed(team, authorTm, place, FEBRUARY_TIME), FEBRUARY_TIME);
 
 			flushAndClear();
 

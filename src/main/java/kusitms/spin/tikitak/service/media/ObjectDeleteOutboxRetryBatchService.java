@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.media;
 
 import kusitms.spin.tikitak.domain.media.entity.ObjectDeleteOutbox;
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.media.ObjectDeleteOutboxRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,7 @@ public class ObjectDeleteOutboxRetryBatchService {
 	private final ObjectDeleteOutboxRepository objectDeleteOutboxRepository;
 	private final ObjectDeleteOutboxProcessor objectDeleteOutboxProcessor;
 
-	@Scheduled(cron = "0 */30 * * * *")
+	@Scheduled(cron = "0 */30 * * * *", zone = KstDateProvider.KST_ZONE_ID)
 	public void retryObjectDeletes() {
 		List<Long> targetIds = objectDeleteOutboxRepository.findRetryTargetIds(
 				PageRequest.of(0, RETRY_BATCH_SIZE)

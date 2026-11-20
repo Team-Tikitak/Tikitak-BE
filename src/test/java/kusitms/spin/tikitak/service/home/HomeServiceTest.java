@@ -8,6 +8,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.config.R2Properties;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
 import kusitms.spin.tikitak.repository.feed.projection.RegionRow;
@@ -22,8 +23,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,12 +39,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class HomeServiceTest extends UnitTest {
 
 	private static final Long MEMBER_ID = 1L;
 	private static final Long TEAM_ID = 10L;
+	// KST 2026-12-01 00:30. 시스템 zone은 UTC로 고정해 JVM 기본 타임존에 의존하지 않는다.
+	private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-11-30T15:30:00Z"), ZoneOffset.UTC);
+	private static final int EXPECTED_MONTH = 12;
+	// KST 2026-12-01 00:00 / 2027-01-01 00:00을 UTC 벽시계로 바꾼 값
+	private static final LocalDateTime MONTH_START = LocalDateTime.of(2026, 11, 30, 15, 0);
+	private static final LocalDateTime NEXT_MONTH_START = LocalDateTime.of(2026, 12, 31, 15, 0);
 
 	@Mock
 	private FeedTagRepository feedTagRepository;
@@ -74,7 +84,8 @@ class HomeServiceTest extends UnitTest {
 				feedRepository,
 				defaultProfileImageResolver,
 				r2Properties,
-				disabledImageUrlResolver()
+				disabledImageUrlResolver(),
+				new KstDateProvider(FIXED_CLOCK, ZoneOffset.UTC)
 		);
 		team = activeTeam(TEAM_ID);
 		requester = activeMember(100L, activeMember(MEMBER_ID), team);
@@ -98,7 +109,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.BestAttendanceResponse result = homeService.getBestAttendance(MEMBER_ID, TEAM_ID);
 
-		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
 		assertThat(result.getMembers()).hasSize(3);
 		assertThat(result.getMembers().get(0).getRank()).isEqualTo(1);
 		assertThat(result.getMembers().get(0).getTagCount()).isEqualTo(5L);
@@ -159,7 +170,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.AllTaggedResponse result = homeService.getAllTaggedFeeds(MEMBER_ID, TEAM_ID);
 
-		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
 		assertThat(result.getFeeds()).hasSize(3);
 		assertThat(result.getFeeds().get(0).getFeedId()).isEqualTo(301L);
 	}
@@ -189,7 +200,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.CombinationResponse result = homeService.getCombination(MEMBER_ID, TEAM_ID);
 
-		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
 		assertThat(result.getCombination()).hasSize(2);
 		assertThat(result.getCombination().get(0).getTeamMemberId()).isEqualTo(101L);
 		assertThat(result.getFeeds()).hasSize(3);
@@ -220,7 +231,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
-		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
 		assertThat(result.getRegions()).hasSize(2);
 		assertThat(result.getRegions().get(0).getRegion()).isEqualTo("서울 강남구");
 		assertThat(result.getRegions().get(0).getFeedCount()).isEqualTo(3L);
@@ -239,7 +250,7 @@ class HomeServiceTest extends UnitTest {
 
 		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
 
-		assertThat(result.getMonth()).isEqualTo(YearMonth.now().getMonthValue());
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
 		assertThat(result.getRegions()).isEmpty();
 	}
 
@@ -254,6 +265,62 @@ class HomeServiceTest extends UnitTest {
 		assertThatThrownBy(() -> homeService.getRegions(MEMBER_ID, TEAM_ID))
 				.isInstanceOfSatisfying(BusinessException.class, e ->
 						assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TEAM008));
+	}
+
+	@Test
+	@DisplayName("시스템 zone이 UTC여도 KST 12월 1일 00:30이면 지역 집계는 KST 12월 범위로 조회하고 month는 12다")
+	void getRegionsQueriesKstMonthRangeAtMonthBoundary() {
+		stubRequester();
+		when(feedRepository.countActiveFeedsWithRegion(any(), any(), any())).thenReturn(5L);
+		when(feedRepository.findRegionSummaries(any(), any(), any())).thenReturn(List.of());
+
+		HomeResponseDTO.RegionResponse result = homeService.getRegions(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
+		verify(feedRepository).countActiveFeedsWithRegion(TEAM_ID, MONTH_START, NEXT_MONTH_START);
+		verify(feedRepository).findRegionSummaries(TEAM_ID, MONTH_START, NEXT_MONTH_START);
+	}
+
+	@Test
+	@DisplayName("시스템 zone이 UTC여도 KST 12월 1일 00:30이면 출석왕은 KST 12월 범위로 조회하고 month는 12다")
+	void getBestAttendanceQueriesKstMonthRangeAtMonthBoundary() {
+		stubRequester();
+
+		HomeResponseDTO.BestAttendanceResponse result = homeService.getBestAttendance(MEMBER_ID, TEAM_ID);
+
+		assertThat(result.getMonth()).isEqualTo(EXPECTED_MONTH);
+		verify(feedTagRepository).findTopTaggedMembersByTeamAndMonth(
+				TEAM_ID, MONTH_START, NEXT_MONTH_START, TeamMemberStatus.ACTIVE);
+	}
+
+	@Test
+	@DisplayName("KST 12월 1일 00:30이면 모두의 픽 응답 month는 12다")
+	void getEveryonePickReturnsKstMonth() {
+		when(feedService.getEveryonePickItems(MEMBER_ID, TEAM_ID)).thenReturn(List.of());
+
+		assertThat(homeService.getEveryonePick(MEMBER_ID, TEAM_ID).getMonth()).isEqualTo(EXPECTED_MONTH);
+	}
+
+	@Test
+	@DisplayName("KST 12월 1일 00:30이면 모두의 픽 썸네일 응답 month는 썸네일 유무와 관계없이 12다")
+	void getEveryonePickThumbnailReturnsKstMonth() {
+		when(feedService.getEveryonePickThumbnailItem(MEMBER_ID, TEAM_ID))
+				.thenReturn(Optional.empty())
+				.thenReturn(Optional.of(FeedResponseDTO.FeedThumbnailItemDTO.builder()
+						.feedId(301L)
+						.thumbnailImageUrl("https://img.jpg")
+						.build()));
+
+		assertThat(homeService.getEveryonePickThumbnail(MEMBER_ID, TEAM_ID).getMonth()).isEqualTo(EXPECTED_MONTH);
+		assertThat(homeService.getEveryonePickThumbnail(MEMBER_ID, TEAM_ID).getMonth()).isEqualTo(EXPECTED_MONTH);
+	}
+
+	@Test
+	@DisplayName("KST 12월 1일 00:30이면 추천 장소 응답 month는 12다")
+	void getRecommendedPlacesReturnsKstMonth() {
+		stubRequester();
+
+		assertThat(homeService.getRecommendedPlaces(MEMBER_ID, TEAM_ID).getMonth()).isEqualTo(EXPECTED_MONTH);
 	}
 
 	// --- helpers ---
@@ -299,12 +366,8 @@ class HomeServiceTest extends UnitTest {
 	}
 
 	private void stubTagRows(List<Object[]> rows) {
-		YearMonth currentMonth = YearMonth.now();
-		LocalDateTime start = currentMonth.atDay(1).atStartOfDay();
-		LocalDateTime end = currentMonth.plusMonths(1).atDay(1).atStartOfDay();
-
 		when(feedTagRepository.findTopTaggedMembersByTeamAndMonth(
-				eq(TEAM_ID), eq(start), eq(end), eq(TeamMemberStatus.ACTIVE)
+				eq(TEAM_ID), eq(MONTH_START), eq(NEXT_MONTH_START), eq(TeamMemberStatus.ACTIVE)
 		)).thenReturn(rows);
 	}
 

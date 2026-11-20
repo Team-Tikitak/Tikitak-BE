@@ -10,18 +10,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import kusitms.spin.tikitak.domain.common.BaseCreatedTimeEntity;
 import kusitms.spin.tikitak.domain.feed.enums.FeedReactionType;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
+import lombok.experimental.SuperBuilder;
 
 @Entity
 @Table(
@@ -32,10 +29,9 @@ import java.time.LocalDateTime;
 		)
 )
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class FeedReaction {
+public class FeedReaction extends BaseCreatedTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -53,21 +49,11 @@ public class FeedReaction {
 	@Column(name = "reaction_type", nullable = false, length = 50)
 	private FeedReactionType reactionType;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
 	void setFeed(Feed feed) {
 		this.feed = feed;
 	}
 
 	public void updateReactionType(FeedReactionType reactionType) {
 		this.reactionType = reactionType;
-	}
-
-	@PrePersist
-	protected void onCreate() {
-		if (createdAt == null) {
-			createdAt = LocalDateTime.now();
-		}
 	}
 }

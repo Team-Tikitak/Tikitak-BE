@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.service.team;
 
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
+import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.member.MemberRepository;
 import kusitms.spin.tikitak.repository.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ public class TeamInactiveBatchService {
 	private final TeamRepository teamRepository;
 	private final MemberRepository memberRepository;
 
-	@Scheduled(cron = "0 0 4 * * *")
+	@Scheduled(cron = "0 0 4 * * *", zone = KstDateProvider.KST_ZONE_ID)
 	@Transactional
 	public void deleteInactiveTeams() {
 		LocalDateTime cutoff = LocalDateTime.now().minusDays(7);

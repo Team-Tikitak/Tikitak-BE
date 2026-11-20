@@ -1,16 +1,17 @@
 package kusitms.spin.tikitak.domain.feed.entity;
 
 import jakarta.persistence.*;
+import kusitms.spin.tikitak.domain.common.BaseTimeEntity;
 import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.domain.place.entity.Place;
 import kusitms.spin.tikitak.domain.question.entity.Question;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,10 +23,9 @@ import java.util.stream.Collectors;
 @Entity
 @Table(name = "feed")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class Feed {
+public class Feed extends BaseTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -56,12 +56,6 @@ public class Feed {
 
 	@Column(length = 100, unique = true)
 	private String dailyAnswerActiveKey;
-
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
 
 	private LocalDateTime deletedAt;
 
@@ -102,12 +96,12 @@ public class Feed {
 	public void updateGeneralFeed(String content, Place place) {
 		this.content = content;
 		this.place = place;
-		this.updatedAt = LocalDateTime.now();
+		touch();
 	}
 
 	public void updateDailyAnswerContent(String content) {
 		this.content = content;
-		this.updatedAt = LocalDateTime.now();
+		touch();
 	}
 
 	public void setDailyAnswer(Question question, LocalDate questionAnswerDate, String dailyAnswerActiveKey) {
@@ -119,13 +113,13 @@ public class Feed {
 	public void replaceImages(List<FeedImage> images) {
 		this.images.clear();
 		images.forEach(this::addImage);
-		this.updatedAt = LocalDateTime.now();
+		touch();
 	}
 
 	public void replaceTags(List<FeedTag> tags) {
 		this.tags.clear();
 		tags.forEach(this::addTag);
-		this.updatedAt = LocalDateTime.now();
+		touch();
 	}
 
 	public void syncTags(List<TeamMember> teamMembers) {
@@ -141,29 +135,13 @@ public class Feed {
 				.filter(teamMember -> !currentTeamMemberIds.contains(teamMember.getId()))
 				.map(teamMember -> FeedTag.builder().teamMember(teamMember).build())
 				.forEach(this::addTag);
-		this.updatedAt = LocalDateTime.now();
+		touch();
 	}
 
 	public void delete() {
 		LocalDateTime now = LocalDateTime.now();
 		this.deletedAt = now;
 		this.dailyAnswerActiveKey = null;
-		this.updatedAt = now;
-	}
-
-	@PrePersist
-	protected void onCreate() {
-		LocalDateTime now = LocalDateTime.now();
-		if (createdAt == null) {
-			createdAt = now;
-		}
-		if (updatedAt == null) {
-			updatedAt = now;
-		}
-	}
-
-	@PreUpdate
-	protected void onUpdate() {
-		updatedAt = LocalDateTime.now();
+		touch();
 	}
 }

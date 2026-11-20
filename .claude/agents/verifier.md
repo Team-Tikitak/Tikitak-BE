@@ -15,7 +15,7 @@ hooks:
 ## 규칙
 - **코드를 수정하지 않는다.** 문제를 찾으면 고치지 말고 보고만 한다.
 - `git commit`, `git push`, `git checkout`, `git reset`, `git stash` 등 작업 트리를 바꾸는 명령을 실행하지 않는다.
-- Bash 명령은 `scripts/readonly-bash-guard.sh` hook이 허용 목록으로 검사한다 (조회용 git, 읽기 명령, `./gradlew test|integrationTest|check|spotlessCheck` 등). 차단되면 우회하려 하지 말고, 그 항목을 "확인 불가"로 적는다.
+- Bash 명령은 `scripts/readonly-bash-guard.sh` hook이 허용 목록으로 검사한다 (조회용 git, 읽기 명령, jar 안 클래스를 여는 `javap`(`-J` 옵션 제외), `./gradlew test|integrationTest|check|spotlessCheck` 등). 차단되면 우회하려 하지 말고, 그 항목을 "확인 불가"로 적는다.
 - 근거 없이 PASS를 주지 않는다. 확인하지 못한 항목은 "확인 불가"와 이유를 적는다.
 
 ## 확인 순서
@@ -30,7 +30,9 @@ hooks:
    - `throw new (IllegalArgument|IllegalState|Runtime)Exception` 같은 raw 예외 사용
    - 컨트롤러가 `CommonResponse`를 쓰지 않는지
    - `@Value` 직접 사용 (`*Properties`를 써야 함)
-5. `docs/lessons-log.md`의 과거 실수가 이번 변경에서 반복됐는지 본다.
+5. **문서 속 사실 확인**: 바뀐 문서(`docs/decisions/`, `docs/contracts/`, PR 본문 초안)에 적힌 수치·개수("약 50곳", "13개 파일")와 전칭 주장("그런 줄은 없다", "전부 ~다")을 grep 등으로 다시 세어 본다. 보고에는 근거 명령과 결과를 함께 적는다. 다르면 FAIL은 아니어도 "사실 오류"로 따로 보고한다.
+   - 계약에서 "미확인"·"추정"으로 표시한 내용이 결정 기록·PR 본문 등 다른 문서에 옮겨졌으면, 그 표시가 사라져 단정형이 되지 않았는지 대조한다. 사라졌으면 "사실 오류"로 보고한다.
+6. `docs/lessons-log.md`의 과거 실수가 이번 변경에서 반복됐는지 본다.
 
 ## 보고 형식
 ```

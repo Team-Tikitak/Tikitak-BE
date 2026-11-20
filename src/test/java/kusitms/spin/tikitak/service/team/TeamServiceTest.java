@@ -41,6 +41,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeOwner
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,8 +80,8 @@ class TeamServiceTest extends UnitTest {
 				memberRepository,
 				teamMemberRepository,
 				teamInviteRepository,
-				mediaRepository,
-				defaultProfileImageResolver
+				defaultProfileImageResolver,
+				new TeamProfileMediaResolver(mediaRepository)
 		);
 	}
 
@@ -159,6 +160,50 @@ class TeamServiceTest extends UnitTest {
 		verify(teamMemberRepository).save(captor.capture());
 		assertThat(captor.getValue().getProfileImgUrl()).isEqualTo(profileMedia.getUrl());
 		assertThat(captor.getValue().getProfileMedia()).isEqualTo(profileMedia);
+	}
+
+	@Test
+	@DisplayName("팀 생성 시 프로필 media가 없으면 MEDIA018 예외가 발생하고 팀 멤버·초대 링크를 저장하지 않는다")
+	void createTeamThrowsWhenProfileMediaNotFound() {
+		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		UUID mediaPublicId = UUID.randomUUID();
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", mediaPublicId, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(mediaRepository.findByPublicIdForUpdate(mediaPublicId)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> teamService.createTeam(MEMBER_ID, request))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEDIA018));
+
+		verify(mediaRepository).findByPublicIdForUpdate(mediaPublicId);
+		verify(teamMemberRepository, never()).save(any());
+		verify(teamInviteRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("팀 생성 시 다른 회원 소유 프로필 media면 MEDIA018 예외가 발생하고 media 상태와 저장이 바뀌지 않는다")
+	void createTeamThrowsWhenProfileMediaOwnedByOtherMember() {
+		Member member = activeMemberWithCharacterType(MEMBER_ID, ProfileCharacterType.TAK_LEADER);
+		UUID mediaPublicId = UUID.randomUUID();
+		Media otherMemberMedia =
+				media(1L, OTHER_MEMBER_ID, mediaPublicId, MediaPurpose.PROFILE_IMAGE, MediaStatus.UPLOADED);
+		TeamRequestDTO.TeamCreateRequestDTO request =
+				new TeamRequestDTO.TeamCreateRequestDTO("team", "intro", mediaPublicId, "nickname");
+
+		when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+		when(teamRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		when(mediaRepository.findByPublicIdForUpdate(mediaPublicId)).thenReturn(Optional.of(otherMemberMedia));
+
+		assertThatThrownBy(() -> teamService.createTeam(MEMBER_ID, request))
+				.isInstanceOf(BusinessException.class)
+				.satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEDIA018));
+
+		assertThat(otherMemberMedia.getStatus()).isEqualTo(MediaStatus.UPLOADED);
+		verify(teamMemberRepository, never()).save(any());
+		verify(teamInviteRepository, never()).save(any());
 	}
 
 	@Test

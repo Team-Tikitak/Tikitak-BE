@@ -19,6 +19,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 - 테스트는 `support`의 베이스 클래스(`UnitTest`, `ApiTest`, `IntegrationTest`)를 사용한다. 버그 수정이면 그 버그를 재현하는 회귀 테스트를 먼저 쓰고 실패를 확인한 뒤 고친다.
 - **`git commit`, `git push`를 하지 않는다.** 커밋은 사람이 diff를 보고 승인한 뒤 오케스트레이터가 한다.
 - 작업과 무관한 미커밋 파일(`git status`에 보이는 것)은 건드리지 않는다.
+- 테스트가 실제로 잡아내는지 보려고 코드를 임시로 바꾸는 실험은, 미커밋 파일이면 **먼저 백업**(scratchpad 등 작업 트리 밖)한다. 되돌릴 때는 `git checkout --`/`git restore`를 쓰지 않고 백업을 복사한 뒤 `cmp`로 백업과 같은지 확인한다. 이 명령들은 커밋된 상태로 돌아가서 미커밋 작업까지 지운다.
 
 ## 끝날 때
 `./gradlew test`를 돌리고, DB/쿼리/마이그레이션을 건드렸다면 `./gradlew integrationTest`도 돌린다 (Docker 필요. 안 되면 안 됐다고 적는다).

@@ -8,14 +8,14 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import kusitms.spin.tikitak.domain.common.BaseTimeEntity;
 import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.member.enums.SocialProvider;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -24,10 +24,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "member")
 @Getter
-@Builder
+@SuperBuilder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
-public class Member {
+public class Member extends BaseTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -73,12 +72,6 @@ public class Member {
 
 	private Long activeTeamId;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
-
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
-
 	private LocalDateTime deletedAt;
 
 	public static Member createSocialMember(
@@ -89,7 +82,6 @@ public class Member {
 			SocialProvider socialProvider,
 			String providerId
 	) {
-		LocalDateTime now = LocalDateTime.now();
 		return Member.builder()
 				.email(email)
 				.name(name)
@@ -101,8 +93,6 @@ public class Member {
 				.termsAgreed(false)
 				.privacyAgreed(false)
 				.onboardingCompleted(false)
-				.createdAt(now)
-				.updatedAt(now)
 				.build();
 	}
 
@@ -110,7 +100,6 @@ public class Member {
 		this.email = email;
 		this.name = name;
 		this.profileImgUrl = profileImgUrl;
-		this.updatedAt = LocalDateTime.now();
 	}
 
 	public void withdraw() {
@@ -119,22 +108,18 @@ public class Member {
 		this.activeTeamId = null;
 		this.providerId = "WITHDRAWN:" + this.id + ":" + UUID.randomUUID();
 		this.deletedAt = now;
-		this.updatedAt = now;
 	}
 
 	public void clearProfileImage() {
 		this.profileImgUrl = null;
-		this.updatedAt = LocalDateTime.now();
 	}
 
 	public void changeActiveTeam(Long teamId) {
 		this.activeTeamId = teamId;
-		this.updatedAt = LocalDateTime.now();
 	}
 
 	public void clearActiveTeam() {
 		this.activeTeamId = null;
-		this.updatedAt = LocalDateTime.now();
 	}
 
 	public void agreeRequiredTerms() {
@@ -143,12 +128,10 @@ public class Member {
 		if (this.termsAgreedAt == null) {
 			this.termsAgreedAt = LocalDateTime.now();
 		}
-		this.updatedAt = LocalDateTime.now();
 	}
 
 	public void completeOnboarding(ProfileCharacterType profileCharacterType) {
 		this.profileCharacterType = Objects.requireNonNull(profileCharacterType, "profileCharacterType must not be null");
 		this.onboardingCompleted = true;
-		this.updatedAt = LocalDateTime.now();
 	}
 }

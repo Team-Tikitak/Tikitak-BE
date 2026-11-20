@@ -18,19 +18,30 @@ import java.util.Base64;
 @ConditionalOnExpression("!'${firebase.credentials-base64:}'.isEmpty()")
 public class FirebaseConfig {
 
+	private static final int CONNECT_TIMEOUT_MILLIS = 3_000;
+	private static final int READ_TIMEOUT_MILLIS = 10_000;
+	private static final int WRITE_TIMEOUT_MILLIS = 10_000;
+
 	private final FirebaseProperties firebaseProperties;
 
 	@Bean
 	public FirebaseApp firebaseApp() throws IOException {
 		byte[] decoded = Base64.getDecoder().decode(firebaseProperties.getCredentialsBase64());
-		FirebaseOptions options = FirebaseOptions.builder()
-				.setCredentials(GoogleCredentials.fromStream(new ByteArrayInputStream(decoded)))
-				.build();
+		FirebaseOptions options = buildOptions(GoogleCredentials.fromStream(new ByteArrayInputStream(decoded)));
 
 		return FirebaseApp.getApps().stream()
 				.filter(app -> FirebaseApp.DEFAULT_APP_NAME.equals(app.getName()))
 				.findFirst()
 				.orElseGet(() -> FirebaseApp.initializeApp(options));
+	}
+
+	static FirebaseOptions buildOptions(GoogleCredentials credentials) {
+		return FirebaseOptions.builder()
+				.setCredentials(credentials)
+				.setConnectTimeout(CONNECT_TIMEOUT_MILLIS)
+				.setReadTimeout(READ_TIMEOUT_MILLIS)
+				.setWriteTimeout(WRITE_TIMEOUT_MILLIS)
+				.build();
 	}
 
 	@Bean
