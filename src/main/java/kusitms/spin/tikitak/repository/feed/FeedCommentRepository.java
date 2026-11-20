@@ -13,7 +13,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface FeedCommentRepository extends JpaRepository<FeedComment, Long> {
+public interface FeedCommentRepository extends JpaRepository<FeedComment, Long>, FeedCommentRepositoryCustom {
 
 	long countByFeedIdAndDeletedFalse(Long feedId);
 
