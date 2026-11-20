@@ -3,6 +3,7 @@ package kusitms.spin.tikitak.service.feed;
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.feed.entity.FeedImage;
 import kusitms.spin.tikitak.domain.feed.entity.FeedTag;
+import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
@@ -17,6 +18,7 @@ import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.global.time.KstDateProvider;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
+import kusitms.spin.tikitak.repository.feed.FeedListCondition;
 import kusitms.spin.tikitak.repository.feed.FeedReactionRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
 import kusitms.spin.tikitak.repository.feed.FeedTagRepository;
@@ -31,13 +33,14 @@ import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.springframework.data.domain.Pageable;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,6 +59,7 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMembe
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,6 +70,7 @@ class FeedServiceTest extends UnitTest {
 	private static final Long MEMBER_ID = 1L;
 	private static final Long TEAM_ID = 10L;
 	private static final Long TEAM_MEMBER_ID = 100L;
+	private static final int DEFAULT_LIST_LIMIT = 21;
 	private static final Long MEDIA_ID = 1000L;
 	private static final Long NEXT_MEDIA_ID = 1001L;
 	private static final Long NEW_MEDIA_ID = 1002L;
@@ -467,29 +472,20 @@ class FeedServiceTest extends UnitTest {
 				activeMember(101L, activeMember(2L), team),
 				activeMember(102L, activeMember(3L), team)
 		));
-		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
-				eq(TEAM_ID),
-				eq(null),
-				eq(null),
-				eq(null),
-				eq(taggedTeamMemberIds),
-				eq(2L),
-				any(Pageable.class)
-		)).thenReturn(List.of());
+		when(feedRepository.findActivePage(any(FeedListCondition.class), anyInt())).thenReturn(List.of());
 
 		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
 				MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds);
 
 		assertThat(response.getItems()).isEmpty();
-		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
-				eq(TEAM_ID),
-				eq(null),
-				eq(null),
-				eq(null),
-				eq(taggedTeamMemberIds),
-				eq(2L),
-				any(Pageable.class)
-		);
+		FeedListCondition condition = captureFindActivePageCondition(DEFAULT_LIST_LIMIT);
+		assertThat(condition.teamId()).isEqualTo(TEAM_ID);
+		assertThat(condition.placeId()).isNull();
+		assertThat(condition.region()).isNull();
+		assertThat(condition.feedType()).isNull();
+		assertThat(condition.taggedTeamMemberIds()).containsExactly(101L, 102L);
+		assertThat(condition.cursorCreatedAt()).isNull();
+		assertThat(condition.cursorFeedId()).isNull();
 	}
 
 	@Test
@@ -503,27 +499,17 @@ class FeedServiceTest extends UnitTest {
 				eq(TeamMemberStatus.ACTIVE),
 				eq(TeamStatus.ACTIVE)
 		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
-		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
-				eq(TEAM_ID),
-				eq(null),
-				eq("서울 강남구"),
-				eq(null),
-				eq(taggedTeamMemberIds),
-				eq(1L),
-				any(Pageable.class)
-		)).thenReturn(List.of());
+		when(feedRepository.findActivePage(any(FeedListCondition.class), anyInt())).thenReturn(List.of());
 
 		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, null, "서울 강남구", null, taggedTeamMemberIds);
 
-		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
-				eq(TEAM_ID),
-				eq(null),
-				eq("서울 강남구"),
-				eq(null),
-				eq(taggedTeamMemberIds),
-				eq(1L),
-				any(Pageable.class)
-		);
+		FeedListCondition condition = captureFindActivePageCondition(DEFAULT_LIST_LIMIT);
+		assertThat(condition.teamId()).isEqualTo(TEAM_ID);
+		assertThat(condition.placeId()).isNull();
+		assertThat(condition.region()).isEqualTo("서울 강남구");
+		assertThat(condition.feedType()).isNull();
+		assertThat(condition.taggedTeamMemberIds()).containsExactly(101L);
+		assertThat(condition.hasCursor()).isFalse();
 	}
 
 	@Test
@@ -537,27 +523,88 @@ class FeedServiceTest extends UnitTest {
 				eq(TeamMemberStatus.ACTIVE),
 				eq(TeamStatus.ACTIVE)
 		)).thenReturn(List.of(activeMember(101L, activeMember(2L), team)));
-		when(feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
-				eq(TEAM_ID),
-				eq("kakao_12345"),
-				eq(null),
-				eq(null),
-				eq(taggedTeamMemberIds),
-				eq(1L),
-				any(Pageable.class)
-		)).thenReturn(List.of());
+		when(feedRepository.findActivePage(any(FeedListCondition.class), anyInt())).thenReturn(List.of());
 
 		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, "kakao_12345", "서울 강남구", null, taggedTeamMemberIds);
 
-		verify(feedRepository).findActiveFirstPageByTaggedTeamMemberIds(
+		FeedListCondition condition = captureFindActivePageCondition(DEFAULT_LIST_LIMIT);
+		assertThat(condition.teamId()).isEqualTo(TEAM_ID);
+		assertThat(condition.placeId()).isEqualTo("kakao_12345");
+		assertThat(condition.region()).isNull();
+		assertThat(condition.feedType()).isNull();
+		assertThat(condition.taggedTeamMemberIds()).containsExactly(101L);
+		assertThat(condition.hasCursor()).isFalse();
+
+		ArgumentCaptor<FeedListCondition> countCaptor = ArgumentCaptor.forClass(FeedListCondition.class);
+		verify(feedRepository).countActive(countCaptor.capture());
+		assertThat(countCaptor.getValue()).isEqualTo(new FeedListCondition(
+				TEAM_ID, "kakao_12345", null, null, List.of(101L), null, null));
+	}
+
+	@Test
+	@DisplayName("태그 필터 ID는 null과 중복을 제거한 뒤 조회 조건에 넣는다")
+	void listFeedsDeduplicatesTaggedTeamMemberIdsInCondition() {
+		List<Long> taggedTeamMemberIds = Arrays.asList(101L, null, 102L, 101L);
+		stubActiveAuthor();
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
 				eq(TEAM_ID),
-				eq("kakao_12345"),
-				eq(null),
-				eq(null),
-				eq(taggedTeamMemberIds),
-				eq(1L),
-				any(Pageable.class)
-		);
+				eq(List.of(101L, 102L)),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(List.of(
+				activeMember(101L, activeMember(2L), team),
+				activeMember(102L, activeMember(3L), team)
+		));
+		when(feedRepository.findActivePage(any(FeedListCondition.class), anyInt())).thenReturn(List.of());
+
+		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, null, null, null, taggedTeamMemberIds);
+
+		FeedListCondition expected = new FeedListCondition(TEAM_ID, null, null, null, List.of(101L, 102L), null, null);
+		assertThat(captureFindActivePageCondition(DEFAULT_LIST_LIMIT)).isEqualTo(expected);
+
+		ArgumentCaptor<FeedListCondition> countCaptor = ArgumentCaptor.forClass(FeedListCondition.class);
+		verify(feedRepository).countActive(countCaptor.capture());
+		assertThat(countCaptor.getValue()).isEqualTo(expected);
+	}
+
+	@Test
+	@DisplayName("커서·size·type을 조회 조건으로 넘기고, count는 커서 없이 같은 조건으로 조회한다")
+	void listFeedsPassesCursorSizeAndTypeToCondition() {
+		LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 5, 1, 10, 15, 30);
+		stubActiveAuthor();
+		when(feedRepository.findActivePage(any(FeedListCondition.class), anyInt())).thenReturn(List.of());
+		when(feedRepository.countActive(any(FeedListCondition.class))).thenReturn(7L);
+
+		FeedResponseDTO.FeedListResponseDTO response = feedService.listFeeds(
+				MEMBER_ID, TEAM_ID, cursorCreatedAt + "_55", 5, null, "서울 강남구", "general", null);
+
+		FeedListCondition condition = captureFindActivePageCondition(6);
+		assertThat(condition.teamId()).isEqualTo(TEAM_ID);
+		assertThat(condition.placeId()).isNull();
+		assertThat(condition.region()).isEqualTo("서울 강남구");
+		assertThat(condition.feedType()).isEqualTo(FeedType.GENERAL);
+		assertThat(condition.taggedTeamMemberIds()).isEmpty();
+		assertThat(condition.cursorCreatedAt()).isEqualTo(cursorCreatedAt);
+		assertThat(condition.cursorFeedId()).isEqualTo(55L);
+
+		ArgumentCaptor<FeedListCondition> countCaptor = ArgumentCaptor.forClass(FeedListCondition.class);
+		verify(feedRepository).countActive(countCaptor.capture());
+		assertThat(countCaptor.getValue()).isEqualTo(new FeedListCondition(
+				TEAM_ID, null, "서울 강남구", FeedType.GENERAL, List.of(), null, null));
+		assertThat(response.getPageInfo().getTotalCount()).isEqualTo(7L);
+		assertThat(response.getPageInfo().getSize()).isEqualTo(5);
+	}
+
+	@Test
+	@DisplayName("type이 DAILY_QUESTION이면 조회 조건의 feedType이 DAILY_QUESTION이다")
+	void listFeedsMapsDailyQuestionTypeToCondition() {
+		stubActiveAuthor();
+		when(feedRepository.findActivePage(any(FeedListCondition.class), anyInt())).thenReturn(List.of());
+
+		feedService.listFeeds(MEMBER_ID, TEAM_ID, null, null, null, null, "DAILY_QUESTION", null);
+
+		assertThat(captureFindActivePageCondition(DEFAULT_LIST_LIMIT)).isEqualTo(new FeedListCondition(
+				TEAM_ID, null, null, FeedType.DAILY_QUESTION, List.of(), null, null));
 	}
 
 	@Test
@@ -629,8 +676,10 @@ class FeedServiceTest extends UnitTest {
 		Feed feed = generalFeedWithImages(media);
 
 		stubActiveAuthor();
-		when(feedRepository.findActiveFirstPage(eq(TEAM_ID), eq(null), any(Pageable.class)))
-				.thenReturn(List.of(feed));
+		when(feedRepository.findActivePage(
+				eq(new FeedListCondition(TEAM_ID, null, null, null, List.of(), null, null)),
+				eq(DEFAULT_LIST_LIMIT)
+		)).thenReturn(List.of(feed));
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
@@ -660,8 +709,10 @@ class FeedServiceTest extends UnitTest {
 		feed.addTag(FeedTag.builder().teamMember(taggedWithoutImg).build());
 
 		stubActiveAuthor();
-		when(feedRepository.findActiveFirstPage(eq(TEAM_ID), eq(null), any(Pageable.class)))
-				.thenReturn(List.of(feed));
+		when(feedRepository.findActivePage(
+				eq(new FeedListCondition(TEAM_ID, null, null, null, List.of(), null, null)),
+				eq(DEFAULT_LIST_LIMIT)
+		)).thenReturn(List.of(feed));
 		when(feedCommentRepository.countByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.countByReactionTypeByFeedIds(List.of(FEED_ID))).thenReturn(List.of());
 		when(feedReactionRepository.findMyReactions(eq(List.of(FEED_ID)), eq(TEAM_MEMBER_ID))).thenReturn(List.of());
@@ -714,6 +765,12 @@ class FeedServiceTest extends UnitTest {
 
 		assertThat(result.combination()).hasSize(1);
 		assertThat(result.combination().get(0).getProfileImageUrl()).isEqualTo(defaultImgUrl);
+	}
+
+	private FeedListCondition captureFindActivePageCondition(int expectedLimit) {
+		ArgumentCaptor<FeedListCondition> captor = ArgumentCaptor.forClass(FeedListCondition.class);
+		verify(feedRepository).findActivePage(captor.capture(), eq(expectedLimit));
+		return captor.getValue();
 	}
 
 	private void stubActiveAuthor() {

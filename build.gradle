@@ -43,6 +43,12 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	implementation 'org.flywaydb:flyway-database-postgresql'
 
+	// QueryDSL (버전은 Spring Boot BOM이 관리. docs/decisions/2026-11-19-querydsl-feed-list.md)
+	implementation 'com.querydsl:querydsl-jpa::jakarta'
+	annotationProcessor 'com.querydsl:querydsl-apt::jakarta'
+	annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+	annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+
 	// AWS S3 SDK
 	implementation 'software.amazon.awssdk:s3:2.34.0'
 
@@ -50,7 +56,7 @@ dependencies {
 	implementation 'com.google.firebase:firebase-admin:9.4.3'
 
 	// Swagger
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'

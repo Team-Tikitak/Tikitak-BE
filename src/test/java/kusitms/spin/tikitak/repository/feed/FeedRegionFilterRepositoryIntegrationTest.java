@@ -13,7 +13,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,11 +29,11 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 	@Autowired
 	private FeedRepository feedRepository;
 
-	// ===== findActiveFirstPageByRegion =====
+	// ===== findActivePage: region, 첫 페이지 =====
 
 	@Nested
-	@DisplayName("findActiveFirstPageByRegion")
-	class FindActiveFirstPageByRegion {
+	@DisplayName("findActivePage - region 첫 페이지")
+	class FindActivePageByRegionFirstPage {
 
 		@Test
 		@DisplayName("해당 region의 피드만 반환한다")
@@ -51,8 +50,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			List<Feed> result = feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, null, PageRequest.of(0, 10));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(), null, null), 10);
 
 			assertThat(result).hasSize(1);
 			assertThat(result.get(0).getId()).isEqualTo(gangnamFeed.getId());
@@ -69,8 +68,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, null, PageRequest.of(0, 10))).isEmpty();
+			assertThat(feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(), null, null), 10)).isEmpty();
 		}
 
 		@Test
@@ -90,8 +89,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, null, PageRequest.of(0, 10))).isEmpty();
+			assertThat(feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(), null, null), 10)).isEmpty();
 		}
 
 		@Test
@@ -107,8 +106,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			List<Feed> result = feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, null, PageRequest.of(0, 10));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(), null, null), 10);
 
 			assertThat(result).hasSize(2);
 			assertThat(result.get(0).getId()).isEqualTo(newer.getId());
@@ -129,8 +128,8 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			List<Feed> result = feedRepository.findActiveFirstPageByRegion(
-					team.getId(), GANGNAM, null, PageRequest.of(0, 3));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(), null, null), 3);
 
 			assertThat(result).hasSize(3);
 		}
@@ -148,16 +147,16 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 
 			flushAndClear();
 
-			assertThat(feedRepository.findActiveFirstPageByRegion(
-					myTeam.getId(), GANGNAM, null, PageRequest.of(0, 10))).isEmpty();
+			assertThat(feedRepository.findActivePage(
+					new FeedListCondition(myTeam.getId(), null, GANGNAM, null, List.of(), null, null), 10)).isEmpty();
 		}
 	}
 
-	// ===== findActiveCursorPageByRegion =====
+	// ===== findActivePage: region, 커서 페이지 =====
 
 	@Nested
-	@DisplayName("findActiveCursorPageByRegion")
-	class FindActiveCursorPageByRegion {
+	@DisplayName("findActivePage - region 커서 페이지")
+	class FindActivePageByRegionCursorPage {
 
 		@Test
 		@DisplayName("커서 이전 피드만 반환한다")
@@ -174,10 +173,10 @@ class FeedRegionFilterRepositoryIntegrationTest extends IntegrationTest {
 			flushAndClear();
 
 			// feed3이 커서 → feed2, feed1만 반환
-			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM, null,
-feed3.getCreatedAt(), feed3.getId(),
-					PageRequest.of(0, 10));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(),
+feed3.getCreatedAt(), feed3.getId()),
+					10);
 
 			assertThat(result).hasSize(2);
 			assertThat(result).extracting(Feed::getId)
@@ -199,10 +198,10 @@ feed3.getCreatedAt(), feed3.getId(),
 			flushAndClear();
 
 			// feed2를 커서로 → id < feed2.id 인 feed1만 반환
-			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM, null,
-feed2.getCreatedAt(), feed2.getId(),
-					PageRequest.of(0, 10));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(),
+feed2.getCreatedAt(), feed2.getId()),
+					10);
 
 			assertThat(result).hasSize(1);
 			assertThat(result.get(0).getId()).isEqualTo(feed1.getId());
@@ -224,10 +223,10 @@ feed2.getCreatedAt(), feed2.getId(),
 
 			flushAndClear();
 
-			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM, null,
-cursor.getCreatedAt(), cursor.getId(),
-					PageRequest.of(0, 10));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(),
+cursor.getCreatedAt(), cursor.getId()),
+					10);
 
 			assertThat(result).hasSize(1);
 			assertThat(result.get(0).getId()).isEqualTo(gangnamFeed.getId());
@@ -252,10 +251,10 @@ cursor.getCreatedAt(), cursor.getId(),
 
 			flushAndClear();
 
-			List<Feed> result = feedRepository.findActiveCursorPageByRegion(
-					team.getId(), GANGNAM, null,
-cursor.getCreatedAt(), cursor.getId(),
-					PageRequest.of(0, 10));
+			List<Feed> result = feedRepository.findActivePage(
+					new FeedListCondition(team.getId(), null, GANGNAM, null, List.of(),
+cursor.getCreatedAt(), cursor.getId()),
+					10);
 
 			assertThat(result).isEmpty();
 		}
@@ -263,7 +262,7 @@ cursor.getCreatedAt(), cursor.getId(),
 
 	@Test
 	@DisplayName("태그 필터와 region 필터를 함께 적용한다")
-	void findActiveFirstPageByTaggedTeamMemberIdsFiltersRegion() {
+	void findActivePageFiltersTaggedTeamMemberIdsAndRegion() {
 		Member author = persist(member("rf-tag-region-author"));
 		Member taggedMember = persist(member("rf-tag-region-tagged"));
 		Team team = persist(team("rf-tag-region"));
@@ -282,14 +281,17 @@ cursor.getCreatedAt(), cursor.getId(),
 
 		flushAndClear();
 
-		List<Feed> result = feedRepository.findActiveFirstPageByTaggedTeamMemberIds(
-				team.getId(),
-				null,
-				GANGNAM,
-				null,
-				List.of(taggedTm.getId()),
-				1L,
-				PageRequest.of(0, 10)
+		List<Feed> result = feedRepository.findActivePage(
+				new FeedListCondition(
+						team.getId(),
+						null,
+						GANGNAM,
+						null,
+						List.of(taggedTm.getId()),
+						null,
+						null
+				),
+				10
 		);
 
 		assertThat(result).extracting(Feed::getId).containsExactly(gangnamTagged.getId());

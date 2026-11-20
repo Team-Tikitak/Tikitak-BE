@@ -1,6 +1,7 @@
 package kusitms.spin.tikitak.architecture;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.querydsl.core.types.EntityPath;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaConstructor;
@@ -121,6 +122,9 @@ class ConventionArchTest {
 		classes()
 				.that().resideInAPackage("..domain.*.entity..")
 				.and().areTopLevelClasses()
+				// QueryDSL이 엔티티 옆에 생성하는 Q-클래스(EntityPath 구현)는 엔티티가 아니다.
+				// docs/decisions/2026-11-19-querydsl-feed-list.md
+				.and().doNotImplement(EntityPath.class)
 				.should().beAnnotatedWith(Entity.class)
 				.because("CLAUDE.md Architecture: domain/<feature>/entity에는 엔티티만 두고 enum 등은 enums에 둔다")
 				.check(PRODUCTION_CLASSES);
