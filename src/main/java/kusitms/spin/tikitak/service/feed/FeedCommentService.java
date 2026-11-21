@@ -11,6 +11,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.feed.FeedCommentListCondition;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -21,7 +22,6 @@ import kusitms.spin.tikitak.service.feed.dto.FeedCommentResponseDTO;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -190,19 +190,9 @@ public class FeedCommentService {
 	}
 
 	private List<FeedComment> findCommentPage(Long feedId, Long feedImageId, Cursor cursor, int pageSize) {
-		PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
-		if (feedImageId == null) {
-			if (cursor.createdAt() == null) {
-				return feedCommentRepository.findActiveFirstPageByFeedId(feedId, pageRequest);
-			}
-			return feedCommentRepository.findActiveCursorPageByFeedId(
-					feedId, cursor.createdAt(), cursor.commentId(), pageRequest);
-		}
-		if (cursor.createdAt() == null) {
-			return feedCommentRepository.findActiveFirstPageByFeedImageId(feedId, feedImageId, pageRequest);
-		}
-		return feedCommentRepository.findActiveCursorPageByFeedImageId(
-				feedId, feedImageId, cursor.createdAt(), cursor.commentId(), pageRequest);
+		return feedCommentRepository.findActivePage(
+				new FeedCommentListCondition(feedId, feedImageId, cursor.createdAt(), cursor.commentId()),
+				pageSize + 1);
 	}
 
 	private Cursor parseCursor(String cursor) {
