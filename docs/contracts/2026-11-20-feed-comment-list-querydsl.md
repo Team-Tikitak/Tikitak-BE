@@ -40,7 +40,7 @@
 ## 의도된 동작 변경
 - **없음.** 댓글 목록 API(`FeedCommentController.java:34-45`)의 items 순서·내용·`hasNext`·`nextCursor`는 피드 전체 / 이미지별 × 첫 페이지 / 커서 4개 조합 모두에서 이전과 같다.
 - 에러 응답도 같다. 잘못된 커서는 COMMON001, 다른 피드의 이미지는 COMMENT011이고, 둘 다 쿼리 전에 던진다.
-- SQL 문자열은 달라질 수 있다. EntityGraph와 fetchJoin의 join 형태가 다르기 때문이다(기존 EntityGraph가 inner인지 left인지는 미확인). NOT NULL FK라서 결과는 같다. 쿼리 수는 늘지 않는다.
+- SQL 문자열은 달라진다. 커밋 1(`c24e672`) 작업 중 implementer가 `SPRING_JPA_SHOW_SQL=true`로 integrationTest를 실행해 확인한 결과, 기존 `@EntityGraph`와 새 `fetchJoin` 모두 `team_member`, `feed_image`를 inner join으로 생성했다(Hibernate 7.2.12). 확인된 차이는 join 순서와 `is_deleted`가 리터럴인지 바인딩인지다. 이미지 필터는 새 SQL에서 join한 `feed_image`의 PK(`fi1_0.id=?`)로 나온다(커밋 2 SQL 로그). 기존 `@Query`가 FK 컬럼(`feed_image_id=?`)으로 냈는지는 미확인이다. 두 FK 모두 NOT NULL inner join이라 결과 행은 같다. PostgreSQL이 등가 추론으로 `idx_feed_comment_feed_image_created_id`를 그대로 쓸 것으로 보지만 EXPLAIN으로는 확인하지 않았다(미확인). 쿼리 수는 늘지 않는다.
 
 ## 완료 조건
 - [ ] `./gradlew spotlessCheck`, `./gradlew test`, `./gradlew integrationTest`가 통과한다. ArchUnit 예외 상수는 추가하지 않는다.
@@ -80,4 +80,4 @@
 - 선례: `FeedListCondition.java`, `FeedRepositoryCustomImpl.java`, `FeedListQueryIntegrationTest.java`(297-354 tie-breaker·fetch 검증), `FeedServiceTest.java:679-682, 770-774`(조건 전체 eq)
 - 시각 고정: `IntegrationTest.java:111-134` `persistWithCreatedAt`. FeedImage 생성 예: `FeedImageRepositoryIntegrationTest.java:105-113`
 - 인덱스: `idx_feed_comment_feed_created_id (feed_id, created_at, id)`, `idx_feed_comment_feed_image_created_id (feed_image_id, created_at, id)` (V9:15-19)
-- 미확인: 기존 `@EntityGraph`가 Hibernate 7.2.12에서 inner join을 내는지 left join을 내는지. `QFeedComment` 생성 여부(같은 apt 설정이라 생성될 것으로 추정, 커밋 1에서 확인)
+- 확인됨: `QFeedComment`는 생성된다(커밋 1 `compileJava`). 기존 `@EntityGraph`는 Hibernate 7.2.12에서 `team_member`, `feed_image`를 inner join으로 낸다(커밋 1 작업 중 implementer가 `SPRING_JPA_SHOW_SQL=true` integrationTest SQL 로그로 확인).

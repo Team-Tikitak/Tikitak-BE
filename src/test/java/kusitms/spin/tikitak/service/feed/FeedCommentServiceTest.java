@@ -13,6 +13,7 @@ import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
 import kusitms.spin.tikitak.domain.team.enums.TeamStatus;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
+import kusitms.spin.tikitak.repository.feed.FeedCommentListCondition;
 import kusitms.spin.tikitak.repository.feed.FeedCommentRepository;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
 import kusitms.spin.tikitak.repository.feed.FeedRepository;
@@ -28,7 +29,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -278,8 +278,10 @@ class FeedCommentServiceTest extends UnitTest {
 		FeedComment first = comment(10L, viewer, LocalDateTime.of(2026, 3, 4, 20, 30));
 		FeedComment second = comment(11L, otherTeamMember, LocalDateTime.of(2026, 3, 4, 20, 31));
 		FeedComment extra = comment(12L, otherTeamMember, LocalDateTime.of(2026, 3, 4, 20, 32));
-		when(feedCommentRepository.findActiveFirstPageByFeedId(eq(FEED_ID), any(Pageable.class)))
-				.thenReturn(List.of(first, second, extra));
+		when(feedCommentRepository.findActivePage(
+				eq(new FeedCommentListCondition(FEED_ID, null, null, null)),
+				eq(3)
+		)).thenReturn(List.of(first, second, extra));
 
 		FeedCommentResponseDTO.CommentListResponseDTO response =
 				feedCommentService.listComments(MEMBER_ID, TEAM_ID, FEED_ID, null, null, 2);
@@ -298,15 +300,64 @@ class FeedCommentServiceTest extends UnitTest {
 		stubActiveViewer();
 		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
 		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(feedImage));
-		when(feedCommentRepository.findActiveFirstPageByFeedImageId(eq(FEED_ID), eq(FEED_IMAGE_ID), any(Pageable.class)))
-				.thenReturn(List.of(comment(10L, viewer, LocalDateTime.of(2026, 3, 4, 20, 30))));
+		when(feedCommentRepository.findActivePage(
+				eq(new FeedCommentListCondition(FEED_ID, FEED_IMAGE_ID, null, null)),
+				eq(21)
+		)).thenReturn(List.of(comment(10L, viewer, LocalDateTime.of(2026, 3, 4, 20, 30))));
 
 		FeedCommentResponseDTO.CommentListResponseDTO response =
 				feedCommentService.listComments(MEMBER_ID, TEAM_ID, FEED_ID, FEED_IMAGE_ID, null, 20);
 
 		assertThat(response.getItems()).hasSize(1);
 		verify(feedImageRepository).findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID);
-		verify(feedCommentRepository).findActiveFirstPageByFeedImageId(eq(FEED_ID), eq(FEED_IMAGE_ID), any(Pageable.class));
+		verify(feedCommentRepository).findActivePage(
+				eq(new FeedCommentListCondition(FEED_ID, FEED_IMAGE_ID, null, null)),
+				eq(21)
+		);
+	}
+
+	@Test
+	@DisplayName("커서가 있으면 커서 시각과 댓글 ID를 조건에 담아 다음 페이지를 조회한다")
+	void listCommentsWithCursor() {
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		FeedComment first = comment(12L, otherTeamMember, LocalDateTime.of(2026, 3, 4, 20, 32));
+		FeedComment second = comment(13L, viewer, LocalDateTime.of(2026, 3, 4, 20, 33));
+		FeedComment extra = comment(14L, otherTeamMember, LocalDateTime.of(2026, 3, 4, 20, 34));
+		when(feedCommentRepository.findActivePage(
+				eq(new FeedCommentListCondition(FEED_ID, null, LocalDateTime.of(2026, 3, 4, 20, 31), 11L)),
+				eq(3)
+		)).thenReturn(List.of(first, second, extra));
+
+		FeedCommentResponseDTO.CommentListResponseDTO response =
+				feedCommentService.listComments(MEMBER_ID, TEAM_ID, FEED_ID, null, "2026-03-04T20:31_11", 2);
+
+		assertThat(response.getItems()).extracting(FeedCommentResponseDTO.CommentItemDTO::getCommentId)
+				.containsExactly(12L, 13L);
+		assertThat(response.getPageInfo().isHasNext()).isTrue();
+		assertThat(response.getPageInfo().getNextCursor()).isEqualTo("2026-03-04T20:33_13");
+	}
+
+	@Test
+	@DisplayName("feedImageId와 커서가 함께 있으면 두 조건을 모두 담아 조회하고, 마지막 페이지면 nextCursor가 없다")
+	void listCommentsByFeedImageWithCursor() {
+		stubActiveViewer();
+		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
+		when(feedImageRepository.findByIdAndFeedId(FEED_IMAGE_ID, FEED_ID)).thenReturn(Optional.of(feedImage));
+		when(feedCommentRepository.findActivePage(any(FeedCommentListCondition.class), eq(21)))
+				.thenReturn(List.of(comment(12L, viewer, LocalDateTime.of(2026, 3, 4, 20, 32))));
+
+		FeedCommentResponseDTO.CommentListResponseDTO response = feedCommentService.listComments(
+				MEMBER_ID, TEAM_ID, FEED_ID, FEED_IMAGE_ID, "2026-03-04T20:31:05.123456_11", 20);
+
+		ArgumentCaptor<FeedCommentListCondition> captor = ArgumentCaptor.forClass(FeedCommentListCondition.class);
+		verify(feedCommentRepository).findActivePage(captor.capture(), eq(21));
+		assertThat(captor.getValue()).isEqualTo(new FeedCommentListCondition(
+				FEED_ID, FEED_IMAGE_ID, LocalDateTime.of(2026, 3, 4, 20, 31, 5, 123_456_000), 11L));
+		assertThat(response.getItems()).extracting(FeedCommentResponseDTO.CommentItemDTO::getCommentId)
+				.containsExactly(12L);
+		assertThat(response.getPageInfo().isHasNext()).isFalse();
+		assertThat(response.getPageInfo().getNextCursor()).isNull();
 	}
 
 	@Test
@@ -393,8 +444,10 @@ class FeedCommentServiceTest extends UnitTest {
 		stubActiveViewer();
 		when(feedRepository.findActiveDetail(TEAM_ID, FEED_ID)).thenReturn(Optional.of(feed));
 		FeedComment commentByAuthorWithoutImg = comment(10L, authorWithoutImg, LocalDateTime.of(2026, 3, 4, 20, 30));
-		when(feedCommentRepository.findActiveFirstPageByFeedId(eq(FEED_ID), any(Pageable.class)))
-				.thenReturn(List.of(commentByAuthorWithoutImg));
+		when(feedCommentRepository.findActivePage(
+				eq(new FeedCommentListCondition(FEED_ID, null, null, null)),
+				eq(11)
+		)).thenReturn(List.of(commentByAuthorWithoutImg));
 		when(defaultProfileImageResolver.resolveForTeamMember(authorWithoutImg)).thenReturn(defaultImgUrl);
 
 		FeedCommentResponseDTO.CommentListResponseDTO response =
