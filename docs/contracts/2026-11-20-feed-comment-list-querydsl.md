@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #204
 - **브랜치**: `Refactor/#204-feed-comment-querydsl` (develop에서 분기)
-- **상태**: 승인됨 (2026-11-20)
+- **상태**: 완료 (2026-11-21, PR #206)
 
 ## 목표
 `FeedCommentRepository`의 댓글 목록 커서 조회 `@Query` 4개(feedImageId 유무 × 커서 유무)를 QueryDSL 동적 쿼리 메서드 하나(`findActivePage(condition, limit)`)로 합친다. API 응답과 조회 결과는 바꾸지 않는다.
