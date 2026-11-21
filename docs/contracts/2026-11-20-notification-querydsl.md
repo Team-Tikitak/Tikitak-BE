@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #205
 - **브랜치**: `Refactor/#205-notification-querydsl` (develop에서 분기, `origin/develop` 17e9ff9)
-- **상태**: 승인됨 (2026-11-20)
+- **상태**: 완료 (2026-11-21, PR #207)
 
 ## 목표
 `NotificationRepository`에서 `(:teamId is null or n.teamId = :teamId)`를 쓰는 `@Query` 5개(목록 2, count 2, 일괄 update 1)를 QueryDSL `NotificationRepositoryCustom`/`Impl`로 옮긴다. API 응답과 조회·갱신 결과는 바꾸지 않는다.
