@@ -13,7 +13,9 @@ import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.global.exception.ErrorCode;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
+import kusitms.spin.tikitak.repository.notification.NotificationListCondition;
 import kusitms.spin.tikitak.repository.notification.NotificationRepository;
+import kusitms.spin.tikitak.repository.notification.NotificationScope;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.media.ImagePreset;
@@ -23,7 +25,6 @@ import kusitms.spin.tikitak.service.notification.NotificationPersistService.Save
 import kusitms.spin.tikitak.service.notification.dto.NotificationResponseDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,11 +109,10 @@ public class NotificationService {
 		Cursor parsedCursor = parseCursor(cursor);
 		int pageSize = normalizePageSize(size);
 
-		List<Notification> notifications = parsedCursor.createdAt() == null
-				? notificationRepository.findFirstPage(memberId, teamId, PageRequest.of(0, pageSize + 1))
-				: notificationRepository.findCursorPage(
-						memberId, teamId, parsedCursor.createdAt(), parsedCursor.id(), PageRequest.of(0, pageSize + 1));
-		long totalCount = notificationRepository.countByMemberIdAndTeamId(memberId, teamId);
+		NotificationListCondition condition =
+				new NotificationListCondition(memberId, teamId, parsedCursor.createdAt(), parsedCursor.id());
+		List<Notification> notifications = notificationRepository.findPage(condition, pageSize + 1);
+		long totalCount = notificationRepository.countAll(new NotificationScope(memberId, teamId));
 
 		boolean hasNext = notifications.size() > pageSize;
 		List<Notification> items = hasNext ? notifications.subList(0, pageSize) : notifications;
@@ -143,7 +143,7 @@ public class NotificationService {
 
 	public NotificationResponseDTO.UnreadCountResponseDTO getUnreadCount(Long memberId, Long teamId) {
 		return NotificationResponseDTO.UnreadCountResponseDTO.builder()
-				.unreadCount(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(memberId, teamId))
+				.unreadCount(notificationRepository.countUnread(new NotificationScope(memberId, teamId)))
 				.build();
 	}
 
@@ -156,7 +156,7 @@ public class NotificationService {
 
 	@Transactional
 	public void markAllAsRead(Long memberId, Long teamId) {
-		notificationRepository.updateAllAsReadByMemberId(memberId, teamId, LocalDateTime.now());
+		notificationRepository.markAllAsRead(new NotificationScope(memberId, teamId), LocalDateTime.now());
 	}
 
 	private NotificationResponseDTO.NotificationListItemDTO toListItem(

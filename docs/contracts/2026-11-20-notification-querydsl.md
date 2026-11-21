@@ -81,7 +81,9 @@
 ## 참고
 - 조사: `NotificationRepository.java:14-75`, `NotificationService.java:107-160, 222-251`, `Notification.java:30-62`(`teamId`는 `Long` 컬럼, `member`는 LAZY 연관), `V22__create_notification.sql:14-15`(인덱스 `member_id, created_at DESC, id DESC` / `member_id, is_read`)
 - #158 패턴: `FeedListCondition.java`, `FeedRepositoryCustomImpl.java`, `FeedListQueryIntegrationTest.java`, `FeedServiceTest.java:538-540, 679-680`
-- 미확인(구현 중 확인):
-  - `QNotification`의 boolean 경로 이름(`isRead` 추정)
-  - QueryDSL update가 `member.id` 술어로 Hibernate 7.2.12에서 정상 SQL을 만드는지 → 커밋 1 integrationTest로 확인
+- 확인된 것 (구현 중):
+  - `QNotification`의 boolean 경로 이름은 `isRead`이다(생성된 `QNotification.java`의 `BooleanPath isRead`).
+  - QueryDSL update는 Hibernate 7.2.12에서 오류 없이 아래 SQL을 만든다. `member.id`는 join 없이 FK로 비교한다. integrationTest `NotificationQueryIntegrationTest` 일괄 읽음 3건의 로그에서 확인했다. 전환 전 JPQL이 만든 SQL 로그와 직접 대조하지는 않았다.
+    - `update notification n1_0 set is_read=?,read_at=? where n1_0.member_id=? [and n1_0.team_id=?] and n1_0.is_read=?`
+- 미확인:
   - Hibernate가 `executeUpdate` 전에 auto-flush하는지. 기존과 같은 `createQuery().executeUpdate()` 경로라 차이는 없을 것으로 본다(추정).

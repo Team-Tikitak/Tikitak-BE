@@ -2,8 +2,8 @@
 
 - **날짜**: 2026-11-19
 - **관련 이슈**: #158
-- **상태**: 결정됨 (2026-11-19 계약 승인). `FeedRepository` 피드 목록 10개 메서드 전환 완료
-- **계약**: [2026-11-19-feed-list-querydsl](../contracts/2026-11-19-feed-list-querydsl.md)
+- **상태**: 결정됨 (2026-11-19 계약 승인). `FeedRepository` 피드 목록 10개 메서드 전환 완료. #205로 `NotificationRepository` 목록·개수·일괄 읽음 5개 메서드 전환 완료(2026-11-20)
+- **계약**: [2026-11-19-feed-list-querydsl](../contracts/2026-11-19-feed-list-querydsl.md), [2026-11-20-notification-querydsl](../contracts/2026-11-20-notification-querydsl.md)(#205)
 
 ## 상황 (Context)
 - `FeedRepository`의 피드 목록 조회는 필터 조합(없음 / region / placeId / 태그) × (첫 페이지 / 커서)마다 `@Query`를 따로 둔 8개 메서드와 count 2개(`countActiveFeeds`, `countActiveFeedsByTaggedTeamMemberIds`)로 되어 있다. 서비스(`FeedService.findFeedPage`/`countFeeds`)가 조건을 보고 그중 하나를 고른다.
@@ -21,6 +21,7 @@
 
 - **의존성**: `com.querydsl:querydsl-jpa::jakarta`(implementation), `com.querydsl:querydsl-apt::jakarta` + `jakarta.persistence-api` + `jakarta.annotation-api`(annotationProcessor). 버전은 Spring Boot 4.0.6 BOM이 관리하는 5.1.0을 따르고 `build.gradle`에 직접 쓰지 않는다(`spring-boot-dependencies-4.0.6.pom` 167, 3401-3403행. `./gradlew dependencies`로 5.1.0, jakarta classifier jar 확인). 테스트 소스는 Q-클래스를 만들 필요가 없어 `testAnnotationProcessor`는 추가하지 않았다.
 - **적용 범위(이번 이슈)**: `FeedRepository`의 피드 목록 10개(`findActiveFirstPage*`/`findActiveCursorPage*` 8개, `countActiveFeeds`, `countActiveFeedsByTaggedTeamMemberIds`)를 `findActivePage(condition, limit)`/`countActive(condition)` 2개로 합친다. 나머지 리포지토리는 이번에 바꾸지 않는다.
+  - **#205 (2026-11-20)**: `NotificationRepository`의 `(:teamId is null or n.teamId = :teamId)` `@Query` 5개(`findFirstPage`, `findCursorPage`, `countByMemberIdAndTeamId`, `countByMemberIdAndTeamIdAndIsReadFalse`, `updateAllAsReadByMemberId`)를 `NotificationRepositoryCustom`의 `findPage(NotificationListCondition, limit)`, `countAll`/`countUnread(NotificationScope)`, `markAllAsRead(NotificationScope, readAt)`으로 옮겼다. 범위 조건(`NotificationScope`)과 커서를 담는 목록 조건(`NotificationListCondition`)을 나눠, count와 update에는 커서가 들어갈 수 없게 했다. 일괄 읽음 update도 QueryDSL `update`(`JPAUpdateClause`)로 옮겼다.
 - **공용 Bean**: `global/config/QuerydslConfig`가 `JPAQueryFactory` Bean을 하나 등록한다. EntityManager는 `@PersistenceContext`로 받은 공유 프록시라 트랜잭션마다 실제 EntityManager로 위임된다. 리포지토리 Impl은 이 Bean을 생성자로 주입받고 `new JPAQueryFactory`를 직접 호출하지 않는다.
   - 이유: 최종적으로 프로젝트 전체에 QueryDSL을 도입하는 것이 전제라, Impl마다 팩토리를 만들면 템플릿 설정 같은 공통 설정이 흩어진다. 설정은 이 Bean 한 곳에서만 한다.
   - `@DataJpaTest`는 사용자 `@Configuration`을 로드하지 않는 것으로 알려져 있어(Spring Boot 4에서는 미확인), 통합 테스트 베이스 `IntegrationTest`에 `@Import(QuerydslConfig.class)`를 붙였다. `@Import`가 있으면 어느 쪽이든 동작한다.
@@ -41,14 +42,17 @@
 - `*Repository.java` 파일 22개(그중 Spring Data 리포지토리를 상속하는 것 17개, 상속하지 않는 `dailyquestion` 인터페이스 5개)
 - `@Query` 82개, 그중 `nativeQuery = true` 11개
 - 동적 조건(`:x is null or`, 정규식 `:[A-Za-z]+ is null or`)은 14줄이고 `FeedRepository`(8), `NotificationRepository`(5), `TeamMemberRepository`(1) 3개 파일에만 있다.
+  - 2026-11-20 #205 이후 `src/main/java`에서 같은 정규식은 `TeamMemberRepository.java`의 네이티브 쿼리 1건뿐이다(`git grep -nE ":[A-Za-z]+ is null or" -- src/main/java`).
 - 동적 조건이 일부 파일에 몰려 있어, 전체를 QueryDSL로 옮기기보다 동적 조건 쿼리부터 옮기는 것이 변경 대비 효과가 크다.
 
 ## 후속 전환 후보
 - `FeedCommentRepository` 커서 4개(`findActiveFirstPageByFeedId`, `findActiveCursorPageByFeedId`, `findActiveFirstPageByFeedImageId`, `findActiveCursorPageByFeedImageId`)
-- `NotificationRepository`, `TeamMemberRepository`의 동적 조건(`:x is null or`) 쿼리
+- ~~`NotificationRepository`의 동적 조건(`:x is null or`) 쿼리~~: #205에서 전환 완료(2026-11-20)
+- `TeamMemberRepository`의 동적 조건 1건(`:selectedTeamId is null or`)은 네이티브 쿼리라 "네이티브 쿼리는 네이티브로 둔다" 규칙에 따라 후보에서 뺀다. "네이티브 쿼리마다 Testcontainers 통합 테스트를 둔다"는 규칙은 이번에 추가하지 않기로 2026-11-20에 정했다(#205 계약).
 
 ## 트레이드오프 / 남은 리스크
-- **라이브러리 유지보수**: 공식 `com.querydsl`은 5.1.0 이후 업데이트가 정체돼 있다(계약의 사람 판단. 릴리스 이력은 이 기록에서 다시 확인하지 않음). Hibernate 7.2.12와 함께 쓸 때 피드 목록 쿼리(fetch join, 서브쿼리 + group by/having, 복합 커서, countDistinct)는 integrationTest 128건에서 오류나 경고 없이 동작했다(2026-11-19). 이 범위를 벗어난 기능은 아직 쓰지 않았다. 앞으로 쿼리 생성 오류나 템플릿 문제가 나오면 OpenFeign 포크로 옮기는 것이 대안이며, 옮길지는 사람이 정한다.
+- **라이브러리 유지보수**: 공식 `com.querydsl`은 5.1.0 이후 업데이트가 정체돼 있다(계약의 사람 판단. 릴리스 이력은 이 기록에서 다시 확인하지 않음). Hibernate 7.2.12와 함께 쓸 때 피드 목록 쿼리(fetch join, 서브쿼리 + group by/having, 복합 커서, countDistinct)는 integrationTest 128건에서 오류나 경고 없이 동작했다(2026-11-19). #205(2026-11-20)부터 update DML(`JPAUpdateClause`)도 쓴다. `NotificationQueryIntegrationTest`의 일괄 읽음 3건으로 확인했고, 생성 SQL은 `update notification n1_0 set is_read=?,read_at=? where n1_0.member_id=? [and n1_0.team_id=?] and n1_0.is_read=?`이다(teamId가 null이면 대괄호 부분이 빠진다). 그 밖의 기능(delete DML, insert 등)은 아직 쓰지 않았다. 앞으로 쿼리 생성 오류나 템플릿 문제가 나오면 OpenFeign 포크로 옮기는 것이 대안이며, 옮길지는 사람이 정한다.
+- **update와 영속성 컨텍스트**: QueryDSL update는 영속성 컨텍스트를 직접 flush·clear하지 않는다. querydsl-jpa 5.1.0 `JPAUpdateClause.execute()`를 `javap -c`로 보면 `EntityManager.createQuery` → 파라미터 설정 → `Query.executeUpdate()`만 호출한다. 전환 전 `@Modifying`도 옵션이 없어 `flushAutomatically`·`clearAutomatically`가 false였으므로(spring-data-jpa 4.0.5 `Modifying`의 AnnotationDefault, `javap -v` 확인) 동작은 같다. 지금은 `NotificationService.markAllAsRead`가 update 한 줄뿐이라 update 뒤 같은 트랜잭션에서 Notification을 다시 읽는 경로가 없다. 앞으로 그런 경로가 생기면 이미 로드된 엔티티가 갱신 전 상태로 남으므로 다시 읽기 전에 clear가 필요하다. Hibernate가 `executeUpdate` 전에 auto-flush하는지는 확인하지 않았다(미확인. 전환 전과 같은 `createQuery().executeUpdate()` 경로라 차이는 없을 것으로 추정).
 - **템플릿 설정**: `QuerydslConfig`는 템플릿을 명시하지 않는다(`new JPAQueryFactory(entityManager)`). 피드 목록 쿼리가 이 설정으로 integrationTest를 통과했기 때문이다. 앞으로 다른 쿼리에서 템플릿 문제가 나오면 `JPQLTemplates.DEFAULT` 명시를 검토하며, 바꾸게 되면 이 Bean 한 곳에서만 바꾼다.
 - **springdoc 3.0.3**: 2026-11-19에 로컬에서 기동해 확인했다(dev 프로필, 로컬 Postgres·Redis, 외부 연동 값은 가짜).
   - 엔드포인트: `/v3/api-docs` 200, `/swagger-ui.html`은 302로 `/swagger-ui/index.html`(200)에 연결된다.
