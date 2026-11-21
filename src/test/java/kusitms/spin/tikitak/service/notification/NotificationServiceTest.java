@@ -13,7 +13,9 @@ import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.global.exception.BusinessException;
 import kusitms.spin.tikitak.repository.feed.FeedImageRepository;
+import kusitms.spin.tikitak.repository.notification.NotificationListCondition;
 import kusitms.spin.tikitak.repository.notification.NotificationRepository;
+import kusitms.spin.tikitak.repository.notification.NotificationScope;
 import kusitms.spin.tikitak.repository.team.TeamMemberRepository;
 import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.media.ImagePreset;
@@ -37,10 +39,10 @@ import static kusitms.spin.tikitak.support.fixture.TeamMemberFixture.activeMembe
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -223,8 +225,9 @@ class NotificationServiceTest extends UnitTest {
 	void listsFirstPageWhenCursorIsAbsent() {
 		NotificationService notificationService = notificationService(Optional.empty());
 		Notification notification = notification(1L, false);
-		when(notificationRepository.findFirstPage(eq(1L), isNull(), any())).thenReturn(List.of(notification));
-		when(notificationRepository.countByMemberIdAndTeamId(1L, null)).thenReturn(1L);
+		when(notificationRepository.findPage(eq(new NotificationListCondition(1L, null, null, null)), eq(21)))
+				.thenReturn(List.of(notification));
+		when(notificationRepository.countAll(eq(new NotificationScope(1L, null)))).thenReturn(1L);
 
 		NotificationResponseDTO.NotificationListResponseDTO response =
 				notificationService.listNotifications(1L, null, null, null);
@@ -240,15 +243,38 @@ class NotificationServiceTest extends UnitTest {
 	void listsNotificationsFilteredByTeamId() {
 		NotificationService notificationService = notificationService(Optional.empty());
 		Notification notification = notification(1L, false);
-		when(notificationRepository.findFirstPage(eq(1L), eq(10L), any())).thenReturn(List.of(notification));
-		when(notificationRepository.countByMemberIdAndTeamId(1L, 10L)).thenReturn(1L);
+		when(notificationRepository.findPage(eq(new NotificationListCondition(1L, 10L, null, null)), eq(21)))
+				.thenReturn(List.of(notification));
+		when(notificationRepository.countAll(eq(new NotificationScope(1L, 10L)))).thenReturn(1L);
 
 		NotificationResponseDTO.NotificationListResponseDTO response =
 				notificationService.listNotifications(1L, 10L, null, null);
 
 		assertThat(response.getItems()).hasSize(1);
 		assertThat(response.getPageInfo().getTotalCount()).isEqualTo(1L);
-		verify(notificationRepository, never()).findFirstPage(eq(1L), isNull(), any());
+		verify(notificationRepository, never()).findPage(eq(new NotificationListCondition(1L, null, null, null)), anyInt());
+		verify(notificationRepository, never()).countAll(eq(new NotificationScope(1L, null)));
+	}
+
+	@Test
+	@DisplayName("커서를 전달하면 디코딩한 커서로 다음 페이지를 조회하고, 전체 개수는 커서 없이 조회한다")
+	void listsNextPageWithDecodedCursor() {
+		NotificationService notificationService = notificationService(Optional.empty());
+		LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 11, 20, 10, 30, 15, 123_000_000);
+		Notification notification = notification(4L, false);
+		when(notificationRepository.findPage(eq(new NotificationListCondition(1L, 10L, cursorCreatedAt, 5L)), eq(3)))
+				.thenReturn(List.of(notification));
+		when(notificationRepository.countAll(eq(new NotificationScope(1L, 10L)))).thenReturn(7L);
+
+		NotificationResponseDTO.NotificationListResponseDTO response =
+				notificationService.listNotifications(1L, 10L, cursorCreatedAt + "_5", 2);
+
+		assertThat(response.getItems()).extracting(NotificationResponseDTO.NotificationListItemDTO::getNotificationId)
+				.containsExactly(4L);
+		assertThat(response.getPageInfo().isHasNext()).isFalse();
+		assertThat(response.getPageInfo().getNextCursor()).isNull();
+		assertThat(response.getPageInfo().getSize()).isEqualTo(2);
+		assertThat(response.getPageInfo().getTotalCount()).isEqualTo(7L);
 	}
 
 	@Test
@@ -263,8 +289,9 @@ class NotificationServiceTest extends UnitTest {
 				.imgUrl("https://example.com/feed.png")
 				.orderIndex(0)
 				.build();
-		when(notificationRepository.findFirstPage(eq(1L), isNull(), any())).thenReturn(List.of(notification));
-		when(notificationRepository.countByMemberIdAndTeamId(1L, null)).thenReturn(1L);
+		when(notificationRepository.findPage(eq(new NotificationListCondition(1L, null, null, null)), eq(21)))
+				.thenReturn(List.of(notification));
+		when(notificationRepository.countAll(eq(new NotificationScope(1L, null)))).thenReturn(1L);
 		when(teamMemberRepository.findByIdsWithMember(List.of(30L))).thenReturn(List.of(actor));
 		when(feedImageRepository.findFirstActiveByFeedIds(List.of(20L))).thenReturn(List.of(firstImage));
 		when(defaultProfileImageResolver.resolveForTeamMember(actor)).thenReturn("https://example.com/profile.png");
@@ -286,7 +313,7 @@ class NotificationServiceTest extends UnitTest {
 	@DisplayName("안읽은 알림 개수를 조회한다")
 	void returnsUnreadCount() {
 		NotificationService notificationService = notificationService(Optional.empty());
-		when(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(1L, null)).thenReturn(3L);
+		when(notificationRepository.countUnread(eq(new NotificationScope(1L, null)))).thenReturn(3L);
 
 		NotificationResponseDTO.UnreadCountResponseDTO response = notificationService.getUnreadCount(1L, null);
 
@@ -297,7 +324,7 @@ class NotificationServiceTest extends UnitTest {
 	@DisplayName("teamId를 전달하면 해당 팀의 안읽은 알림 개수만 조회한다")
 	void returnsUnreadCountFilteredByTeamId() {
 		NotificationService notificationService = notificationService(Optional.empty());
-		when(notificationRepository.countByMemberIdAndTeamIdAndIsReadFalse(1L, 10L)).thenReturn(2L);
+		when(notificationRepository.countUnread(eq(new NotificationScope(1L, 10L)))).thenReturn(2L);
 
 		NotificationResponseDTO.UnreadCountResponseDTO response = notificationService.getUnreadCount(1L, 10L);
 
@@ -333,7 +360,7 @@ class NotificationServiceTest extends UnitTest {
 
 		notificationService.markAllAsRead(1L, null);
 
-		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), isNull(), any(LocalDateTime.class));
+		verify(notificationRepository).markAllAsRead(eq(new NotificationScope(1L, null)), any(LocalDateTime.class));
 	}
 
 	@Test
@@ -343,7 +370,7 @@ class NotificationServiceTest extends UnitTest {
 
 		notificationService.markAllAsRead(1L, 10L);
 
-		verify(notificationRepository).updateAllAsReadByMemberId(eq(1L), eq(10L), any(LocalDateTime.class));
+		verify(notificationRepository).markAllAsRead(eq(new NotificationScope(1L, 10L)), any(LocalDateTime.class));
 	}
 
 	private NotificationService notificationService(Optional<FirebaseMessaging> firebaseMessaging) {
