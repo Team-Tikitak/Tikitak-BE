@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #210
 - **브랜치**: `Feat/#210-feed-tagged-notification` (origin/develop e42d175에서 분기)
-- **상태**: 승인됨 (2026-11-22)
+- **상태**: 완료 (2026-11-22, PR #212)
 
 ## 목표
 일반 게시글을 작성할 때 태그된 팀원(작성자 제외)은 `FEED_UPLOADED` 대신 `FEED_TAGGED` 알림을 받는다. 나머지 활성 팀원은 지금처럼 `FEED_UPLOADED`를 받는다. 게시글 하나에 한 사람이 받는 알림은 하나뿐이다.
@@ -91,7 +91,11 @@
 
 ## 남은 리스크
 - 앱이 모르는 `type`을 받을 때 어떻게 동작하는지, `FEED_TAGGED`를 눌렀을 때 어느 화면으로 가는지는 **미확인**이다(저장소 밖). PR에 FE 확인 요청을 적는다.
-- 일반 수신자에서 태그 수신자를 member.id 기준으로 뺀다. 그런데 team_member의 `(team_id, member_id)`에는 DB 유니크가 없다(`V1__initial_schema.sql:45-55`). 같은 팀에 같은 member의 활성 TeamMember가 둘 있으면 어떻게 될지는 **미확인**이다. 다만 이 경우에도 그 member는 태그 알림 하나만 받는다(일반 목록에서 빠지므로).
+- 일반 수신자에서 태그 수신자를 member.id 기준으로 뺀다. 그런데 team_member의 `(team_id, member_id)`에는 DB 유니크가 없다(`V1__initial_schema.sql:45-55`). 그런 데이터가 있고 두 TeamMember가 모두 태그되면 태그 알림이 중복된다(critic 지적). 지금 앱 코드로는 이런 데이터가 생기지 않는다(구현 뒤 확인).
+  - TeamMember를 새로 만드는 곳은 팀 생성(`TeamService.java:62`, OWNER)과 초대 수락(`TeamInvitationService.acceptInviteLink`) 두 곳뿐이다(`TeamMember.builder()` grep).
+  - 초대 수락은 팀 행 `PESSIMISTIC_WRITE` 락(`findByIdForUpdate`, `TeamInvitationService.java:142`, `TeamRepository.java:29-31`)을 먼저 잡는다. 그다음 `findByMemberIdAndTeamId`로 기존 행을 조회해 재사용하거나 INVITE006으로 거절한다(`:156-195`).
+  - 그래서 동시 가입은 순서대로 처리된다. 격리 수준을 바꾼 설정은 없다(grep). 그래서 PostgreSQL 기본값인 READ COMMITTED가 적용되고, 뒤 요청은 앞 요청이 커밋한 행을 보게 된다.
+  - 락을 거치지 않는 생성 경로가 새로 생기면 이 보호가 사라진다. 동시 실행 테스트로는 재현해 보지 않았다.
 - 태그가 있으면 `notificationExecutor`(core 2 / max 4 / queue 50, `AsyncConfig.java:17-19`)에 제출하는 작업이 게시글 하나에 2건이 된다. 실제 부하 수준은 **미확인**이다.
 - `TeamMember.nickname`은 NULL을 허용한다(`V1__initial_schema.sql:49`). 닉네임이 null이면 문구가 "null님이"가 된다. 기존 알림도 같은 문제를 갖고 있고, 실제로 null이 생기는지는 **미확인**이다.
 
