@@ -9,6 +9,7 @@ import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
+import kusitms.spin.tikitak.domain.notification.event.FeedPostedEvent;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -35,6 +36,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -116,6 +119,9 @@ class FeedServiceTest extends UnitTest {
 	@Mock
 	private DefaultProfileImageResolver defaultProfileImageResolver;
 
+	@Mock
+	private ApplicationEventPublisher eventPublisher;
+
 	private FeedService feedService;
 	private Team team;
 	private TeamMember author;
@@ -134,7 +140,8 @@ class FeedServiceTest extends UnitTest {
 				teamMemberRepository,
 				defaultProfileImageResolver,
 				disabledImageUrlResolver(),
-				new KstDateProvider(FIXED_CLOCK, ZoneOffset.UTC)
+				new KstDateProvider(FIXED_CLOCK, ZoneOffset.UTC),
+				eventPublisher
 		);
 		team = activeTeam(TEAM_ID);
 		Member member = activeMember(MEMBER_ID);
@@ -164,6 +171,51 @@ class FeedServiceTest extends UnitTest {
 	}
 
 	@Test
+	@DisplayName("일반 피드를 작성하면 작성자를 뺀 활성 팀원에게 FeedPostedEvent를 발행한다")
+	void createFeedPublishesFeedPostedEventToOtherActiveMembers() {
+		Media media = uploadedFeedImage(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID);
+		FeedRequestDTO.FeedCreateRequestDTO request = validCreateRequest(MEDIA_PUBLIC_ID);
+		stubActiveAuthor();
+		when(mediaRepository.findByPublicIdsForUpdate(List.of(MEDIA_PUBLIC_ID))).thenReturn(List.of(media));
+		when(feedRepository.save(any(Feed.class))).thenAnswer(invocation -> {
+			Feed savedFeed = invocation.getArgument(0);
+			ReflectionTestUtils.setField(savedFeed, "id", FEED_ID);
+			return savedFeed;
+		});
+		when(teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
+				TEAM_ID, TEAM_MEMBER_ID, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE))
+				.thenReturn(List.of(2L, 3L));
+
+		feedService.createFeed(MEMBER_ID, TEAM_ID, request);
+
+		verify(teamMemberRepository).findActiveMemberIdsByTeamIdExcludingTeamMember(
+				TEAM_ID, TEAM_MEMBER_ID, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		ArgumentCaptor<FeedPostedEvent> captor = ArgumentCaptor.forClass(FeedPostedEvent.class);
+		verify(eventPublisher).publishEvent(captor.capture());
+		assertThat(captor.getValue()).isEqualTo(new FeedPostedEvent(
+				List.of(2L, 3L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
+	}
+
+	@Test
+	@DisplayName("작성자 외 활성 팀원이 없으면 FeedPostedEvent를 발행하지 않는다")
+	void createFeedDoesNotPublishEventWhenNoOtherActiveMembers() {
+		Media media = uploadedFeedImage(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID);
+		FeedRequestDTO.FeedCreateRequestDTO request = validCreateRequest(MEDIA_PUBLIC_ID);
+		stubActiveAuthor();
+		when(mediaRepository.findByPublicIdsForUpdate(List.of(MEDIA_PUBLIC_ID))).thenReturn(List.of(media));
+		when(feedRepository.save(any(Feed.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
+				TEAM_ID, TEAM_MEMBER_ID, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE))
+				.thenReturn(List.of());
+
+		feedService.createFeed(MEMBER_ID, TEAM_ID, request);
+
+		verify(teamMemberRepository).findActiveMemberIdsByTeamIdExcludingTeamMember(
+				TEAM_ID, TEAM_MEMBER_ID, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		verify(eventPublisher, never()).publishEvent(any());
+	}
+
+	@Test
 	@DisplayName("피드 이미지는 최대 10장까지 등록할 수 있다")
 	void createFeedThrowsWhenMediaCountExceeded() {
 		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithMediaCount(11);
@@ -172,6 +224,9 @@ class FeedServiceTest extends UnitTest {
 		assertThatThrownBy(() -> feedService.createFeed(MEMBER_ID, TEAM_ID, request))
 				.isInstanceOfSatisfying(BusinessException.class, exception ->
 						assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FEED006));
+		verify(teamMemberRepository, never()).findActiveMemberIdsByTeamIdExcludingTeamMember(
+				any(), any(), any(), any());
+		verify(eventPublisher, never()).publishEvent(any());
 	}
 
 	@Test

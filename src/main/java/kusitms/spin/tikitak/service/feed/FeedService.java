@@ -9,6 +9,7 @@ import kusitms.spin.tikitak.domain.feed.enums.FeedType;
 import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
+import kusitms.spin.tikitak.domain.notification.event.FeedPostedEvent;
 import kusitms.spin.tikitak.domain.place.entity.Place;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
@@ -33,6 +34,7 @@ import kusitms.spin.tikitak.service.me.DefaultProfileImageResolver;
 import kusitms.spin.tikitak.service.media.ImagePreset;
 import kusitms.spin.tikitak.service.media.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -86,6 +88,7 @@ public class FeedService {
 	private final DefaultProfileImageResolver defaultProfileImageResolver;
 	private final ImageUrlResolver imageUrlResolver;
 	private final KstDateProvider kstDateProvider;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public FeedResponseDTO.FeedListResponseDTO listFeeds(
 		Long memberId,
@@ -341,6 +344,14 @@ public class FeedService {
 				.build()));
 
 		Feed savedFeed = feedRepository.save(feed);
+
+		List<Long> recipientMemberIds = teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
+				teamId, author.getId(), TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+		if (!recipientMemberIds.isEmpty()) {
+			eventPublisher.publishEvent(
+					new FeedPostedEvent(recipientMemberIds, author.getId(), author.getNickname(), savedFeed.getId(), teamId));
+		}
+
 		return toMutation(savedFeed);
 	}
 
