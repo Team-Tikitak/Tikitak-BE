@@ -6,6 +6,7 @@ import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedPostedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedTaggedEvent;
 import kusitms.spin.tikitak.support.UnitTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -116,6 +117,40 @@ class NotificationEventListenerTest extends UnitTest {
 				.when(notificationService).send(eq(2L), any(NotificationPayload.class));
 
 		notificationEventListener.handleFeedPosted(event);
+
+		verify(notificationService).send(eq(2L), any(NotificationPayload.class));
+		verify(notificationService).send(eq(3L), any(NotificationPayload.class));
+	}
+
+	@Test
+	@DisplayName("FeedTaggedEvent sends FEED_TAGGED notification to all recipients")
+	void handleFeedTaggedSendsNotificationToAllRecipients() {
+		FeedTaggedEvent event = new FeedTaggedEvent(List.of(2L, 3L), 7L, "actor", 20L, 200L);
+
+		notificationEventListener.handleFeedTagged(event);
+
+		ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
+		verify(notificationService).send(eq(2L), captor.capture());
+		verify(notificationService).send(eq(3L), captor.capture());
+
+		assertThat(captor.getAllValues()).hasSize(2).allSatisfy(payload -> {
+			assertThat(payload.getType()).isEqualTo(NotificationType.FEED_TAGGED);
+			assertThat(payload.getTitle()).isEqualTo("게시글에 태그됐어요");
+			assertThat(payload.getBody()).isEqualTo("actor님이 회원님을 게시글에 태그했어요.");
+			assertThat(payload.getActorTeamMemberId()).isEqualTo(7L);
+			assertThat(payload.getData()).containsExactlyInAnyOrderEntriesOf(
+					Map.of("feedId", "20", "teamId", "200"));
+		});
+	}
+
+	@Test
+	@DisplayName("FeedTaggedEvent keeps sending to next recipient when one send fails")
+	void handleFeedTaggedContinuesWhenOneRecipientFails() {
+		FeedTaggedEvent event = new FeedTaggedEvent(List.of(2L, 3L), 7L, "actor", 20L, 200L);
+		doThrow(new RuntimeException("send failed"))
+				.when(notificationService).send(eq(2L), any(NotificationPayload.class));
+
+		notificationEventListener.handleFeedTagged(event);
 
 		verify(notificationService).send(eq(2L), any(NotificationPayload.class));
 		verify(notificationService).send(eq(3L), any(NotificationPayload.class));

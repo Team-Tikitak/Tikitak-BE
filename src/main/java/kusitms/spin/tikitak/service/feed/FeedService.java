@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.domain.media.entity.Media;
 import kusitms.spin.tikitak.domain.media.enums.MediaPurpose;
 import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.notification.event.FeedPostedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedTaggedEvent;
 import kusitms.spin.tikitak.domain.place.entity.Place;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
@@ -345,11 +346,23 @@ public class FeedService {
 
 		Feed savedFeed = feedRepository.save(feed);
 
+		List<Long> taggedRecipientMemberIds = taggedMembers.stream()
+				.filter(teamMember -> !teamMember.getId().equals(author.getId()))
+				.map(teamMember -> teamMember.getMember().getId())
+				.toList();
+		Set<Long> taggedRecipientMemberIdSet = Set.copyOf(taggedRecipientMemberIds);
 		List<Long> recipientMemberIds = teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
-				teamId, author.getId(), TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE);
+				teamId, author.getId(), TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE)
+				.stream()
+				.filter(recipientMemberId -> !taggedRecipientMemberIdSet.contains(recipientMemberId))
+				.toList();
 		if (!recipientMemberIds.isEmpty()) {
 			eventPublisher.publishEvent(
 					new FeedPostedEvent(recipientMemberIds, author.getId(), author.getNickname(), savedFeed.getId(), teamId));
+		}
+		if (!taggedRecipientMemberIds.isEmpty()) {
+			eventPublisher.publishEvent(
+					new FeedTaggedEvent(taggedRecipientMemberIds, author.getId(), author.getNickname(), savedFeed.getId(), teamId));
 		}
 
 		return toMutation(savedFeed);
