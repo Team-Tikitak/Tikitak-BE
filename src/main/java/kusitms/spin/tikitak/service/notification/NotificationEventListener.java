@@ -5,6 +5,7 @@ import kusitms.spin.tikitak.domain.notification.enums.NotificationType;
 import kusitms.spin.tikitak.domain.notification.event.DailyAnswerPostedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentCreatedEvent;
 import kusitms.spin.tikitak.domain.notification.event.FeedCommentRepliedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedPostedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -70,6 +71,29 @@ public class NotificationEventListener {
 				.type(NotificationType.DAILY_QUESTION_UPLOADED)
 				.title("오늘의 질문 답변이 올라왔어요")
 				.body(event.actorNickname() + "님이 오늘의 질문에 답변했어요.")
+				.actorTeamMemberId(event.actorTeamMemberId())
+				.data(Map.of(
+						"feedId", String.valueOf(event.feedId()),
+						"teamId", String.valueOf(event.teamId())
+				))
+				.build();
+
+		event.recipientMemberIds().forEach(memberId -> {
+			try {
+				notificationService.send(memberId, payload);
+			} catch (Exception e) {
+				log.error("알림 전송 중 예외가 발생했습니다. memberId={}, type={}", memberId, payload.getType(), e);
+			}
+		});
+	}
+
+	@Async("notificationExecutor")
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	public void handleFeedPosted(FeedPostedEvent event) {
+		NotificationPayload payload = NotificationPayload.builder()
+				.type(NotificationType.FEED_UPLOADED)
+				.title("새 게시글이 올라왔어요")
+				.body(event.actorNickname() + "님이 새 게시글을 올렸어요.")
 				.actorTeamMemberId(event.actorTeamMemberId())
 				.data(Map.of(
 						"feedId", String.valueOf(event.feedId()),
