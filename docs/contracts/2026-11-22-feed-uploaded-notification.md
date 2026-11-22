@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #208
 - **브랜치**: `Feat/#208-feed-created-notification` (origin/develop 2dc3a21에서 분기)
-- **상태**: 승인됨 (2026-11-22)
+- **상태**: 완료 (2026-11-22, PR #211)
 
 ## 목표
 일반 게시글(GENERAL 피드)을 작성하면 작성자를 뺀 활성 팀원에게 `FEED_UPLOADED` 알림(저장 + FCM 푸시)이 간다. 오늘의 질문 답변 알림(`DailyAnswerPostedEvent`)과 같은 방식(커밋 후 비동기, 수신자별 실패 격리)을 따른다.
