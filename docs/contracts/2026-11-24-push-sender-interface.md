@@ -73,24 +73,24 @@
 - HTTP 응답 코드는 해당 없다. `send`는 async 리스너에서만 불린다(`NotificationEventListener`).
 
 ## 완료 조건
-- [ ] `NotificationService.java`가 `com.google.firebase`를 하나도 import하지 않는다. main에서 `com.google.firebase.messaging`을 import하는 파일은 `FirebaseConfig`와 `FcmPushSender`뿐이다(grep).
-- [ ] `PushSender`에 `isAvailable()`과 `send(List<String>, PushMessage)` 두 메서드가 있고, `PushResult`/`PushStatus`가 결정 사항과 같다.
-- [ ] `FirebaseConfig`, `NotificationPersistService`, `NotificationEventListener`, `ExternalCallConnectionTest`의 diff가 0이다. `NotificationService`의 목록, 개수, 읽음 메서드도 diff가 0이다.
-- [ ] `FcmPushSenderTest`
+- [x] `NotificationService.java`가 `com.google.firebase`를 하나도 import하지 않는다. main에서 `com.google.firebase.messaging`을 import하는 파일은 `FirebaseConfig`와 `FcmPushSender`뿐이다(grep).
+- [x] `PushSender`에 `isAvailable()`과 `send(List<String>, PushMessage)` 두 메서드가 있고, `PushResult`/`PushStatus`가 결정 사항과 같다.
+- [x] `FirebaseConfig`, `NotificationPersistService`, `NotificationEventListener`, `ExternalCallConnectionTest`의 diff가 0이다. `NotificationService`의 목록, 개수, 읽음 메서드도 diff가 0이다.
+- [x] `FcmPushSenderTest`
   - 성공, `UNREGISTERED`, 그 밖의 코드(`UNAVAILABLE`)가 섞인 응답이 순서대로 `SUCCESS`/`INVALID_TOKEN`/`FAILED`로 바뀐다. `errorCode`도 비교한다.
   - `sendEach`에 넘긴 `Message`의 token, title, body, data를 비교한다. `Message`의 getter(`getToken`, `getData`, `getNotification`)는 package-private이고 `Notification`에는 getter가 없다(javap 확인). 그래서 `ArgumentCaptor`로 잡은 뒤 reflection으로 필드를 읽는 등, 비교 방법은 구현자가 고르고 보고한다.
   - `FirebaseMessagingException`이면 예외가 나가지 않고 모든 토큰이 `FAILED`다.
   - RuntimeException은 밖으로 나간다.
   - 빈 토큰 리스트이거나 미설정이면 `sendEach`를 `never()` 부른다.
   - `isAvailable()`이 Optional의 존재 여부와 같다.
-- [ ] `NotificationServiceTest`의 send 테스트는 `PushSender` mock으로 바꾸고, 기존 시나리오를 모두 유지한다.
+- [x] `NotificationServiceTest`의 send 테스트는 `PushSender` mock으로 바꾸고, 기존 시나리오를 모두 유지한다.
   - 미설정이면 `saveForActiveMember(..., false)`이고 `send`는 `never()`다.
   - `INVALID_TOKEN`이면 해당 id만 삭제한다.
   - `FAILED`이면 삭제를 `never()`한다.
   - `PushSender`가 RuntimeException을 던지면 전파되고, 순서는 저장 → 발송이다.
   - `PushMessage`의 data(`type`, `notificationId`, payload data)는 기대 객체 전체와 `isEqualTo`로 비교한다(lessons :53).
-- [ ] 수정한 Java 파일에 Spotless를 적용했고 `./gradlew spotlessCheck`가 통과한다.
-- [ ] `./gradlew test`가 통과한다. ArchUnit, `ExternalCallConnectionTest`, `TikitakApplicationTests`를 포함한다(빈 구성이 바뀌므로, lessons :34, :50). 쿼리와 스키마는 바뀌지 않으므로 integrationTest는 필수가 아니다.
+- [x] 수정한 Java 파일에 Spotless를 적용했고 `./gradlew spotlessCheck`가 통과한다.
+- [x] `./gradlew test`가 통과한다. ArchUnit, `ExternalCallConnectionTest`, `TikitakApplicationTests`를 포함한다(빈 구성이 바뀌므로, lessons :34, :50). 쿼리와 스키마는 바뀌지 않으므로 integrationTest는 필수가 아니다.
 
 ## 커밋 구성
 1. `[Refactor] 푸시 발송을 PushSender 인터페이스와 FCM 구현체로 분리 (#213)`: 신규 main 5개, `NotificationService`, 테스트 2개, 이 계약
