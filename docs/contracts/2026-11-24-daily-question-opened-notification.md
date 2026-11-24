@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #214
 - **브랜치**: `Feat/#214-daily-question-opened-notification` (origin/develop 931c22c에서 분기)
-- **상태**: 승인됨 (2026-11-24)
+- **상태**: 완료 (2026-11-24, PR #218)
 
 ## 목표
 매일 KST 자정(설정값)에 활성 팀에 활성 멤버십이 하나 이상 있는 활성 회원 전체에게 `DAILY_QUESTION_OPENED` 알림을 회원당 한 번, 공통 문구로 보낸다. 대량 발송 개선의 기준선(baseline)으로 쓰기 위해 **최적화하지 않고** 기존 `NotificationService.send()`를 차례로 부르며, Micrometer 지표와 시작/종료 로그를 처음부터 넣는다.
