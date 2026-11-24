@@ -19,7 +19,14 @@ loadtest/
 │   ├── 20_notification.sql   # 알림 시드: notification (#217)
 │   ├── 30_targets.sql        # k6 입력 JSON 추출 (읽기 전용, #217)
 │   └── NN_<기능>.sql          # 기능별 시드. 00_common 다음에 번호 순서대로 실행한다
-├── k6/data/                  # 시드에서 뽑은 k6 입력. 커밋하지 않는다
+├── k6/
+│   ├── read-api-baseline.js  # 조회 API 측정 시나리오 (mixed / ramp / solo, #217)
+│   └── data/                 # 시드에서 뽑은 k6 입력(targets.json, comment-feeds.json). 커밋하지 않는다
+├── scripts/
+│   ├── extract-comment-feeds.sh  # 댓글 요청 대상(팀별 최신 피드 20개) 추출
+│   ├── pgss.sh               # pg_stat_statements 초기화·덤프
+│   ├── hikari-sampler.sh     # /actuator/prometheus의 Hikari 지표를 1초마다 CSV로
+│   └── run-measure.sh        # 위를 묶은 측정 1회 실행 래퍼
 └── results/                  # 결과 문서. results/raw/ 는 원시 로그로 커밋하지 않는다
 ```
 
@@ -308,3 +315,101 @@ docker compose -f loadtest/docker-compose.yml up -d --wait
 ```
 
 `down -v`는 named volume `tikitak-loadtest-pgdata`까지 지운다. 다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V25를 처음부터 적용한다(4번부터 다시).
+
+### 8. 측정 (#217)
+
+명령은 저장소 루트에서 Git Bash로 실행한다. 앱이 떠 있어야 한다(4·5번). k6는 v2.2.0에서 확인했다.
+
+#### 8-1. 준비
+
+```bash
+# 6-2의 targets.json이 있어야 한다. 그다음 댓글 요청 대상을 뽑는다(약 1초, 약 380KB)
+bash loadtest/scripts/extract-comment-feeds.sh
+```
+
+`comment-feeds.json`은 팀마다 피드 목록 첫 페이지에 보이는 최신 피드 20개의 ID다. `targets.json`에는 댓글 많은 피드만 있어서 따로 뽑는다.
+k6 `setup()`에서 API로 가져오지 않는 이유는, solo 측정의 `pg_stat_statements`에 피드 목록 쿼리가 섞이지 않게 하려는 것이다.
+
+#### 8-2. 요청 구성 (`k6/read-api-baseline.js`)
+
+| `api` 태그 | 요청 | 비중 | 대상 고르기 |
+|---|---|---|---|
+| `map_pins` | `GET /api/v1/teams/{teamId}/map/pins` | 20% | 팀 |
+| `feed_by_place` | `GET /api/v1/teams/{teamId}/feeds?placeId=<externalPlaceId>` | 20% | 팀 → 그 팀 장소 중 피드 수에 비례해 하나(큰 팀은 상위 100개 장소 안에서) |
+| `feed_first` | `GET /api/v1/teams/{teamId}/feeds` | 15% | 팀 |
+| `feed_deep` | `GET /api/v1/teams/{teamId}/feeds?cursor=<deepCursor>` | 5% | `deepCursors` 9개 중 하나(큰 팀만 있다) |
+| `best_attendance` | `GET /api/v1/teams/{teamId}/home/best-attendance` | 5% | 팀 |
+| `comments` | `GET /api/v1/teams/{teamId}/feeds/{feedId}/comments` | 10% | 20%는 댓글 많은 피드(500~2,000개, `commentHeavyFeeds`), 80%는 팀 → 그 팀 최신 피드 20개 중 하나 |
+| `notifications` | `GET /api/v1/me/notifications` | 10% | 팀 → 회원. `teamId` 없이 회원 전체 알림 |
+| `unread_count` | `GET /api/v1/me/notifications/unread-count` | 15% | 팀 → 회원. `teamId` 없이 |
+
+- "팀"은 30% 확률로 큰 팀 3개 중 하나, 70%는 일반 팀 2,000개 중 하나다. 회원은 고른 팀의 멤버 중 무작위다. 댓글 많은 피드와 깊은 커서는 그 피드의 팀 멤버 중에서 고른다(댓글 많은 피드는 약 30%가 큰 팀이다).
+- `size`, `type` 등 나머지 쿼리 파라미터는 보내지 않는다(서버 기본값: 페이지 20건).
+- 댓글 많은 피드를 20%로 둔 이유: 실제 비율(피드의 0.1%)로 두면 측정 5분 동안 몇 건만 나와 그 경로의 지연이 보이지 않는다. 반대로 절반 이상이면 댓글 API 지연이 이 피드들로만 정해진다. 두 경우가 모두 P95에 드러나도록 고른 값이다.
+- 요청마다 `tags: {api, name}`을 붙인다(`name`은 경로 템플릿이라 URL별 시계열이 늘지 않는다). ramp에서는 `stage` 태그도 붙는다.
+- check: 상태 200, 응답 `success == true`, `feed_by_place`는 `data.items`가 1건 이상. 200이 아니면 응답 앞부분을 경고 로그로 남긴다(`LOG_ERRORS=0`이면 끈다).
+
+**토큰**: `setup()`이 `JWT_SECRET`으로 `targets.json`의 모든 회원(8,557명)에게 HS256 access token을 서명한다. 형식은 `TokenService.createToken`과 같다.
+header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"access","iat":..,"exp":..,"jti":"<uuid>"}`(만료 24시간), base64url 패딩 없음, 서명은 `crypto.hmac('sha256', secret, data, 'base64rawurl')`이다(k6 v2.2.0에서 `base64rawurl` 출력이 Java `Base64.getUrlEncoder().withoutPadding()`과 같은 것을 확인했다).
+앱은 서명을 문자열로 비교하므로 인코딩이 다르면 401(AUTH009)이 난다. k6 시작부터 첫 요청까지(init과 서명 포함) 약 1.5초 걸렸다(2026-11-24).
+
+#### 8-3. 모드
+
+| 모드 | 실행기 | 기본값 | threshold |
+|---|---|---|---|
+| `mixed`(기본) | `warmup`: `constant-arrival-rate` 20 RPS 1분 → `measure`: `constant-arrival-rate` 100 RPS 5분(`startTime` = 웜업 시간). `preAllocatedVUs` 50, `maxVUs` 300 | `WARMUP=1m`, `DURATION=5m`, `RATE=100` | API별 `http_req_duration{scenario:measure,api:x}` `p(95)<300`, `http_req_failed{...}` `rate<0.01`, `checks{...}` `rate>0.99`, `dropped_iterations{scenario:measure}` `count==0`. 웜업은 `scenario:warmup`이라 판정에 섞이지 않는다 |
+| `ramp` | `ramping-arrival-rate`. 단계마다 2분 유지, 단계 사이 10초는 선형 전환 | `RAMP_RATES=25,50,100,200,400`, `STAGE_DURATION=2m`, `TRANSITION=10s` | 단계별 `http_req_duration{stage:r025}` 등. 판정용이 아니라 요약에 단계별 P95를 남기려고 건다 |
+| `solo` | `constant-arrival-rate` 한 API만 | `API=<태그>`, `RATE=20`, `DURATION=1m` | 그 API의 P95·실패율·check, `dropped_iterations` |
+
+- ramp의 `stage` 태그는 시나리오 시작 기준 경과 시간으로 정한다. 유지 구간은 `r025`, `r050`, `r100`, `r200`, `r400`, 전환 구간은 `transition`이다. 전환 구간 요청은 단계별 지표에서 빠진다.
+- ramp 전체 길이는 2분 × 5 + 10초 × 4 = 10분 40초다(그 뒤 gracefulStop 최대 30초).
+- 공통 env: `BASE_URL`(기본 `http://localhost:8080`), `MAX_VUS`(기본 300), `JWT_SECRET`(필수), `RUN_ID`, `SUMMARY_DIR`(기본 `loadtest/results/raw`).
+- 짧게 확인할 때는 `WARMUP=10s DURATION=30s`, `DURATION=10s`, `RAMP_RATES=5,10 STAGE_DURATION=10s TRANSITION=5s`처럼 줄인다.
+
+#### 8-4. 실행
+
+```bash
+bash loadtest/scripts/run-measure.sh mixed
+bash loadtest/scripts/run-measure.sh ramp
+bash loadtest/scripts/run-measure.sh solo map_pins     # API 태그 하나
+DURATION=10s bash loadtest/scripts/run-measure.sh solo comments
+```
+
+`run-measure.sh`는 다음을 차례로 한다. `JWT_SECRET`이 env에 없으면 `loadtest/.env`에서 읽는다.
+
+1. 앱 `/actuator/health`와 입력 JSON 확인
+2. `pg_stat_statements_reset()`
+3. Hikari 샘플러를 백그라운드로 시작
+4. `k6 run --quiet loadtest/k6/read-api-baseline.js` (ramp는 `--out csv=...-k6-metrics.csv.gz`를 더한다)
+5. 샘플러 종료, `pg_stat_statements` 덤프
+6. Hikari active/pending 최대값(ramp는 단계별로도) 출력
+
+종료 코드는 k6의 것이다(threshold를 넘으면 99). threshold를 넘어도 덤프까지 한다.
+
+결과 파일은 `loadtest/results/raw/<RUN_ID>-<mode>[-api]-*`로 남는다(`RUN_ID` = 호스트 로컬 시각 `yyyyMMdd-HHmmss`).
+
+| 파일 | 내용 |
+|---|---|
+| `-k6-summary.json` | k6 `handleSummary` 결과. `meta`(모드, 시나리오, 비중, setup 끝 시각, ramp 일정)와 모든 지표(P95·P99 포함) |
+| `-k6.log` | k6 stdout. 끝에 API별(ramp는 단계별도) count·avg·P95·P99·max·실패율·check 표 |
+| `-hikari.csv` | `epoch_ms,time,active,pending,idle,max`. 1초 간격 |
+| `-pgss.csv` / `-pgss.txt` | `total_exec_time` 상위 50개 쿼리의 calls·rows·총/평균/최대 시간·공유 버퍼 hit/read·쿼리 전문(csv) / 합계와 표(txt) |
+| `-stages.csv` | ramp만. 단계별 구간의 절대 시각(epoch ms) |
+| `-k6-metrics.csv.gz` | ramp만. 요청 단위 원시 지표(단계별 `dropped_iterations` 시점 확인용) |
+
+스크립트를 따로 쓸 수도 있다.
+
+```bash
+bash loadtest/scripts/pgss.sh reset
+bash loadtest/scripts/pgss.sh dump loadtest/results/raw/<접두사> [N]       # 상위 N개(기본 50)
+bash loadtest/scripts/hikari-sampler.sh loadtest/results/raw/<파일>.csv &  # 종료: kill <pid>
+JWT_SECRET=... MODE=solo API=unread_count k6 run loadtest/k6/read-api-baseline.js
+```
+
+#### 8-5. 결과를 읽을 때
+
+- **요청당 쿼리 수**(solo): `-pgss.csv`의 각 쿼리 `calls` ÷ k6 요청 수(`-k6.log` 표의 count). setup은 `/actuator/health`만 부르고 DB를 쓰는 API를 부르지 않는다. 앱 기동 직후에는 JDBC 메타데이터 조회(`SELECT c.oid, a.attnum, ...`)가 몇 번 섞일 수 있다.
+- **mixed의 `pg_stat_statements`**는 웜업 시작 전에 초기화하므로 웜업 1분의 쿼리도 포함한다. P95 같은 지연 판정은 k6의 `scenario:measure` 값으로 한다.
+- **캐시 상태**: 앱 기동이나 시드 직후 첫 실행은 Postgres 버퍼 캐시가 비어 있어, 같은 API가 이후 실행보다 몇 배~수십 배 느렸다(2026-11-24 스모크). solo를 여러 개 이어서 돌릴 때는 실행 순서를 결과 문서에 적고, 필요하면 같은 solo를 한 번 더 돌려 두 번째 값을 쓴다.
+- **샘플러 빈 줄**: `/actuator/prometheus`도 같은 Tomcat 스레드 풀에서 처리된다. 풀이 포화돼 요청이 쌓이면 2초 안에 응답하지 못해 그 샘플의 값이 비고, 래퍼가 빈 샘플 수를 출력한다. 빈 구간의 pending은 알 수 없으므로 결과 문서에 그 사실을 같이 적는다.
+- **k6도 같은 호스트의 CPU를 쓴다.** 요청 하나를 만들 때 무거운 일을 하면(예: SharedArray 전체를 훑는 것) 그 시간이 `http_req_blocked`·`http_req_connecting`과 지연에 섞인다. 의심되면 요약의 `iteration_duration`과 `http_req_duration`의 평균을 비교한다(정상이면 거의 같다).
