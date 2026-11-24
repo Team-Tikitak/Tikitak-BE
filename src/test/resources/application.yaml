@@ -30,3 +30,7 @@ kakao:
 auth:
   jwt:
     secret: test-jwt-secret-for-tests-at-least-32-bytes
+
+notification:
+  daily-question-opened:
+    cron: "-"
