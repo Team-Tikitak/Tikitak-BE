@@ -2,6 +2,7 @@ package kusitms.spin.tikitak.repository.team;
 
 import kusitms.spin.tikitak.domain.feed.entity.Feed;
 import kusitms.spin.tikitak.domain.member.entity.Member;
+import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
@@ -133,6 +134,40 @@ class TeamMemberRepositoryIntegrationTest extends IntegrationTest {
 		);
 
 		assertThat(recipientMemberIds).containsExactly(teammate.getId());
+	}
+
+	@Test
+	@DisplayName("활성 팀에 활성 멤버십이 있는 활성 회원 id를 중복 없이 오름차순으로 조회한다")
+	void findDistinctMemberIdsWithActiveMembershipFiltersAndDeduplicates() {
+		Member twoTeams = persist(member("two-teams"));
+		Member single = persist(member("single"));
+		Member withdrawn = persist(member("withdrawn", MemberStatus.INACTIVE, null));
+		Member inactiveTeamOnly = persist(member("inactive-team-only"));
+		Member leftOnly = persist(member("left-only"));
+		Member bannedOnly = persist(member("banned-only"));
+		Member invitedOnly = persist(member("invited-only"));
+		Team activeTeam = persist(team("recipient-active"));
+		Team otherActiveTeam = persist(team("recipient-other-active"));
+		Team inactiveTeam = persist(team("recipient-inactive", TeamStatus.INACTIVE, BASE_TIME.minusDays(1)));
+
+		persist(teamMember(twoTeams, activeTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(twoTeams, otherActiveTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(single, otherActiveTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(withdrawn, activeTeam, TeamMemberRole.MEMBER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(inactiveTeamOnly, inactiveTeam, TeamMemberRole.OWNER, TeamMemberStatus.ACTIVE));
+		persist(teamMember(leftOnly, activeTeam, TeamMemberRole.MEMBER, TeamMemberStatus.LEFT));
+		persist(teamMember(bannedOnly, activeTeam, TeamMemberRole.MEMBER, TeamMemberStatus.BANNED));
+		persist(teamMember(invitedOnly, activeTeam, TeamMemberRole.MEMBER, TeamMemberStatus.INVITED));
+		flushAndClear();
+
+		List<Long> memberIds = teamMemberRepository.findDistinctMemberIdsWithActiveMembership(
+				MemberStatus.ACTIVE,
+				TeamMemberStatus.ACTIVE,
+				TeamStatus.ACTIVE
+		);
+
+		assertThat(twoTeams.getId()).isLessThan(single.getId());
+		assertThat(memberIds).containsExactly(twoTeams.getId(), single.getId());
 	}
 
 	@Test

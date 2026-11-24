@@ -11,7 +11,8 @@ import org.springframework.context.annotation.Configuration;
 		ImageOptimizationProperties.class,
 		FirebaseProperties.class,
 		OAuthStateProperties.class,
-		LoginCodeProperties.class
+		LoginCodeProperties.class,
+		DailyQuestionOpenedNotificationProperties.class
 })
 public class PropertiesConfig {
 }

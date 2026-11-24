@@ -99,3 +99,7 @@ kakao:
 
 firebase:
   credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
+
+notification:
+  daily-question-opened:
+    cron: ${DAILY_QUESTION_OPENED_NOTIFICATION_CRON:}

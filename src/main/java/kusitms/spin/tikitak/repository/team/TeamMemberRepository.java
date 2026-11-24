@@ -1,5 +1,6 @@
 package kusitms.spin.tikitak.repository.team;
 
+import kusitms.spin.tikitak.domain.member.enums.MemberStatus;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberRole;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -200,6 +201,22 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long>, D
 			@Param("teamId") Long teamId,
 			@Param("excludeTeamMemberId") Long excludeTeamMemberId,
 			@Param("memberStatus") TeamMemberStatus memberStatus,
+			@Param("teamStatus") TeamStatus teamStatus
+	);
+
+	@Query("""
+			select distinct m.id
+			from TeamMember tm
+			join tm.member m
+			join tm.team t
+			where m.status = :memberStatus
+				and tm.status = :teamMemberStatus
+				and t.status = :teamStatus
+			order by m.id
+			""")
+	List<Long> findDistinctMemberIdsWithActiveMembership(
+			@Param("memberStatus") MemberStatus memberStatus,
+			@Param("teamMemberStatus") TeamMemberStatus teamMemberStatus,
 			@Param("teamStatus") TeamStatus teamStatus
 	);
 }
