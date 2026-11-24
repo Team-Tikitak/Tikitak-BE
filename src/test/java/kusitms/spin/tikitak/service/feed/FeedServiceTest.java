@@ -10,6 +10,7 @@ import kusitms.spin.tikitak.domain.media.enums.MediaStatus;
 import kusitms.spin.tikitak.domain.member.entity.Member;
 import kusitms.spin.tikitak.domain.member.enums.ProfileCharacterType;
 import kusitms.spin.tikitak.domain.notification.event.FeedPostedEvent;
+import kusitms.spin.tikitak.domain.notification.event.FeedTaggedEvent;
 import kusitms.spin.tikitak.domain.team.entity.Team;
 import kusitms.spin.tikitak.domain.team.entity.TeamMember;
 import kusitms.spin.tikitak.domain.team.enums.TeamMemberStatus;
@@ -65,6 +66,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -194,6 +196,61 @@ class FeedServiceTest extends UnitTest {
 		verify(eventPublisher).publishEvent(captor.capture());
 		assertThat(captor.getValue()).isEqualTo(new FeedPostedEvent(
 				List.of(2L, 3L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
+		verify(eventPublisher, never()).publishEvent(any(FeedTaggedEvent.class));
+	}
+
+	@Test
+	@DisplayName("일부 팀원을 태그하면 태그된 팀원은 FeedTaggedEvent, 나머지는 FeedPostedEvent로 나눠 발행한다")
+	void createFeedPublishesFeedTaggedEventToTaggedMembersAndFeedPostedEventToOthers() {
+		TeamMember firstTagged = activeMember(101L, activeMember(2L), team);
+		TeamMember secondTagged = activeMember(102L, activeMember(3L), team);
+		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithTags(List.of(102L, 101L));
+		stubCreateFeedWithTags(List.of(102L, 101L), List.of(firstTagged, secondTagged), List.of(2L, 3L, 4L, 5L));
+
+		feedService.createFeed(MEMBER_ID, TEAM_ID, request);
+
+		List<Object> events = capturePublishedEvents(2);
+		assertThat(events).filteredOn(FeedPostedEvent.class::isInstance)
+				.containsExactly(new FeedPostedEvent(
+						List.of(4L, 5L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
+		assertThat(events).filteredOn(FeedTaggedEvent.class::isInstance)
+				.containsExactly(new FeedTaggedEvent(
+						List.of(3L, 2L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
+	}
+
+	@Test
+	@DisplayName("다른 활성 팀원을 모두 태그하면 FeedTaggedEvent만 발행한다")
+	void createFeedPublishesOnlyFeedTaggedEventWhenAllOtherMembersTagged() {
+		TeamMember firstTagged = activeMember(101L, activeMember(2L), team);
+		TeamMember secondTagged = activeMember(102L, activeMember(3L), team);
+		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithTags(List.of(101L, 102L));
+		stubCreateFeedWithTags(List.of(101L, 102L), List.of(firstTagged, secondTagged), List.of(2L, 3L));
+
+		feedService.createFeed(MEMBER_ID, TEAM_ID, request);
+
+		ArgumentCaptor<FeedTaggedEvent> captor = ArgumentCaptor.forClass(FeedTaggedEvent.class);
+		verify(eventPublisher).publishEvent(captor.capture());
+		assertThat(captor.getValue()).isEqualTo(new FeedTaggedEvent(
+				List.of(2L, 3L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
+		verify(eventPublisher, never()).publishEvent(any(FeedPostedEvent.class));
+	}
+
+	@Test
+	@DisplayName("요청 태그 목록에 작성자를 넣어도 작성자는 어느 알림 이벤트의 수신자에도 들어가지 않는다")
+	void createFeedExcludesAuthorFromBothEventsWhenAuthorInTaggedIds() {
+		TeamMember tagged = activeMember(101L, activeMember(2L), team);
+		FeedRequestDTO.FeedCreateRequestDTO request = createRequestWithTags(List.of(TEAM_MEMBER_ID, 101L));
+		stubCreateFeedWithTags(List.of(101L), List.of(tagged), List.of(2L, 3L));
+
+		feedService.createFeed(MEMBER_ID, TEAM_ID, request);
+
+		List<Object> events = capturePublishedEvents(2);
+		assertThat(events).filteredOn(FeedPostedEvent.class::isInstance)
+				.containsExactly(new FeedPostedEvent(
+						List.of(3L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
+		assertThat(events).filteredOn(FeedTaggedEvent.class::isInstance)
+				.containsExactly(new FeedTaggedEvent(
+						List.of(2L), TEAM_MEMBER_ID, "nickname-" + TEAM_MEMBER_ID, FEED_ID, TEAM_ID));
 	}
 
 	@Test
@@ -826,6 +883,41 @@ class FeedServiceTest extends UnitTest {
 		ArgumentCaptor<FeedListCondition> captor = ArgumentCaptor.forClass(FeedListCondition.class);
 		verify(feedRepository).findActivePage(captor.capture(), eq(expectedLimit));
 		return captor.getValue();
+	}
+
+	private FeedRequestDTO.FeedCreateRequestDTO createRequestWithTags(List<Long> taggedTeamMemberIds) {
+		return new FeedRequestDTO.FeedCreateRequestDTO(
+				"오늘 카페 좋았다", List.of(MEDIA_PUBLIC_ID), null, taggedTeamMemberIds);
+	}
+
+	private void stubCreateFeedWithTags(
+			List<Long> idsToResolve,
+			List<TeamMember> resolvedMembers,
+			List<Long> otherActiveMemberIds
+	) {
+		Media media = uploadedFeedImage(MEDIA_ID, MEMBER_ID, MEDIA_PUBLIC_ID);
+		stubActiveAuthor();
+		when(mediaRepository.findByPublicIdsForUpdate(List.of(MEDIA_PUBLIC_ID))).thenReturn(List.of(media));
+		when(teamMemberRepository.findActiveByTeamIdAndIds(
+				eq(TEAM_ID),
+				eq(idsToResolve),
+				eq(TeamMemberStatus.ACTIVE),
+				eq(TeamStatus.ACTIVE)
+		)).thenReturn(resolvedMembers);
+		when(feedRepository.save(any(Feed.class))).thenAnswer(invocation -> {
+			Feed savedFeed = invocation.getArgument(0);
+			ReflectionTestUtils.setField(savedFeed, "id", FEED_ID);
+			return savedFeed;
+		});
+		when(teamMemberRepository.findActiveMemberIdsByTeamIdExcludingTeamMember(
+				TEAM_ID, TEAM_MEMBER_ID, TeamMemberStatus.ACTIVE, TeamStatus.ACTIVE))
+				.thenReturn(otherActiveMemberIds);
+	}
+
+	private List<Object> capturePublishedEvents(int expectedCount) {
+		ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+		verify(eventPublisher, times(expectedCount)).publishEvent(captor.capture());
+		return captor.getAllValues();
 	}
 
 	private void stubActiveAuthor() {
