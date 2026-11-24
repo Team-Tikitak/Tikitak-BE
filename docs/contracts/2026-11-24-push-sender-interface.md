@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #213
 - **브랜치**: `Refactor/#213-pushsender-interface` (origin/develop bd15eaf에서 분기)
-- **상태**: 승인됨 (2026-11-24)
+- **상태**: 완료 (2026-11-24, PR #216)
 
 ## 목표
 `NotificationService`가 Firebase SDK(`FirebaseMessaging`, `Message`, `BatchResponse`, `SendResponse`, `MessagingErrorCode`, `FirebaseMessagingException`)를 직접 쓰지 않게 한다. 대신 `PushSender` 인터페이스에만 의존하게 해서, #215에서 지연과 실패율을 조절하는 가짜 발송기로 바꿔 끼울 수 있게 한다. 발송 동작(무엇을 보내는지, 어떤 토큰을 지우는지, 어떤 예외가 밖으로 나가는지)은 바꾸지 않는다. 바뀌는 것은 로그뿐이다(아래 표).
