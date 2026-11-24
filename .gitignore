@@ -44,3 +44,8 @@ src/main/resources/application-local.yaml
 
 ### Codex critic reviews (local only) ###
 .codex-reviews/
+
+### Load test (local only) ###
+loadtest/.env
+loadtest/k6/data/
+loadtest/results/raw/

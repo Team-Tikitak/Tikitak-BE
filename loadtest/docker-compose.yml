@@ -1,0 +1,74 @@
+# 조회 API 부하 측정용 로컬 환경 (#217, #215 공용)
+# 사용법과 고정 설정값 설명은 loadtest/README.md 참고.
+# 측정 도중에는 아래 Postgres 설정과 리소스 제한을 바꾸지 않는다.
+name: tikitak-loadtest
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: tikitak-loadtest-postgres
+    environment:
+      POSTGRES_DB: tikitak
+      POSTGRES_USER: tikitak
+      POSTGRES_PASSWORD: tikitak
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - track_io_timing=on
+      - -c
+      - timezone=Asia/Seoul
+      - -c
+      - log_timezone=Asia/Seoul
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_wal_size=4GB
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    # Docker 기본 /dev/shm(64MB)은 병렬 쿼리에서 부족할 수 있어 늘린다. 메모리 제한(2g)에 포함된다.
+    shm_size: 256mb
+    cpus: 2
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tikitak -d tikitak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: tikitak-loadtest-redis
+    environment:
+      TZ: Asia/Seoul
+    ports:
+      - "56379:6379"
+    cpus: 1
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+    name: tikitak-loadtest-pgdata
