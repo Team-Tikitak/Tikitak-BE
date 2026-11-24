@@ -1,0 +1,13 @@
+# loadtest/grafana/dashboards/*.json 을 자동으로 불러온다 (#217).
+# 화면에서 고친 내용은 저장되지 않는다. 대시보드를 바꾸려면 JSON 파일을 고친다.
+apiVersion: 1
+
+providers:
+  - name: tikitak-loadtest
+    folder: loadtest
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

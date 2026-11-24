@@ -1,6 +1,7 @@
 # 조회 API 부하 측정용 로컬 환경 (#217, #215 공용)
 # 사용법과 고정 설정값 설명은 loadtest/README.md 참고.
 # 측정 도중에는 아래 Postgres 설정과 리소스 제한을 바꾸지 않는다.
+# 구성: postgres, redis(측정 환경) + prometheus, grafana(모니터링). `down -v`는 네 서비스의 볼륨을 모두 지운다.
 name: tikitak-loadtest
 
 services:
@@ -69,6 +70,68 @@ services:
       timeout: 3s
       retries: 20
 
+  # 모니터링: 호스트에서 도는 앱의 /actuator/prometheus(management 포트 8081)를 1초 간격으로 수집한다.
+  # 앱·k6와 같은 호스트 CPU를 나눠 쓰므로 작게 제한한다. 포트는 이 PC에서만 열리게 127.0.0.1에 묶는다.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: tikitak-loadtest-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    # Docker Desktop은 host.docker.internal을 기본 제공하지만, Linux Docker Engine에서도 되게 명시한다.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:59090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    cpus: 0.5
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: tikitak-loadtest-grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Seoul
+      # 로컬 전용: 로그인 없이 보기(Viewer), 편집은 admin/admin
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/tikitak-backend-dashboard.json
+    ports:
+      - "127.0.0.1:53000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    cpus: 0.5
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata:
     name: tikitak-loadtest-pgdata
+  promdata:
+    name: tikitak-loadtest-prometheus
+  grafanadata:
+    name: tikitak-loadtest-grafana

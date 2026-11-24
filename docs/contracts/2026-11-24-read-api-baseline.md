@@ -66,13 +66,13 @@
 - `loadtest/**` (새로 만든다)
 - `.gitignore`: `loadtest/.env`, `loadtest/k6/data/`, `loadtest/results/raw/`를 추가한다.
 - `docs/contracts/2026-11-24-read-api-baseline.md` (이 문서)
-- `src/**`, `build.gradle`, `src/main/resources/**`는 **건드리지 않는다**.
+- `src/**`, `build.gradle`, `src/main/resources/**`는 **건드리지 않는다**. actuator 포트 분리는 측정용 `.env`의 env 값으로만 한다.
 
 ## 의도된 동작 변경
 없음. 앱 코드와 설정을 바꾸지 않는다.
 
 ## 완료 조건
-- [ ] `git diff --stat origin/develop` 결과에 `src/`, `build.gradle`, `src/main/resources/` 변경이 없다.
+- [ ] `git diff --stat origin/develop...HEAD`(세 점, develop이 앞서 나가도 이 브랜치 변경만 보이게) 결과에 `src/`, `build.gradle`, `src/main/resources/` 변경이 없다.
 - [ ] `docker compose -f loadtest/docker-compose.yml down -v` 다음 `up -d`를 하면 빈 DB가 뜬다. 앱을 기동하면 Flyway V1~V25가 적용된다(`flyway_schema_history` 25행).
 - [ ] 시드 4개를 실행한 뒤 확인 쿼리(README에 포함) 결과가 아래 조건을 만족한다.
   - feed 총수가 90만~110만 건이다.
@@ -93,7 +93,8 @@
 1. 측정 환경과 공통 시드: `docker-compose.yml`, `.env.example`, `README.md`(기동·초기화), `sql/00_common.sql`, `.gitignore`
 2. 피드·알림 시드와 대상 추출: `sql/10_feed.sql`, `20_notification.sql`, `30_targets.sql`, README의 시드 절차와 확인 쿼리
 3. k6 시나리오와 수집 스크립트: `k6/read-api-baseline.js`, `scripts/*`, README의 측정 절차
-4. 베이스라인 결과: `results/2026-11-xx-baseline.md`, 계약 상태 갱신
+4. 모니터링과 측정 규칙(2026-11-24 추가 승인): compose에 Prometheus·Grafana 추가, 기존 대시보드 JSON을 `loadtest/grafana/`에 두고 자동 로드, `.env.example`에 `MANAGEMENT_SERVER_PORT=8081`(actuator 분리), 측정 전 2분 웜업 규칙을 README와 래퍼에 반영
+5. 베이스라인 결과: `results/2026-11-xx-baseline.md`, 계약 상태 갱신
 
 ## 하지 말 것
 - dev Supabase나 prod DB에 접속하거나 시드를 넣는 것. 단, `SHOW server_version` 확인은 사람이 한다.
@@ -109,7 +110,7 @@
 - soft delete 피드가 0건이라, `deleted_at IS NULL` 부분 인덱스와 비부분 인덱스를 고르는 실행 계획이 실제와 다를 수 있다.
 - 로컬은 앱과 DB 사이 네트워크 지연이 거의 없다. 그래서 절대 수치는 dev/prod보다 낮게 나온다. 같은 조건에서 개선 전과 후를 비교하는 용도로만 쓴다.
 - 혼합 시나리오에서 한 API의 커넥션 점유가 다른 API의 지연에 섞인다. 원인을 가를 때는 solo 실행과 `pg_stat_statements`로 나눠 본다.
-- k6가 직접 서명할 때 `k6/crypto`의 base64url 출력이 되는지 미확인이다. 안 되면 표준 base64를 받아 문자를 치환한다.
+- (확인됨) k6 `crypto.hmac(..., 'base64rawurl')`이 패딩 없는 base64url을 낸다. 이 토큰으로 unread-count 200을 받았다(커밋 3 스모크).
 - OAuth placeholder를 비웠을 때 기동이 실패하는지, Redis가 없을 때 기동에 영향이 있는지 미확인이다. 그래서 `.env.example`에 가짜 값을 넣고 Redis도 띄운다.
 
 ## 참고

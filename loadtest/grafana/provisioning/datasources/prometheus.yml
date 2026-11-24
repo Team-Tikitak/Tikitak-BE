@@ -1,0 +1,14 @@
+# 로컬 Prometheus 데이터소스 (#217). uid는 대시보드 JSON의 ds 변수 기본값과 같아야 한다.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus (loadtest)
+    uid: tikitak-loadtest-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # scrape 간격과 맞춘다. $__rate_interval = max(4 × 1s, 간격 + 1s)
+      timeInterval: 1s

@@ -10,13 +10,13 @@
 # 사용
 #   bash loadtest/scripts/hikari-sampler.sh <출력 CSV> &      # 백그라운드
 #   kill <pid>                                                  # 종료
-# env: BASE_URL(기본 http://localhost:8080), INTERVAL(정수 초, 기본 1)
+# env: MANAGEMENT_URL(actuator 주소, 기본 http://localhost:8081 = loadtest/.env의 MANAGEMENT_SERVER_PORT), INTERVAL(정수 초, 기본 1)
 #
 # CSV 열: epoch_ms, time(호스트 로컬 시각), active, pending, idle, max
 set -uo pipefail
 
 OUT="${1:?usage: $0 <출력 CSV>}"
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+MANAGEMENT_URL="${MANAGEMENT_URL:-http://localhost:8081}"
 INTERVAL="${INTERVAL:-1}"
 mkdir -p "$(dirname "$OUT")"
 
@@ -35,7 +35,7 @@ while [ "$running" -eq 1 ]; do
 	ts_us=$(now_us)
 	printf -v ts '%(%Y-%m-%dT%H:%M:%S)T' "${ts_us:0:-6}"
 	# 예: hikaricp_connections_active{pool="HikariPool-1"} 3.0  -> 마지막 필드
-	vals="$(curl -s --max-time 2 "$BASE_URL/actuator/prometheus" 2>/dev/null | awk '
+	vals="$(curl -s --max-time 2 "$MANAGEMENT_URL/actuator/prometheus" 2>/dev/null | awk '
 		/^hikaricp_connections_active[{ ]/  { a = $NF }
 		/^hikaricp_connections_pending[{ ]/ { p = $NF }
 		/^hikaricp_connections_idle[{ ]/    { i = $NF }

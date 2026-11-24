@@ -9,9 +9,9 @@
 
 ```
 loadtest/
-├── docker-compose.yml        # Postgres 17.6 + Redis (프로젝트 이름 tikitak-loadtest)
+├── docker-compose.yml        # Postgres 17.6 + Redis + Prometheus + Grafana (프로젝트 이름 tikitak-loadtest)
 ├── initdb/                   # 볼륨이 비어 있을 때 한 번 실행 (pg_stat_statements 확장 생성)
-├── .env.example              # 앱 실행용 env 템플릿 (가짜 R2·Kakao·OAuth 값)
+├── .env.example              # 앱 실행용 env 템플릿 (가짜 R2·Kakao·OAuth 값, actuator 포트 8081 분리)
 ├── .env                      # 위 파일을 복사해 만든다. 커밋하지 않는다
 ├── sql/
 │   ├── 00_common.sql         # 공통 시드: member, team, team_member (#217, #215 공유)
@@ -26,7 +26,11 @@ loadtest/
 │   ├── extract-comment-feeds.sh  # 댓글 요청 대상(팀별 최신 피드 20개) 추출
 │   ├── pgss.sh               # pg_stat_statements 초기화·덤프
 │   ├── hikari-sampler.sh     # /actuator/prometheus의 Hikari 지표를 1초마다 CSV로
-│   └── run-measure.sh        # 위를 묶은 측정 1회 실행 래퍼
+│   └── run-measure.sh        # 측정 전 웜업 + 위를 묶은 측정 1회 실행 래퍼
+├── prometheus/prometheus.yml # 앱 management 포트(8081)를 1초 간격으로 수집
+├── grafana/
+│   ├── provisioning/         # 데이터소스(Prometheus)와 대시보드 자동 로드 설정
+│   └── dashboards/           # Tikitak Backend 대시보드 JSON (운영 대시보드를 로컬용으로 고친 복사본)
 └── results/                  # 결과 문서. results/raw/ 는 원시 로그로 커밋하지 않는다
 ```
 
@@ -52,10 +56,16 @@ loadtest/
 | `track_io_timing` | on (`EXPLAIN (ANALYZE, BUFFERS)`에 I/O 시간이 나오게) | 〃 |
 | 타임존 | 컨테이너 `TZ`·`PGTZ`와 서버 `timezone` 모두 `Asia/Seoul` | 〃 |
 | Redis | `redis:7.4-alpine`, CPU 1개, 메모리 256MB | 〃 |
-| 호스트 포트 | Postgres **55432**, Redis **56379** (로컬의 5432/6379와 겹치지 않게) | 〃 |
-| 컨테이너·볼륨 | `tikitak-loadtest-postgres`, `tikitak-loadtest-redis`, 볼륨 `tikitak-loadtest-pgdata` | 〃 |
+| Prometheus | `prom/prometheus:v3.5.0`, CPU 0.5개, 메모리 512MB, 수집 간격 1초(`scrape_timeout` 1초), 보존 30일 | `docker-compose.yml`, `prometheus/prometheus.yml` |
+| Grafana | `grafana/grafana:12.1.1`, CPU 0.5개, 메모리 512MB | `docker-compose.yml` |
+| 호스트 포트 | Postgres **55432**, Redis **56379** (로컬의 5432/6379와 겹치지 않게), Prometheus **59090**, Grafana **53000** (둘은 `127.0.0.1`에만 열림) | 〃 |
+| 컨테이너·볼륨 | `tikitak-loadtest-{postgres,redis,prometheus,grafana}`, 볼륨 `tikitak-loadtest-pgdata`, `tikitak-loadtest-prometheus`, `tikitak-loadtest-grafana` | 〃 |
 | 앱 | `./gradlew bootJar` 결과 jar를 `java -Duser.timezone=Asia/Seoul -jar`로 실행. 프로필 `dev`. devtools 안 씀 | 아래 절차 |
+| 앱 포트 | API **8080**, actuator **8081**(`MANAGEMENT_SERVER_PORT=8081`) | `.env.example` |
 | Hikari 풀 | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=10` | `.env.example` |
+| 측정 전 웜업 | 앱 기동 후 매 측정 전 mixed 비중 100 RPS로 2분 (8-0 참고) | `scripts/run-measure.sh` |
+
+Prometheus·Grafana의 CPU 제한(합계 1개)은 Postgres 제한(2개)과 별개로 호스트 CPU에서 나온다. 앱·k6도 같은 호스트 CPU를 쓰므로 측정 도중에는 두 컨테이너의 제한도 바꾸지 않는다.
 
 실제로 적용된 값은 아래로 확인한다(결과 문서에는 이 출력을 옮긴다).
 
@@ -72,13 +82,13 @@ docker inspect tikitak-loadtest-postgres --format 'NanoCpus={{.HostConfig.NanoCp
 
 명령은 모두 저장소 루트에서 실행한다. Docker Desktop이 켜져 있어야 한다.
 
-### 1. DB·Redis 기동
+### 1. DB·Redis·모니터링 기동
 
 ```bash
 docker compose -f loadtest/docker-compose.yml up -d --wait
 ```
 
-`--wait`는 두 컨테이너가 healthy가 될 때까지 기다린다. 볼륨이 비어 있으면 `initdb/01_pg_stat_statements.sql`이 실행돼 `pg_stat_statements` 확장이 만들어진다.
+`--wait`는 네 컨테이너(postgres, redis, prometheus, grafana)가 healthy가 될 때까지 기다린다. 모니터링은 9번을 본다. 볼륨이 비어 있으면 `initdb/01_pg_stat_statements.sql`이 실행돼 `pg_stat_statements` 확장이 만들어진다.
 
 ```bash
 docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -Atc "SELECT extname FROM pg_extension"
@@ -99,11 +109,14 @@ cp loadtest/.env.example loadtest/.env
 ```
 
 `.env.example`의 값은 모두 가짜이고, 그대로 두면 로컬 compose에 맞는다. 값에 공백이나 따옴표를 넣지 않는다.
+모니터링 추가(커밋 4) 전에 복사한 `.env`에는 `MANAGEMENT_SERVER_PORT=8081`이 없다. 다시 복사하거나 그 줄을 추가한다. 없으면 actuator가 8080에 그대로 있어 스크립트·Prometheus가 앱을 찾지 못한다.
 Windows에서 `.env`를 편집기로 열어 저장했다면 줄 끝이 CRLF가 되지 않았는지 확인한다(Git Bash의 `source`는 값 끝에 `\r`을 붙인다).
 
 ### 4. 앱 실행 (Flyway가 V1~V25를 적용한다)
 
-JDK 21 이상이 필요하다. 앱은 포트 8080을 쓴다.
+JDK 21 이상이 필요하다. 앱은 API에 포트 8080, actuator(`/actuator/health`, `/actuator/prometheus`)에 포트 8081을 쓴다.
+actuator를 분리하는 이유: management 포트는 별도 Tomcat(스레드 이름 `http-nio-8081-exec-*`)이라, API 요청이 몰려 8080 스레드가 밀려도 Prometheus 수집과 Hikari 샘플러가 응답을 받는다.
+앱의 `SecurityFilterChain`은 8081에도 걸리지만 `/actuator/**`가 화이트리스트라 토큰 없이 열린다(2026-11-24 확인: 8081 `/actuator/prometheus` 200, 8081 `/foo` 401, 8080 `/actuator/health` 404).
 
 **Git Bash**
 
@@ -139,15 +152,18 @@ PowerShell은 env를 현재 세션에만 넣는다. 값이 빈 항목(`REDIS_PAS
 로그에 `Successfully applied 25 migrations`(빈 DB일 때)와 `Started TikitakApplication`이 나와야 한다.
 
 ```bash
-curl -s localhost:8080/actuator/health
+curl -s localhost:8081/actuator/health
 # {"groups":["liveness","readiness"],"status":"UP"}
 
 docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -Atc \
   "SELECT count(*) FILTER (WHERE success), max(version::int) FROM flyway_schema_history"
 # 25|25
 
-curl -s localhost:8080/actuator/prometheus | grep -E '^hikaricp_connections_(max|active|pending)'
+curl -s localhost:8081/actuator/prometheus | grep -E '^hikaricp_connections_(max|active|pending)'
 # hikaricp_connections_max{...} 10.0
+
+curl -s localhost:59090/api/v1/targets | grep -o '"health":"[a-z]*"'
+# "health":"up"   (Prometheus가 앱을 수집하고 있다)
 ```
 
 ### 6. 공통 시드
@@ -314,11 +330,23 @@ docker compose -f loadtest/docker-compose.yml down -v
 docker compose -f loadtest/docker-compose.yml up -d --wait
 ```
 
-`down -v`는 named volume `tikitak-loadtest-pgdata`까지 지운다. 다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V25를 처음부터 적용한다(4번부터 다시).
+`down -v`는 named volume `tikitak-loadtest-pgdata`와 Prometheus·Grafana 볼륨(`tikitak-loadtest-prometheus`, `tikitak-loadtest-grafana`)까지 지운다. 지난 측정의 Prometheus 시계열도 사라지므로, 비교에 쓸 그래프는 먼저 9-3대로 스크린샷을 남긴다.
+다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V25를 처음부터 적용한다(4번부터 다시).
 
 ### 8. 측정 (#217)
 
 명령은 저장소 루트에서 Git Bash로 실행한다. 앱이 떠 있어야 한다(4·5번). k6는 v2.2.0에서 확인했다.
+
+#### 8-0. 규칙: 앱 기동 후 매 측정 전 2분 웜업
+
+**측정할 때마다 그 직전에 mixed 비중으로 2분 웜업을 한다.** `run-measure.sh`가 기본으로 한다.
+
+- 이유: 앱 기동이나 시드 직후 첫 측정은 Postgres 버퍼 캐시와 JVM(JIT, 커넥션, Hibernate 메타데이터)이 비어 있어, 같은 API가 이후보다 수십 배 느렸다. 2026-11-24 스모크에서 solo `map_pins`가 첫 실행 P95 12,489ms, 캐시가 찬 뒤 960ms였고, solo `feed_by_place`는 1,933ms → 156ms, `best_attendance`는 4,539ms → 70ms였다. 웜업 없이 재면 실행 순서가 결과를 정한다.
+- 무엇을: mixed와 같은 요청 비중으로 100 RPS × 2분(`PREWARM_RATE`, `PREWARM_DURATION`). solo·ramp 측정 전에도 mixed 비중으로 한다(한 API만 데우면 다른 API의 캐시 상태가 측정마다 달라진다).
+- 언제 끝나나: 웜업 k6가 끝난 뒤, 앱에 남은 요청(처리 중 HTTP 요청, Hikari active·pending)이 3초 연속 0이 될 때까지 기다린 다음 `pg_stat_statements` reset과 Hikari 샘플러를 시작한다. 그래서 웜업 요청은 `-pgss.*`, `-hikari.csv`, 본 측정 지연에 섞이지 않는다. `PREWARM_DRAIN_TIMEOUT`(기본 180초) 안에 비지 않으면 측정을 중단한다.
+- 콜드 상태에서 100 RPS 웜업은 앱이 감당하지 못해 지연이 10초를 넘고 `dropped_iterations`가 생긴다(20초 웜업 스모크에서 약 1,200~1,500건). 데우는 것이 목적이라 정상이다. 웜업 결과(`<RUN_ID>-prewarm-k6.log`, `-prewarm-k6-summary.json`)는 판정에 쓰지 않는다.
+- 끄기: `PREWARM_DURATION=0`(또는 `off`). 같은 앱 기동에서 방금 웜업과 측정을 했고 바로 이어 재는 경우에만 끈다. 끄면 결과 문서에 적는다.
+- mixed 모드 안의 1분 웜업(20 RPS, `scenario:warmup`)은 이 규칙과 별개로 그대로 있다. mixed의 `pg_stat_statements`에는 이 1분이 들어간다(8-5).
 
 #### 8-1. 준비
 
@@ -363,8 +391,9 @@ header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"acces
 
 - ramp의 `stage` 태그는 시나리오 시작 기준 경과 시간으로 정한다. 유지 구간은 `r025`, `r050`, `r100`, `r200`, `r400`, 전환 구간은 `transition`이다. 전환 구간 요청은 단계별 지표에서 빠진다.
 - ramp 전체 길이는 2분 × 5 + 10초 × 4 = 10분 40초다(그 뒤 gracefulStop 최대 30초).
-- 공통 env: `BASE_URL`(기본 `http://localhost:8080`), `MAX_VUS`(기본 300), `JWT_SECRET`(필수), `RUN_ID`, `SUMMARY_DIR`(기본 `loadtest/results/raw`).
-- 짧게 확인할 때는 `WARMUP=10s DURATION=30s`, `DURATION=10s`, `RAMP_RATES=5,10 STAGE_DURATION=10s TRANSITION=5s`처럼 줄인다.
+- 공통 env: `BASE_URL`(API, 기본 `http://localhost:8080`), `MANAGEMENT_URL`(actuator, 기본 `http://localhost:8081`. setup의 health 확인), `MAX_VUS`(기본 300), `JWT_SECRET`(필수), `RUN_ID`, `SUMMARY_DIR`(기본 `loadtest/results/raw`).
+- mixed 웜업 시나리오 env: `WARMUP`(기본 1m), `WARMUP_RATE`(기본 20), `WARMUP_ONLY=1`(웜업 시나리오만 돌리고 판정하지 않는다. `run-measure.sh`의 측정 전 웜업이 쓴다).
+- 짧게 확인할 때는 `WARMUP=10s DURATION=30s`, `DURATION=10s`, `RAMP_RATES=5,10 STAGE_DURATION=10s TRANSITION=5s`처럼 줄이고, 측정 전 웜업도 `PREWARM_DURATION=20s`처럼 줄인다.
 
 #### 8-4. 실행
 
@@ -372,17 +401,21 @@ header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"acces
 bash loadtest/scripts/run-measure.sh mixed
 bash loadtest/scripts/run-measure.sh ramp
 bash loadtest/scripts/run-measure.sh solo map_pins     # API 태그 하나
-DURATION=10s bash loadtest/scripts/run-measure.sh solo comments
+PREWARM_DURATION=20s DURATION=10s bash loadtest/scripts/run-measure.sh solo comments   # 짧은 동작 확인용
 ```
 
 `run-measure.sh`는 다음을 차례로 한다. `JWT_SECRET`이 env에 없으면 `loadtest/.env`에서 읽는다.
 
-1. 앱 `/actuator/health`와 입력 JSON 확인
-2. `pg_stat_statements_reset()`
-3. Hikari 샘플러를 백그라운드로 시작
-4. `k6 run --quiet loadtest/k6/read-api-baseline.js` (ramp는 `--out csv=...-k6-metrics.csv.gz`를 더한다)
-5. 샘플러 종료, `pg_stat_statements` 덤프
-6. Hikari active/pending 최대값(ramp는 단계별로도) 출력
+1. 앱 `$MANAGEMENT_URL/actuator/health`(기본 8081)와 입력 JSON 확인
+2. 측정 전 웜업(8-0): mixed 비중 k6(`WARMUP_ONLY=1`)를 돌리고, 앱에 남은 요청이 끝날 때까지 기다린다
+3. `pg_stat_statements_reset()`
+4. Hikari 샘플러를 백그라운드로 시작(`$MANAGEMENT_URL/actuator/prometheus`)
+5. `k6 run --quiet loadtest/k6/read-api-baseline.js` (ramp는 `--out csv=...-k6-metrics.csv.gz`를 더한다)
+6. 샘플러 종료, `pg_stat_statements` 덤프
+7. Hikari active/pending 최대값(ramp는 단계별로도) 출력
+
+2026-11-24 짧은 확인(`PREWARM_DURATION=20s DURATION=10s ... solo map_pins`)의 실제 순서(파일 시각과 샘플 시각): 웜업 k6 종료 20:09:19 → 남은 요청 대기 → reset·샘플러 첫 샘플 20:09:35(active 0, pending 0) → k6 setup 끝 20:09:36 → k6 종료 20:09:49 → 덤프 20:09:51.
+대기를 넣기 전에는 웜업 k6가 끝난 뒤에도 앱에 웜업 요청이 남아, 샘플러 첫 샘플이 active 10·pending 190이었다.
 
 종료 코드는 k6의 것이다(threshold를 넘으면 99). threshold를 넘어도 덤프까지 한다.
 
@@ -390,6 +423,7 @@ DURATION=10s bash loadtest/scripts/run-measure.sh solo comments
 
 | 파일 | 내용 |
 |---|---|
+| `-prewarm-k6.log` / `-prewarm-k6-summary.json` | 측정 전 웜업 결과(`<RUN_ID>-prewarm-*`). 판정에 쓰지 않는다 |
 | `-k6-summary.json` | k6 `handleSummary` 결과. `meta`(모드, 시나리오, 비중, setup 끝 시각, ramp 일정)와 모든 지표(P95·P99 포함) |
 | `-k6.log` | k6 stdout. 끝에 API별(ramp는 단계별도) count·avg·P95·P99·max·실패율·check 표 |
 | `-hikari.csv` | `epoch_ms,time,active,pending,idle,max`. 1초 간격 |
@@ -410,6 +444,50 @@ JWT_SECRET=... MODE=solo API=unread_count k6 run loadtest/k6/read-api-baseline.j
 
 - **요청당 쿼리 수**(solo): `-pgss.csv`의 각 쿼리 `calls` ÷ k6 요청 수(`-k6.log` 표의 count). setup은 `/actuator/health`만 부르고 DB를 쓰는 API를 부르지 않는다. 앱 기동 직후에는 JDBC 메타데이터 조회(`SELECT c.oid, a.attnum, ...`)가 몇 번 섞일 수 있다.
 - **mixed의 `pg_stat_statements`**는 웜업 시작 전에 초기화하므로 웜업 1분의 쿼리도 포함한다. P95 같은 지연 판정은 k6의 `scenario:measure` 값으로 한다.
-- **캐시 상태**: 앱 기동이나 시드 직후 첫 실행은 Postgres 버퍼 캐시가 비어 있어, 같은 API가 이후 실행보다 몇 배~수십 배 느렸다(2026-11-24 스모크). solo를 여러 개 이어서 돌릴 때는 실행 순서를 결과 문서에 적고, 필요하면 같은 solo를 한 번 더 돌려 두 번째 값을 쓴다.
-- **샘플러 빈 줄**: `/actuator/prometheus`도 같은 Tomcat 스레드 풀에서 처리된다. 풀이 포화돼 요청이 쌓이면 2초 안에 응답하지 못해 그 샘플의 값이 비고, 래퍼가 빈 샘플 수를 출력한다. 빈 구간의 pending은 알 수 없으므로 결과 문서에 그 사실을 같이 적는다.
+- **캐시 상태**: 앱 기동이나 시드 직후 첫 실행은 Postgres 버퍼 캐시가 비어 있어, 같은 API가 이후 실행보다 몇 배~수십 배 느렸다(2026-11-24 스모크). 그래서 8-0의 측정 전 웜업을 한다. solo를 여러 개 이어서 돌릴 때도 실행 순서를 결과 문서에 적는다.
+- **샘플러 빈 줄**: actuator를 8081로 분리한 뒤로는 API(8080) 스레드가 밀려도 샘플러가 응답을 받았다(2026-11-24 짧은 확인에서 pending 190 안팎인 구간에도 빈 샘플 0). 다만 호스트 CPU가 포화되면 여전히 2초 안에 못 받을 수 있다. 래퍼가 빈 샘플 수를 출력하고, 빈 구간의 pending은 알 수 없으므로 결과 문서에 그 사실을 같이 적는다.
 - **k6도 같은 호스트의 CPU를 쓴다.** 요청 하나를 만들 때 무거운 일을 하면(예: SharedArray 전체를 훑는 것) 그 시간이 `http_req_blocked`·`http_req_connecting`과 지연에 섞인다. 의심되면 요약의 `iteration_duration`과 `http_req_duration`의 평균을 비교한다(정상이면 거의 같다).
+
+### 9. 모니터링 (Prometheus·Grafana)
+
+compose에 같이 뜬다(1번). 이 PC에서만 열린다(`127.0.0.1`).
+
+| 무엇 | 주소 | 비고 |
+|---|---|---|
+| Grafana | http://localhost:53000 | 로그인 없이 보기 가능(익명 Viewer). 편집은 `admin` / `admin`(로컬 전용) |
+| 대시보드 | http://localhost:53000/d/tikitak-loadtest-backend | Grafana 첫 화면(홈)도 이 대시보드다. 폴더 `loadtest` |
+| Prometheus | http://localhost:59090 | 수집 대상: http://localhost:59090/targets (job `tikitak-loadtest`가 UP이어야 한다) |
+
+- Prometheus는 컨테이너 안에서 `host.docker.internal:8081/actuator/prometheus`를 1초마다 수집한다. `extra_hosts: host.docker.internal:host-gateway`를 명시했다(2026-11-24 Windows Docker Desktop 29.9.2에서 UP 확인, 수집 1회 약 50ms. Linux Docker Engine에서는 확인하지 않았다).
+- Grafana 데이터소스(`Prometheus (loadtest)`, uid `tikitak-loadtest-prometheus`)와 대시보드는 `grafana/provisioning/`이 자동으로 만든다. 화면에서 고친 대시보드는 저장되지 않는다. 바꾸려면 `grafana/dashboards/tikitak-backend-dashboard.json`을 고친다(30초마다 다시 읽는다).
+- 데이터소스의 `timeInterval`을 1초로 둬서 패널의 `$__rate_interval`은 짧은 시간 범위에서 4초다(범위를 넓히면 `max(4×1s, $__interval + 1s)`로 커진다). 짧은 구간의 변화가 보이는 대신 그래프가 출렁인다.
+- 측정 전 웜업(8-0)도 그래프에 나온다. 본 측정 구간은 9-2대로 고른다.
+
+#### 9-1. 대시보드
+
+운영용 대시보드(Grafana Cloud)를 로컬용으로 바꾼 복사본이다. 바꾼 것은 제목·uid, `ds` 변수 기본값(로컬 데이터소스), `Environment`(`$job`) 변수 기본값(`tikitak-loadtest`, Prometheus job 이름), 기본 시간 범위(최근 30분), 새로고침(5초), 태그(`loadtest` 추가)뿐이고 패널·쿼리는 그대로다.
+패널: Overview(RPS, P95, P99, 5xx 비율, DB 커넥션 사용률, 가동 시간), Traffic & Latency(RPS·지연 추이, URI별 RPS·P95, 에러), Database(HikariCP: active·idle·max, pending, 커넥션 획득·사용 시간), JVM & System(CPU, 힙, 스레드·로그 에러).
+2026-11-24 짧은 확인에서 Grafana HTTP API(`/api/ds/query`)로 RPS, P95, Latency, RPS by URI, DB Connections, Connections, Pending threads 패널 쿼리를 실행해 모두 값이 나왔다.
+
+#### 9-2. 측정 시간대 고르기
+
+본 측정 구간만 본다(앞의 웜업은 뺀다). 구간은 `-hikari.csv`의 첫 줄과 마지막 줄 시각이 정확하다(reset 직후 ~ k6 종료).
+
+```bash
+# 측정 구간 앞뒤 30초를 붙인 대시보드 URL
+awk -F, 'NR==2{f=$1} END{print "http://localhost:53000/d/tikitak-loadtest-backend?from=" f-30000 "&to=" $1+30000 "&var-job=tikitak-loadtest"}' \
+  loadtest/results/raw/<RUN_ID>-<mode>[-api]-hikari.csv
+```
+
+화면에서 고를 때는 오른쪽 위 시간 선택에 절대 시간(KST, 대시보드 타임존 `Asia/Seoul`)을 넣거나, 그래프를 드래그해 구간을 좁힌다. 측정 중 실시간으로 볼 때는 "Last 15 minutes"와 5초 새로고침이면 된다.
+Overview의 숫자 패널은 고른 구간의 **마지막 값**이다(평균·최대가 아니다). 구간 전체를 비교할 때는 아래 시계열 패널을 본다. 판정 수치는 대시보드가 아니라 k6 요약(P95·P99)과 `-hikari.csv`(최대값)를 쓴다.
+
+#### 9-3. 개선 전후 비교용 스크린샷
+
+Prometheus 데이터는 `down -v`를 하거나 30일 보존 기간이 지나면 사라진다. 비교에 쓸 그래프는 측정 직후 남긴다.
+
+1. 9-2의 URL로 측정 구간을 연다. URL에 `from`·`to`(epoch ms)가 들어 있어 같은 구간을 다시 열 수 있다. 이 URL을 결과 문서에 같이 적는다.
+2. 비교할 패널(보통 "Latency (avg / P95 / P99)", "P95 by URI", "Connections", "Pending threads")을 패널 메뉴 → View(단축키 `v`)로 크게 연다.
+3. OS 화면 캡처(Windows `Win+Shift+S`)로 저장한다. 이 Grafana에는 이미지 렌더러 플러그인을 설치하지 않았으므로 Grafana의 이미지 내보내기는 쓰지 않는다.
+4. 파일 이름은 `<RUN_ID>-<mode>[-api]-<패널>.png`로 하고 결과 문서와 같은 `loadtest/results/` 아래에 둔다(`results/raw/`는 커밋하지 않는다).
+5. 개선 후에도 같은 모드·같은 시간 길이·같은 패널로 찍어 나란히 둔다. 세로축 범위가 자동이라 두 그림의 눈금이 다를 수 있으니 숫자를 같이 적는다.

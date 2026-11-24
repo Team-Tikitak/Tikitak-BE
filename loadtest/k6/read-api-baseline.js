@@ -9,9 +9,12 @@
 //   JWT_SECRET      (필수) 앱과 같은 HS256 키. setup()이 회원마다 access token을 서명한다
 //   MODE            mixed(기본) | ramp | solo
 //   API             solo 대상 (아래 APIS 키)
-//   BASE_URL        기본 http://localhost:8080
+//   BASE_URL        API 주소(기본 http://localhost:8080)
+//   MANAGEMENT_URL  actuator 주소(기본 http://localhost:8081, loadtest/.env의 MANAGEMENT_SERVER_PORT). setup()의 health 확인에 쓴다
 //   RATE            mixed 측정 RPS(기본 100) / solo RPS(기본 20)
-//   WARMUP          mixed 웜업 시간(기본 1m, 20 RPS)
+//   WARMUP          mixed 웜업 시간(기본 1m)
+//   WARMUP_RATE     mixed 웜업 RPS(기본 20)
+//   WARMUP_ONLY     1이면 mixed에서 웜업 시나리오만 돌린다(판정 없음). scripts/run-measure.sh의 측정 전 웜업이 쓴다
 //   DURATION        mixed 측정 시간(기본 5m) / solo 시간(기본 1m)
 //   RAMP_RATES      ramp 단계 RPS 목록(기본 25,50,100,200,400)
 //   STAGE_DURATION  ramp 단계 유지 시간(기본 2m)
@@ -30,6 +33,8 @@ import exec from 'k6/execution';
 
 const MODE = (__ENV.MODE || 'mixed').toLowerCase();
 const BASE_URL = (__ENV.BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
+const MANAGEMENT_URL = (__ENV.MANAGEMENT_URL || 'http://localhost:8081').replace(/\/+$/, '');
+const WARMUP_ONLY = MODE === 'mixed' && __ENV.WARMUP_ONLY === '1';
 const MAX_VUS = parseInt(__ENV.MAX_VUS || '300', 10);
 const SUMMARY_DIR = (__ENV.SUMMARY_DIR || 'loadtest/results/raw').replace(/\/+$/, '');
 const BIG_TEAM_RATIO = 0.3; // 요청의 30%는 큰 팀
@@ -167,17 +172,21 @@ function rampSchedule() {
 function buildScenarios() {
 	if (MODE === 'mixed') {
 		const warmup = __ENV.WARMUP || '1m';
+		const warmupScenario = {
+			executor: 'constant-arrival-rate',
+			rate: parseInt(__ENV.WARMUP_RATE || '20', 10),
+			timeUnit: '1s',
+			duration: warmup,
+			preAllocatedVUs: 20,
+			maxVUs: MAX_VUS,
+			gracefulStop: '0s',
+		};
+		if (WARMUP_ONLY) {
+			return { warmup: warmupScenario };
+		}
 		return {
 			// 웜업은 별도 시나리오라 threshold(scenario:measure)에 섞이지 않는다.
-			warmup: {
-				executor: 'constant-arrival-rate',
-				rate: 20,
-				timeUnit: '1s',
-				duration: warmup,
-				preAllocatedVUs: 20,
-				maxVUs: MAX_VUS,
-				gracefulStop: '0s',
-			},
+			warmup: warmupScenario,
 			measure: {
 				executor: 'constant-arrival-rate',
 				startTime: warmup,
@@ -226,6 +235,15 @@ function buildScenarios() {
 
 function buildThresholds() {
 	const th = {};
+	if (WARMUP_ONLY) {
+		// 판정하지 않는다. 요약 표에 API별 웜업 지연이 나오도록 항상 통과하는 조건으로 하위 지표만 만든다.
+		for (const api of API_NAMES) {
+			th[`http_req_duration{scenario:warmup,api:${api}}`] = ['max>=0'];
+			th[`http_req_failed{scenario:warmup,api:${api}}`] = ['rate>=0'];
+			th[`checks{scenario:warmup,api:${api}}`] = ['rate>=0'];
+		}
+		return th;
+	}
 	if (MODE === 'mixed') {
 		for (const api of API_NAMES) {
 			th[`http_req_duration{scenario:measure,api:${api}}`] = ['p(95)<300'];
@@ -298,9 +316,9 @@ export function setup() {
 	if (!secret) {
 		throw new Error('JWT_SECRET env가 필요하다(loadtest/.env 값). scripts/run-measure.sh는 자동으로 넘긴다.');
 	}
-	const health = http.get(`${BASE_URL}/actuator/health`, { tags: { api: 'setup' } });
+	const health = http.get(`${MANAGEMENT_URL}/actuator/health`, { tags: { api: 'setup' } });
 	if (health.status !== 200) {
-		throw new Error(`앱이 응답하지 않는다: ${BASE_URL}/actuator/health status=${health.status}`);
+		throw new Error(`앱이 응답하지 않는다: ${MANAGEMENT_URL}/actuator/health status=${health.status}`);
 	}
 	const nowSeconds = Math.floor(Date.now() / 1000);
 	const tokens = {};
@@ -517,13 +535,15 @@ function timestamp() {
 
 export function handleSummary(data) {
 	const runId = __ENV.RUN_ID || timestamp();
-	const suffix = MODE === 'solo' ? `${MODE}-${__ENV.API}` : MODE;
+	const suffix = MODE === 'solo' ? `${MODE}-${__ENV.API}` : (WARMUP_ONLY ? 'prewarm' : MODE);
 	const file = `${SUMMARY_DIR}/${runId}-${suffix}-k6-summary.json`;
 	const setupData = data.setup_data || {};
 	const meta = {
 		mode: MODE,
 		api: __ENV.API || null,
 		baseUrl: BASE_URL,
+		managementUrl: MANAGEMENT_URL,
+		warmupOnly: WARMUP_ONLY,
 		scenarios: options.scenarios,
 		setupFinishedAt: setupData.startedAt || null,
 		setupFinishedAtMs: setupData.startedAtMs || null,
@@ -537,9 +557,9 @@ export function handleSummary(data) {
 
 	const m = data.metrics;
 	const dropped = m.dropped_iterations ? m.dropped_iterations.values.count : 0;
-	let text = `\n[${MODE}${__ENV.API ? ` ${__ENV.API}` : ''}] summary -> ${file}\n`;
+	let text = `\n[${WARMUP_ONLY ? 'prewarm' : MODE}${__ENV.API ? ` ${__ENV.API}` : ''}] summary -> ${file}\n`;
 	if (MODE === 'mixed') {
-		text += rows(m, API_NAMES, (api) => [`api:${api}`, 'scenario:measure']);
+		text += rows(m, API_NAMES, (api) => [`api:${api}`, `scenario:${WARMUP_ONLY ? 'warmup' : 'measure'}`]);
 	} else if (MODE === 'ramp') {
 		text += `${rows(m, RAMP_RATES.map(stageLabel), (s) => [`stage:${s}`])}\n\n`;
 		text += rows(m, API_NAMES, (api) => [`api:${api}`]);
