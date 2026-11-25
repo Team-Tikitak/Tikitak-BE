@@ -336,12 +336,15 @@ FEED_COMMENT가 많은 이유: 고른 피드의 작성자가 알림을 받는 �
 
 ```bash
 # 앱을 먼저 끈다 (Ctrl+C 또는 kill)
-docker compose -f loadtest/docker-compose.yml down -v
-docker compose -f loadtest/docker-compose.yml up -d --wait
+dc="docker compose -f loadtest/docker-compose.yml"
+project="$($dc config | sed -n 's/^name: //p')"   # 10-3: 이 폴더의 LOADTEST_PROJECT인지 확인한다
+$dc down                                          # 컨테이너만 지운다. 볼륨은 남는다
+docker volume rm "$project-pgdata"               # DB만 비운다. Prometheus·Grafana 볼륨은 남는다
+$dc up -d --wait
 ```
 
-`down -v`는 named volume `tikitak-loadtest-pgdata`와 Prometheus·Grafana 볼륨(`tikitak-loadtest-prometheus`, `tikitak-loadtest-grafana`)까지 지운다. 지난 측정의 Prometheus 시계열도 사라지므로, 비교에 쓸 그래프는 먼저 9-3대로 스크린샷을 남긴다.
-같은 PC의 다른 작업 폴더도 이 환경을 쓰면 `down -v` 전에 10-3대로 프로젝트 이름을 확인한다.
+DB를 다시 시드할 때는 `pgdata` 볼륨만 지운다. `down -v`는 Prometheus·Grafana 볼륨(`<프로젝트>-prometheus`, `<프로젝트>-grafana`)까지 지워 지난 측정의 시계열이 사라지므로(#217, #215에서 두 번 겪음), 측정 환경 전체를 버릴 때만 쓴다. 그때도 비교에 쓸 그래프는 먼저 9-3대로 스크린샷을 남긴다.
+같은 PC의 다른 작업 폴더도 이 환경을 쓰면 볼륨을 지우기 전에 10-3대로 프로젝트 이름을 확인한다.
 다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V25를 처음부터 적용한다(4번부터 다시).
 
 ### 8. 측정 (#217)
@@ -585,14 +588,14 @@ bash loadtest/scripts/measure-lock.sh --status        # 누가 잡고 있는지�
 - 명령이 끝나면 정상·에러·Ctrl+C(INT)·TERM 모두 잠금을 푼다. 기다리던 쪽을 Ctrl+C로 끊으면 남의 잠금은 건드리지 않는다.
 - `run-measure.sh`는 스스로 잠금을 잡는다. 따로 감싸지 않아도 된다.
 
-**처음부터 재현 전체를 한 번에 감싸는 예.** 앱 기동(Flyway)부터 대상 추출까지 다른 폴더의 측정이 끼어들지 않는다. `down -v` 전에 10-3으로 프로젝트 이름을 확인한다.
+**처음부터 재현 전체를 한 번에 감싸는 예.** 앱 기동(Flyway)부터 대상 추출까지 다른 폴더의 측정이 끼어들지 않는다. 볼륨을 지우기 전에 10-3으로 프로젝트 이름을 확인한다. DB만 비우고 Prometheus 데이터는 남긴다(7번).
 
 ```bash
 bash loadtest/scripts/measure-lock.sh bash -c '
   set -e
   mkdir -p loadtest/results/raw loadtest/k6/data
   dc="docker compose -f loadtest/docker-compose.yml"
-  $dc down -v && $dc up -d --wait
+  $dc down && docker volume rm "$($dc config | sed -n "s/^name: //p")-pgdata" && $dc up -d --wait
   ( set -a; source loadtest/.env; set +a
     nohup java -Duser.timezone=Asia/Seoul -jar build/libs/tikitak-0.0.1-SNAPSHOT.jar > loadtest/results/raw/app.log 2>&1 & echo $! > loadtest/results/raw/app.pid )
   until curl -sf localhost:8081/actuator/health > /dev/null; do sleep 2; done   # 다른 폴더면 자기 MANAGEMENT_SERVER_PORT
