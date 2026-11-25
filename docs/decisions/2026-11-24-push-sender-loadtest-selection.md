@@ -6,7 +6,7 @@
 - **계약**: [2026-11-24-bulk-notification-baseline](../contracts/2026-11-24-bulk-notification-baseline.md)
 
 ## 상황 (Context)
-- 오늘의 질문 공개 알림 배치(#214, `DailyQuestionOpenedNotificationBatchService`)를 받는 사람 1만/10만/100만 규모로 로컬에서 돌려 개선 전 기준선을 재야 한다. 실제 FCM은 부를 수 없으므로 지연과 실패율을 조절하는 가짜 발송기가 필요하다.
+- 오늘의 질문 공개 알림 배치(#214, `DailyQuestionOpenedNotificationBatchService`)를 받는 사람 1만/10만 규모로 로컬에서 돌려 개선 전 기준선을 재야 한다(100만은 선형 추정, 2026-11-25 계약 변경). 실제 FCM은 부를 수 없으므로 지연과 실패율을 조절하는 가짜 발송기가 필요하다.
 - #213에서 발송을 `PushSender` 인터페이스 뒤로 옮기면서, 여러 구현체 중 하나를 고르는 구조는 가짜 발송기가 실제로 들어오는 #215에서 정하기로 했다([2026-11-24-push-sender-interface](2026-11-24-push-sender-interface.md)).
 - 배치는 cron(`notification.daily-question-opened.cron`)으로만 시작한다. 측정 회차마다 바로 시작시킬 방법이 필요하다.
 

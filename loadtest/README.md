@@ -656,7 +656,7 @@ bash loadtest/scripts/measure-lock.sh bash -c '
 
 ### 11. 대량 알림 배치 측정 (#215)
 
-오늘의 질문 공개 알림 배치(`DailyQuestionOpenedNotificationBatchService`)를 받는 사람 1만·10만·100만 규모로 돌려 처리 시간과 병목을 잰다.
+오늘의 질문 공개 알림 배치(`DailyQuestionOpenedNotificationBatchService`)를 받는 사람 1만·10만 규모로 돌려 처리 시간과 병목을 잰다(100만은 선형 추정, 결과는 [results/2026-11-25-bulk-notification-baseline.md](results/2026-11-25-bulk-notification-baseline.md)).
 앱은 `dev,loadtest` 프로필로 띄운다. 이 프로필에서는 실제 FCM 대신 가짜 발송기(`LoadTestPushSender`)가 지연·실패를 흉내 내고, 기동 직후 `LoadTestDailyQuestionOpenedRunner`가 배치를 한 번 실행한다(`loadtest.daily-question-opened.run-on-startup=true`일 때만).
 결과 문서는 `results/` 아래에 따로 쓴다.
 
@@ -666,7 +666,7 @@ bash loadtest/scripts/measure-lock.sh bash -c '
 - 같은 PC에서 #217 폴더도 이 환경을 쓰면 10번대로 폴더를 분리한다. #215 폴더의 `loadtest/.env`는 10-1의 "#215 폴더 예" 값(`LOADTEST_PROJECT=tikitak-loadtest-push`, Postgres 55433, Redis 56380, Prometheus 59091, Grafana 53001, 앱 8082·8083, `DB_URL`·`REDIS_PORT`도 새 포트)이다. `docker compose -f loadtest/docker-compose.yml config | grep -E '^name|container_name|published'`로 확인한다.
 - 측정은 #217과 번갈아 한다(10-2). 측정 전에 #217 폴더의 앱을 끄고 그 폴더에서 `docker compose -f loadtest/docker-compose.yml stop`(볼륨 유지)을 한다. #217 쪽 stop/start는 그 작업 세션과 먼저 맞춘다. 스크립트는 시작할 때 이 프로젝트 밖 컨테이너가 떠 있으면 경고를 내고 `-docker-ps.txt`에 남긴다(막지는 않는다).
 - `run-batch-measure.sh`는 `40_bulk_notification.sql`(TRUNCATE)을 실행하기 전에 `.env`의 `LOADTEST_PROJECT`와 `config`의 `name`이 같은지, 그리고 `<프로젝트>-postgres` 컨테이너의 compose `working_dir` 라벨이 이 폴더의 `loadtest`인지 확인하고, 다르면 멈춘다.
-- `loadtest` 프로필에서도 다른 `@Scheduled` 배치(30분 주기 `ObjectDeleteOutboxRetryBatchService`, 새벽 정리 배치들)는 그대로 돈다. 긴 회차(50ms × 10만 등)는 그 시각과 겹치는지 결과 문서에 적는다.
+- `loadtest` 프로필에서도 다른 `@Scheduled` 배치(30분 주기 `ObjectDeleteOutboxRetryBatchService`, 새벽 정리 배치들)는 그대로 돈다. 긴 회차(10만 이상, 지연을 준 회차 등)는 그 시각과 겹치는지 결과 문서에 적는다.
 - `down -v` 전에는 10-3대로 `config`의 `name`이 `tikitak-loadtest-push`이고 `docker compose ls -a`에서 이 폴더 행의 NAME과 같은지 확인한다. 다르면 #217 볼륨을 지운다.
 - Redis 키 프리픽스: `application.yaml`의 OAuth state·로그인 코드 프리픽스(`:56`, `:73`)는 `${spring.profiles.active}`를 쓰므로 `dev,loadtest`면 값에 쉼표가 들어간다(예상 `tikitak:dev,loadtest:oauth:state:`, 실제 값은 미확인). 이 프리픽스를 쓰는 곳은 `RedisOAuthStateStore`·`RedisLoginCodeStore`(OAuth 로그인)뿐이고, 배치·`NotificationService` 경로는 Redis를 쓰지 않으므로 배치 측정에는 영향이 없다(2026-11-25 `src/main/java`에서 `RedisTemplate` 사용처를 grep으로 확인).
 
@@ -707,7 +707,7 @@ time docker compose -f loadtest/docker-compose.yml exec -T postgres \
 | 규모(받는 사람) | `normal_teams` | 근거 |
 |---|---|---|
 | 1만 | 2,340 | 실측: 회원 10,024명, 받는 사람 10,024명 (2026-11-25, 11-5) |
-| 10만 | 23,340 | **추정**: 1만 실측의 팀당 회원 수(10,024 ÷ 2,343팀 ≈ 4.28)에 비례. 실제 수는 측정 후 `recipientCount`로 적는다 |
+| 10만 | 23,340 | 1만 실측의 팀당 회원 수(10,024 ÷ 2,343팀 ≈ 4.28)에 비례해 정했다. 실측: 받는 사람 100,243명 (2026-11-25, `20261125-154900-batch-baseline-100k-0ms-summary.txt`의 `recipientCount`) |
 | 100만 | 233,400 | **추정**: 같은 비례. `team_id` ≥ 100000이면 `00_common.sql`의 팀 이름(`lpad(team_id, 5)`)이 잘려 겹친다(unique 없음, 측정 영향 없음으로 추정, 미확인). 시드 시간·디스크 용량 미확인 |
 
 `40_bulk_notification.sql`이 하는 일:
