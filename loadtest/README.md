@@ -667,7 +667,7 @@ bash loadtest/scripts/measure-lock.sh bash -c '
 - 측정은 #217과 번갈아 한다(10-2). 측정 전에 #217 폴더의 앱을 끄고 그 폴더에서 `docker compose -f loadtest/docker-compose.yml stop`(볼륨 유지)을 한다. #217 쪽 stop/start는 그 작업 세션과 먼저 맞춘다. 스크립트는 시작할 때 이 프로젝트 밖 컨테이너가 떠 있으면 경고를 내고 `-docker-ps.txt`에 남긴다(막지는 않는다).
 - `run-batch-measure.sh`는 `40_bulk_notification.sql`(TRUNCATE)을 실행하기 전에 `.env`의 `LOADTEST_PROJECT`와 `config`의 `name`이 같은지, 그리고 `<프로젝트>-postgres` 컨테이너의 compose `working_dir` 라벨이 이 폴더의 `loadtest`인지 확인하고, 다르면 멈춘다.
 - `loadtest` 프로필에서도 다른 `@Scheduled` 배치(30분 주기 `ObjectDeleteOutboxRetryBatchService`, 새벽 정리 배치들)는 그대로 돈다. 긴 회차(10만 이상, 지연을 준 회차 등)는 그 시각과 겹치는지 결과 문서에 적는다.
-- `down -v` 전에는 10-3대로 `config`의 `name`이 `tikitak-loadtest-push`이고 `docker compose ls -a`에서 이 폴더 행의 NAME과 같은지 확인한다. 다르면 #217 볼륨을 지운다.
+- 볼륨을 지우기 전에는 10-3대로 `config`의 `name`이 `tikitak-loadtest-push`이고 `docker compose ls -a`에서 이 폴더 행의 NAME과 같은지 확인한다. 다르면 #217 볼륨을 지운다. 규모를 바꿀 때는 `pgdata` 볼륨만 지우고 Prometheus·Grafana 볼륨은 남긴다(7번).
 - Redis 키 프리픽스: `application.yaml`의 OAuth state·로그인 코드 프리픽스(`:56`, `:73`)는 `${spring.profiles.active}`를 쓰므로 `dev,loadtest`면 값에 쉼표가 들어간다(예상 `tikitak:dev,loadtest:oauth:state:`, 실제 값은 미확인). 이 프리픽스를 쓰는 곳은 `RedisOAuthStateStore`·`RedisLoginCodeStore`(OAuth 로그인)뿐이고, 배치·`NotificationService` 경로는 Redis를 쓰지 않으므로 배치 측정에는 영향이 없다(2026-11-25 `src/main/java`에서 `RedisTemplate` 사용처를 grep으로 확인).
 
 #### 11-2. 규모별 준비
@@ -679,8 +679,9 @@ bash loadtest/scripts/measure-lock.sh bash -c '
 docker compose ls -a
 docker compose -f loadtest/docker-compose.yml config | grep '^name'
 
-# 1) 초기화와 기동 (앱이 떠 있으면 먼저 끈다)
-docker compose -f loadtest/docker-compose.yml down -v
+# 1) DB만 초기화하고 기동 (앱이 떠 있으면 먼저 끈다). Prometheus·Grafana 볼륨은 남겨 지난 회차 그래프를 보존한다(7번)
+docker compose -f loadtest/docker-compose.yml down
+docker volume rm tikitak-loadtest-push-pgdata
 docker compose -f loadtest/docker-compose.yml up -d --wait
 
 # 2) jar 빌드 (코드가 바뀌었을 때만)
