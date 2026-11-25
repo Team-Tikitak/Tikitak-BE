@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #215
 - **브랜치**: `Test/#215-bulk-notification-baseline` (처음에는 PR #219 340b964 위에 쌓았고, #219·#227 머지 뒤 2026-11-25 `git rebase --onto origin/develop 340b964`로 `origin/develop` 0300934 위로 옮김)
-- **상태**: 승인됨 (2026-11-25)
+- **상태**: 완료 (2026-11-25, PR #228)
 
 ## 목표
 오늘의 질문 공개 알림 배치(#214, `DailyQuestionOpenedNotificationBatchService`)를 받는 사람 1만/10만 규모로 로컬 Docker Postgres(#217 환경)에서 실행해 개선 전 처리 시간과 병목을 기록하고, 100만은 선형 추정한다. FCM 전송 한도를 근거로 개선 목표를 정한다. 운영 코드의 동작은 바꾸지 않는다.
