@@ -2,12 +2,18 @@
 # 사용법과 고정 설정값 설명은 loadtest/README.md 참고.
 # 측정 도중에는 아래 Postgres 설정과 리소스 제한을 바꾸지 않는다.
 # 구성: postgres, redis(측정 환경) + prometheus, grafana(모니터링). `down -v`는 네 서비스의 볼륨을 모두 지운다.
-name: tikitak-loadtest
+#
+# 같은 PC의 여러 작업 폴더가 이 파일을 쓸 때는 폴더마다 프로젝트 이름(컨테이너·볼륨 이름 앞부분)과 호스트 포트를 다르게 둔다.
+# 값은 셸 env 또는 이 파일 옆 loadtest/.env(compose가 기본으로 읽는다)에서 받는다. 없으면 아래 기본값(#217 값)을 쓴다.
+#   LOADTEST_PROJECT(tikitak-loadtest), LOADTEST_PG_PORT(55432), LOADTEST_REDIS_PORT(56379),
+#   LOADTEST_PROMETHEUS_PORT(59090), LOADTEST_GRAFANA_PORT(53000), MANAGEMENT_SERVER_PORT(8081, 앱 actuator = Prometheus 수집 대상)
+# 자세한 내용은 README "같은 PC에서 여러 작업 폴더가 이 환경을 쓸 때".
+name: ${LOADTEST_PROJECT:-tikitak-loadtest}
 
 services:
   postgres:
     image: postgres:17.6-alpine
-    container_name: tikitak-loadtest-postgres
+    container_name: ${LOADTEST_PROJECT:-tikitak-loadtest}-postgres
     environment:
       POSTGRES_DB: tikitak
       POSTGRES_USER: tikitak
@@ -41,7 +47,7 @@ services:
       - -c
       - max_wal_size=4GB
     ports:
-      - "55432:5432"
+      - "${LOADTEST_PG_PORT:-55432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./initdb:/docker-entrypoint-initdb.d:ro
@@ -57,11 +63,11 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: tikitak-loadtest-redis
+    container_name: ${LOADTEST_PROJECT:-tikitak-loadtest}-redis
     environment:
       TZ: Asia/Seoul
     ports:
-      - "56379:6379"
+      - "${LOADTEST_REDIS_PORT:-56379}:6379"
     cpus: 1
     mem_limit: 256m
     healthcheck:
@@ -70,11 +76,11 @@ services:
       timeout: 3s
       retries: 20
 
-  # 모니터링: 호스트에서 도는 앱의 /actuator/prometheus(management 포트 8081)를 1초 간격으로 수집한다.
+  # 모니터링: 호스트에서 도는 앱의 /actuator/prometheus(management 포트, 기본 8081)를 1초 간격으로 수집한다.
   # 앱·k6와 같은 호스트 CPU를 나눠 쓰므로 작게 제한한다. 포트는 이 PC에서만 열리게 127.0.0.1에 묶는다.
   prometheus:
     image: prom/prometheus:v3.5.0
-    container_name: tikitak-loadtest-prometheus
+    container_name: ${LOADTEST_PROJECT:-tikitak-loadtest}-prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -83,9 +89,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:59090:9090"
+      - "127.0.0.1:${LOADTEST_PROMETHEUS_PORT:-59090}:9090"
+    configs:
+      - source: prometheus
+        target: /etc/prometheus/prometheus.yml
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - promdata:/prometheus
     cpus: 0.5
     mem_limit: 512m
@@ -97,7 +105,7 @@ services:
 
   grafana:
     image: grafana/grafana:12.1.1
-    container_name: tikitak-loadtest-grafana
+    container_name: ${LOADTEST_PROJECT:-tikitak-loadtest}-grafana
     depends_on:
       prometheus:
         condition: service_healthy
@@ -115,7 +123,7 @@ services:
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/tikitak-backend-dashboard.json
     ports:
-      - "127.0.0.1:53000:3000"
+      - "127.0.0.1:${LOADTEST_GRAFANA_PORT:-53000}:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
@@ -130,8 +138,26 @@ services:
 
 volumes:
   pgdata:
-    name: tikitak-loadtest-pgdata
+    name: ${LOADTEST_PROJECT:-tikitak-loadtest}-pgdata
   promdata:
-    name: tikitak-loadtest-prometheus
+    name: ${LOADTEST_PROJECT:-tikitak-loadtest}-prometheus
   grafanadata:
-    name: tikitak-loadtest-grafana
+    name: ${LOADTEST_PROJECT:-tikitak-loadtest}-grafana
+
+# Prometheus 설정. 수집 대상 포트가 앱의 MANAGEMENT_SERVER_PORT를 따라가도록 파일 대신 compose에 둔다
+# (Prometheus 설정 파일은 env를 풀지 않는다). 바꾸면 `up -d`가 prometheus 컨테이너를 다시 만든다.
+# job 이름(tikitak-loadtest)은 Grafana 대시보드의 Environment($job) 변수 값이다. 바꾸면 대시보드 기본값도 같이 바꾼다.
+# 작업 폴더마다 다르게 두지 않는다(Prometheus가 폴더마다 따로 떠서 섞이지 않는다).
+configs:
+  prometheus:
+    content: |
+      global:
+        scrape_interval: 1s
+        scrape_timeout: 1s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: tikitak-loadtest
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ["host.docker.internal:${MANAGEMENT_SERVER_PORT:-8081}"]

@@ -17,7 +17,9 @@
 #   PREWARM_DURATION  기본 2m. 0 또는 off면 건너뛴다(같은 앱 기동에서 방금 웜업했을 때만 끈다)
 #   PREWARM_RATE      기본 100 RPS. 요청 비중은 mixed와 같다(모드가 solo·ramp여도 웜업은 mixed 비중)
 #   PREWARM_DRAIN_TIMEOUT  웜업 뒤 앱의 남은 요청이 끝나기를 기다리는 최대 초(기본 180). 넘으면 측정을 중단한다
-# 주소: BASE_URL(API, 기본 http://localhost:8080), MANAGEMENT_URL(actuator, 기본 http://localhost:8081)
+# 주소: BASE_URL(API), MANAGEMENT_URL(actuator). env에 없으면 loadtest/.env의 SERVER_PORT·MANAGEMENT_SERVER_PORT로
+#   http://localhost:<포트>를 만든다(그 줄이 없으면 8080·8081). 같은 PC의 다른 작업 폴더가 앱 포트를 바꿔도
+#   그 폴더의 앱을 재게 하려는 것이다(README "같은 PC에서 여러 작업 폴더가 이 환경을 쓸 때").
 #
 # 종료 코드는 k6의 것을 돌려준다(threshold 실패면 99). 실패해도 샘플러 종료와 덤프는 한다.
 set -uo pipefail
@@ -32,8 +34,14 @@ if [ "$MODE" = "solo" ] && [ -z "$API" ]; then
 	exit 2
 fi
 export MODE API
-export BASE_URL="${BASE_URL:-http://localhost:8080}"
-export MANAGEMENT_URL="${MANAGEMENT_URL:-http://localhost:8081}"
+# loadtest/.env에서 KEY=값 한 줄을 읽는다(없으면 빈 값)
+env_file_value() {
+	sed -n "s/^$1=//p" loadtest/.env 2>/dev/null | tr -d '\r' | tail -n 1
+}
+APP_PORT="$(env_file_value SERVER_PORT)"
+APP_MANAGEMENT_PORT="$(env_file_value MANAGEMENT_SERVER_PORT)"
+export BASE_URL="${BASE_URL:-http://localhost:${APP_PORT:-8080}}"
+export MANAGEMENT_URL="${MANAGEMENT_URL:-http://localhost:${APP_MANAGEMENT_PORT:-8081}}"
 PREWARM_DURATION="${PREWARM_DURATION:-2m}"
 PREWARM_RATE="${PREWARM_RATE:-100}"
 if [ -z "${JWT_SECRET:-}" ]; then
@@ -51,7 +59,7 @@ for f in loadtest/k6/data/targets.json loadtest/k6/data/comment-feeds.json; do
 	fi
 done
 if ! curl -sf --max-time 5 "$MANAGEMENT_URL/actuator/health" > /dev/null; then
-	echo "앱이 응답하지 않는다: $MANAGEMENT_URL/actuator/health (loadtest/.env에 MANAGEMENT_SERVER_PORT=8081이 있는지 확인)" >&2
+	echo "앱이 응답하지 않는다: $MANAGEMENT_URL/actuator/health (loadtest/.env의 MANAGEMENT_SERVER_PORT와 앱이 같은 env로 떴는지 확인)" >&2
 	exit 2
 fi
 
@@ -63,6 +71,7 @@ LABEL="$MODE${API:+-$API}"
 PREFIX="$RAW/$RUN_ID-$LABEL"
 
 echo "== run $RUN_ID ($LABEL) =="
+echo "== app: BASE_URL=$BASE_URL MANAGEMENT_URL=$MANAGEMENT_URL =="
 if [ "$PREWARM_DURATION" = "0" ] || [ "$PREWARM_DURATION" = "off" ]; then
 	echo "== prewarm: 건너뜀 (PREWARM_DURATION=$PREWARM_DURATION) =="
 else

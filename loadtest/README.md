@@ -9,7 +9,7 @@
 
 ```
 loadtest/
-├── docker-compose.yml        # Postgres 17.6 + Redis + Prometheus + Grafana (프로젝트 이름 tikitak-loadtest)
+├── docker-compose.yml        # Postgres 17.6 + Redis + Prometheus(설정 포함) + Grafana (프로젝트 이름 기본 tikitak-loadtest, 10번)
 ├── initdb/                   # 볼륨이 비어 있을 때 한 번 실행 (pg_stat_statements 확장 생성)
 ├── .env.example              # 앱 실행용 env 템플릿 (가짜 R2·Kakao·OAuth 값, actuator 포트 8081 분리)
 ├── .env                      # 위 파일을 복사해 만든다. 커밋하지 않는다
@@ -27,7 +27,6 @@ loadtest/
 │   ├── pgss.sh               # pg_stat_statements 초기화·덤프
 │   ├── hikari-sampler.sh     # /actuator/prometheus의 Hikari 지표를 1초마다 CSV로
 │   └── run-measure.sh        # 측정 전 웜업 + 위를 묶은 측정 1회 실행 래퍼
-├── prometheus/prometheus.yml # 앱 management 포트(8081)를 1초 간격으로 수집
 ├── grafana/
 │   ├── provisioning/         # 데이터소스(Prometheus)와 대시보드 자동 로드 설정
 │   └── dashboards/           # Tikitak Backend 대시보드 JSON (운영 대시보드를 로컬용으로 고친 복사본)
@@ -56,10 +55,10 @@ loadtest/
 | `track_io_timing` | on (`EXPLAIN (ANALYZE, BUFFERS)`에 I/O 시간이 나오게) | 〃 |
 | 타임존 | 컨테이너 `TZ`·`PGTZ`와 서버 `timezone` 모두 `Asia/Seoul` | 〃 |
 | Redis | `redis:7.4-alpine`, CPU 1개, 메모리 256MB | 〃 |
-| Prometheus | `prom/prometheus:v3.5.0`, CPU 0.5개, 메모리 512MB, 수집 간격 1초(`scrape_timeout` 1초), 보존 30일 | `docker-compose.yml`, `prometheus/prometheus.yml` |
+| Prometheus | `prom/prometheus:v3.5.0`, CPU 0.5개, 메모리 512MB, 수집 간격 1초(`scrape_timeout` 1초), 보존 30일 | `docker-compose.yml` (수집 설정은 `configs.prometheus`) |
 | Grafana | `grafana/grafana:12.1.1`, CPU 0.5개, 메모리 512MB | `docker-compose.yml` |
-| 호스트 포트 | Postgres **55432**, Redis **56379** (로컬의 5432/6379와 겹치지 않게), Prometheus **59090**, Grafana **53000** (둘은 `127.0.0.1`에만 열림) | 〃 |
-| 컨테이너·볼륨 | `tikitak-loadtest-{postgres,redis,prometheus,grafana}`, 볼륨 `tikitak-loadtest-pgdata`, `tikitak-loadtest-prometheus`, `tikitak-loadtest-grafana` | 〃 |
+| 호스트 포트 | Postgres **55432**, Redis **56379** (로컬의 5432/6379와 겹치지 않게), Prometheus **59090**, Grafana **53000** (둘은 `127.0.0.1`에만 열림). 기본값이고, 같은 PC의 다른 작업 폴더는 10번대로 바꾼다 | 〃, `.env` |
+| 컨테이너·볼륨 | `tikitak-loadtest-{postgres,redis,prometheus,grafana}`, 볼륨 `tikitak-loadtest-pgdata`, `tikitak-loadtest-prometheus`, `tikitak-loadtest-grafana`. 앞부분은 `LOADTEST_PROJECT`(기본 `tikitak-loadtest`) | 〃 |
 | 앱 | `./gradlew bootJar` 결과 jar를 `java -Duser.timezone=Asia/Seoul -jar`로 실행. 프로필 `dev`. devtools 안 씀 | 아래 절차 |
 | 앱 포트 | API **8080**, actuator **8081**(`MANAGEMENT_SERVER_PORT=8081`) | `.env.example` |
 | Hikari 풀 | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=10` | `.env.example` |
@@ -75,7 +74,7 @@ docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -
   SELECT name, setting, unit FROM pg_settings
   WHERE name IN ('shared_buffers','effective_cache_size','work_mem','maintenance_work_mem',
                  'max_connections','max_wal_size','shared_preload_libraries','timezone','track_io_timing');"
-docker inspect tikitak-loadtest-postgres --format 'NanoCpus={{.HostConfig.NanoCpus}} Memory={{.HostConfig.Memory}}'
+docker inspect "$(docker compose -f loadtest/docker-compose.yml ps -q postgres)" --format 'NanoCpus={{.HostConfig.NanoCpus}} Memory={{.HostConfig.Memory}}'
 ```
 
 ## 절차
@@ -335,6 +334,7 @@ docker compose -f loadtest/docker-compose.yml up -d --wait
 ```
 
 `down -v`는 named volume `tikitak-loadtest-pgdata`와 Prometheus·Grafana 볼륨(`tikitak-loadtest-prometheus`, `tikitak-loadtest-grafana`)까지 지운다. 지난 측정의 Prometheus 시계열도 사라지므로, 비교에 쓸 그래프는 먼저 9-3대로 스크린샷을 남긴다.
+같은 PC의 다른 작업 폴더도 이 환경을 쓰면 `down -v` 전에 10-3대로 프로젝트 이름을 확인한다.
 다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V25를 처음부터 적용한다(4번부터 다시).
 
 ### 8. 측정 (#217)
@@ -462,7 +462,7 @@ compose에 같이 뜬다(1번). 이 PC에서만 열린다(`127.0.0.1`).
 | 대시보드 | http://localhost:53000/d/tikitak-loadtest-backend | Grafana 첫 화면(홈)도 이 대시보드다. 폴더 `loadtest` |
 | Prometheus | http://localhost:59090 | 수집 대상: http://localhost:59090/targets (job `tikitak-loadtest`가 UP이어야 한다) |
 
-- Prometheus는 컨테이너 안에서 `host.docker.internal:8081/actuator/prometheus`를 1초마다 수집한다. `extra_hosts: host.docker.internal:host-gateway`를 명시했다(2026-11-24 Windows Docker Desktop 29.9.2에서 UP 확인, 수집 1회 약 50ms. Linux Docker Engine에서는 확인하지 않았다).
+- Prometheus는 컨테이너 안에서 `host.docker.internal:8081/actuator/prometheus`를 1초마다 수집한다. 포트는 `loadtest/.env`의 `MANAGEMENT_SERVER_PORT`(없으면 8081)를 따른다. 설정은 파일이 아니라 `docker-compose.yml`의 `configs.prometheus`에 있다(Prometheus 설정 파일은 env를 풀지 않아서). `extra_hosts: host.docker.internal:host-gateway`를 명시했다(2026-11-24 Windows Docker Desktop 29.9.2에서 UP 확인, 수집 1회 약 50ms. Linux Docker Engine에서는 확인하지 않았다).
 - Grafana 데이터소스(`Prometheus (loadtest)`, uid `tikitak-loadtest-prometheus`)와 대시보드는 `grafana/provisioning/`이 자동으로 만든다. 화면에서 고친 대시보드는 저장되지 않는다. 바꾸려면 `grafana/dashboards/tikitak-backend-dashboard.json`을 고친다(30초마다 다시 읽는다).
 - 데이터소스의 `timeInterval`을 1초로 둬서 패널의 `$__rate_interval`은 짧은 시간 범위에서 4초다(범위를 넓히면 `max(4×1s, $__interval + 1s)`로 커진다). 짧은 구간의 변화가 보이는 대신 그래프가 출렁인다.
 - 측정 전 웜업(8-0)도 그래프에 나온다. 본 측정 구간은 9-2대로 고른다.
@@ -495,3 +495,65 @@ Prometheus 데이터는 `down -v`를 하거나 30일 보존 기간이 지나면 
 3. OS 화면 캡처(Windows `Win+Shift+S`)로 저장한다. 이 Grafana에는 이미지 렌더러 플러그인을 설치하지 않았으므로 Grafana의 이미지 내보내기는 쓰지 않는다.
 4. 파일 이름은 `<RUN_ID>-<mode>[-api]-<패널>.png`로 하고 결과 문서와 같은 `loadtest/results/` 아래에 둔다(`results/raw/`는 커밋하지 않는다).
 5. 개선 후에도 같은 모드·같은 시간 길이·같은 패널로 찍어 나란히 둔다. 세로축 범위가 자동이라 두 그림의 눈금이 다를 수 있으니 숫자를 같이 적는다.
+
+### 10. 같은 PC에서 여러 작업 폴더가 이 환경을 쓸 때
+
+#217 폴더와 #215 폴더처럼 같은 PC의 여러 작업 폴더(worktree)가 이 compose 파일을 쓰면, 기본값으로는 프로젝트 이름·컨테이너 이름·볼륨 이름·호스트 포트가 모두 겹친다.
+그러면 한쪽의 `up -d`가 다른 쪽 컨테이너를 다시 만들고, 한쪽의 `down -v`가 다른 쪽 시드 DB와 Prometheus 데이터를 지운다(2026-11-24 실제로 볼륨이 지워졌다).
+
+#### 10-1. 폴더마다 이름과 포트를 다르게 둔다
+
+`docker compose -f loadtest/docker-compose.yml`은 compose 파일 옆의 `loadtest/.env`를 기본으로 읽는다(저장소 루트에서 실행해도 같다). 셸 env에 같은 이름이 있으면 셸 값이 우선한다.
+그래서 앱 env와 같은 파일(`loadtest/.env`)에 아래 값을 둔다. 앱은 `LOADTEST_*`를 쓰지 않는다. 한 폴더만 쓴다면 아무것도 바꾸지 않아도 된다(줄이 없어도 기본값으로 풀린다).
+
+| 변수 | 기본값(#217) | #215 폴더 예 | 바뀌는 것 |
+|---|---|---|---|
+| `LOADTEST_PROJECT` | `tikitak-loadtest` | `tikitak-loadtest-push` | compose 프로젝트 이름, 컨테이너 `<값>-{postgres,redis,prometheus,grafana}`, 볼륨 `<값>-{pgdata,prometheus,grafana}`, 네트워크 `<값>_default` |
+| `LOADTEST_PG_PORT` | 55432 | 55433 | Postgres 호스트 포트. `DB_URL`도 같은 포트로 바꾼다 |
+| `LOADTEST_REDIS_PORT` | 56379 | 56380 | Redis 호스트 포트. `REDIS_PORT`도 같은 값으로 바꾼다 |
+| `LOADTEST_PROMETHEUS_PORT` | 59090 | 59091 | Prometheus 화면 |
+| `LOADTEST_GRAFANA_PORT` | 53000 | 53001 | Grafana 화면 |
+| `SERVER_PORT` | 8080 | 8082 | 앱 API |
+| `MANAGEMENT_SERVER_PORT` | 8081 | 8083 | 앱 actuator. Prometheus 수집 대상도 이 값을 따른다(`configs.prometheus`) |
+
+#215 폴더의 `loadtest/.env`에서 바꿀 줄:
+
+```
+LOADTEST_PROJECT=tikitak-loadtest-push
+LOADTEST_PG_PORT=55433
+LOADTEST_REDIS_PORT=56380
+LOADTEST_PROMETHEUS_PORT=59091
+LOADTEST_GRAFANA_PORT=53001
+SERVER_PORT=8082
+MANAGEMENT_SERVER_PORT=8083
+DB_URL=jdbc:postgresql://localhost:55433/tikitak
+REDIS_PORT=56380
+```
+
+- 띄우기 전에 이름과 포트가 바뀌었는지 본다: `docker compose -f loadtest/docker-compose.yml config | grep -E '^name|container_name|published|targets'`
+- `loadtest/.env` 값에 `$`를 넣지 않는다. compose가 이 파일을 읽을 때 `$`를 변수로 풀려고 한다.
+- `run-measure.sh`는 `BASE_URL`·`MANAGEMENT_URL`이 env에 없으면 `loadtest/.env`의 `SERVER_PORT`·`MANAGEMENT_SERVER_PORT`로 만든다. 시작할 때 찍는 `== app: BASE_URL=... ==` 줄로 대상을 확인한다.
+- k6나 `hikari-sampler.sh`를 직접 돌릴 때는 `BASE_URL=http://localhost:8082 MANAGEMENT_URL=http://localhost:8083`처럼 넘긴다. 안 넘기면 기본값(8080·8081), 즉 다른 폴더의 앱을 잰다.
+- 이 README의 `localhost:8081`, `localhost:59090`, `localhost:53000`(9-2의 대시보드 URL 포함)은 기본값이다. 다른 폴더에서는 자기 포트로 바꿔 읽는다. `docker compose ... exec postgres`는 서비스 이름이라 그대로 쓴다.
+- Prometheus job 이름(`tikitak-loadtest`)과 Grafana 데이터소스 uid는 폴더마다 바꾸지 않는다. 폴더마다 Prometheus·Grafana가 따로 떠서 섞이지 않고, 대시보드 기본값도 그대로 맞는다.
+
+#### 10-2. 측정은 번갈아 한다
+
+두 폴더의 앱·DB·k6는 같은 호스트 CPU와 메모리를 쓴다. 동시에 돌리면 서로의 지연에 섞인다.
+
+- 한쪽이 측정할 때 다른 쪽은 앱을 끄고 컨테이너를 멈춘다. 다른 폴더에서 `docker compose -f loadtest/docker-compose.yml stop`을 실행한다. 볼륨(시드 DB, Prometheus 데이터)은 남는다. 다시 쓸 때는 `up -d --wait`.
+- 측정 전에 `docker ps`로 자기 프로젝트 컨테이너만 떠 있는지 확인하고, 결과 문서에 다른 폴더 환경을 멈춘 상태였다고 적는다.
+
+#### 10-3. `down -v` 전에 프로젝트 이름을 확인한다
+
+```bash
+docker compose ls -a
+# NAME                    STATUS       CONFIG FILES
+# tikitak-loadtest        running(4)   .../test-api/loadtest/docker-compose.yml
+# tikitak-loadtest-push   exited(4)    .../test/loadtest/docker-compose.yml
+docker compose -f loadtest/docker-compose.yml config | grep '^name'
+# name: <이 폴더의 LOADTEST_PROJECT>
+```
+
+`config`의 `name`이 `docker compose ls -a`에서 CONFIG FILES가 이 폴더인 행의 NAME과 같을 때만 `down -v`를 한다.
+다르면(예: `loadtest/.env`에 `LOADTEST_PROJECT`가 빠져 기본값 `tikitak-loadtest`로 풀림) 다른 폴더의 볼륨을 지운다. `.env`부터 고친다.
