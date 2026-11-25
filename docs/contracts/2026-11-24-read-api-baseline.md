@@ -96,6 +96,7 @@
 4. 모니터링과 측정 규칙(2026-11-24 추가 승인): compose에 Prometheus·Grafana 추가, 기존 대시보드 JSON을 `loadtest/grafana/`에 두고 자동 로드, `.env.example`에 `MANAGEMENT_SERVER_PORT=8081`(actuator 분리), 측정 전 2분 웜업 규칙을 README와 래퍼에 반영
 5. 베이스라인 결과: `results/2026-11-xx-baseline.md`, 계약 상태 갱신
 6. (2026-11-25 추가) 작업 폴더별 compose 이름·포트 분리: `docker-compose.yml`(프로젝트·컨테이너·볼륨 이름과 호스트 포트를 `LOADTEST_*` env로, Prometheus 설정을 compose `configs`로 옮겨 수집 포트가 `MANAGEMENT_SERVER_PORT`를 따름), `prometheus/prometheus.yml` 삭제, `.env.example`, `scripts/run-measure.sh`(앱 주소 기본값을 `.env` 포트에서), README 10번
+7. (2026-11-25 추가) PC 공용 측정 잠금과 외부 부하 기록: `scripts/measure-lock.sh`(시드·측정을 PC 전체에서 한 번에 하나만, 중첩 허용, 남은 잠금은 Windows PID로 확인해 정리), `scripts/external-load-sampler.sh`·`.ps1`(측정과 무관한 호스트 프로세스·컨테이너 CPU 기록, `CONTAMINATION: POSSIBLE` 표시), `scripts/run-measure.sh`(잠금과 샘플러 연결), README 시드 절차 감싸기와 10-2·10-4·10-5
 
 ## 하지 말 것
 - dev Supabase나 prod DB에 접속하거나 시드를 넣는 것. 단, `SHOW server_version` 확인은 사람이 한다.

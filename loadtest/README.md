@@ -26,7 +26,9 @@ loadtest/
 │   ├── extract-comment-feeds.sh  # 댓글 요청 대상(팀별 최신 피드 20개) 추출
 │   ├── pgss.sh               # pg_stat_statements 초기화·덤프
 │   ├── hikari-sampler.sh     # /actuator/prometheus의 Hikari 지표를 1초마다 CSV로
-│   └── run-measure.sh        # 측정 전 웜업 + 위를 묶은 측정 1회 실행 래퍼
+│   ├── measure-lock.sh       # PC 공용 측정 잠금. 시드·측정은 이것으로 감싼다(10-4)
+│   ├── external-load-sampler.sh / .ps1  # 측정과 무관한 호스트 프로세스·컨테이너 CPU 기록과 오염 판정(10-5)
+│   └── run-measure.sh        # 잠금 + 측정 전 웜업 + 위를 묶은 측정 1회 실행 래퍼
 ├── grafana/
 │   ├── provisioning/         # 데이터소스(Prometheus)와 대시보드 자동 로드 설정
 │   └── dashboards/           # Tikitak Backend 대시보드 JSON (운영 대시보드를 로컬용으로 고친 복사본)
@@ -168,10 +170,11 @@ curl -s localhost:59090/api/v1/targets | grep -o '"health":"[a-z]*"'
 ### 6. 공통 시드
 
 앱이 Flyway를 적용한 **빈 DB**에서 한 번만 실행한다. 호스트에 psql이 없어도 되도록 컨테이너 안의 psql을 쓴다.
+시드는 Postgres CPU 2개를 몇 분간 다 쓰므로, 다른 작업 폴더의 측정과 겹치지 않게 `measure-lock.sh`로 감싼다(10-4). 6-1, 6-2도 같다.
 
 ```bash
-time docker compose -f loadtest/docker-compose.yml exec -T postgres \
-  psql -U tikitak -d tikitak -v normal_teams=2000 -f - < loadtest/sql/00_common.sql
+time bash loadtest/scripts/measure-lock.sh bash -c 'docker compose -f loadtest/docker-compose.yml exec -T postgres \
+  psql -U tikitak -d tikitak -v normal_teams=2000 -f - < loadtest/sql/00_common.sql'
 ```
 
 - `-v normal_teams=N`: 일반 팀 수(기본 2000). 큰 팀 3개는 항상 만든다.
@@ -212,11 +215,13 @@ ID는 명시적으로 넣고 identity 시퀀스를 마지막 값으로 맞춘다
 시드가 도는 동안(약 7~8분)은 앱을 끄는 것을 권장한다. 앱의 배치가 같은 테이블을 건드리지 않게 하고, 시드가 CPU 2개를 다 쓰기 때문이다.
 
 ```bash
-time docker compose -f loadtest/docker-compose.yml exec -T postgres \
-  psql -U tikitak -d tikitak -f - < loadtest/sql/10_feed.sql
-time docker compose -f loadtest/docker-compose.yml exec -T postgres \
-  psql -U tikitak -d tikitak -f - < loadtest/sql/20_notification.sql
+time bash loadtest/scripts/measure-lock.sh bash -c '
+  set -e
+  docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -f - < loadtest/sql/10_feed.sql
+  docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -f - < loadtest/sql/20_notification.sql'
 ```
+
+두 파일을 따로 재려면 각각 `time bash loadtest/scripts/measure-lock.sh bash -c '...'`로 감싼다. 잠금을 기다린 시간도 `time`에 들어가므로, 시드 시간은 잠금 획득 줄(`[measure-lock HH:MM:SS] 잠금 획득`)과 해제 줄의 시각 차이로 본다.
 
 - 대상 테이블(`10_feed`: place, feed, feed_image, feed_tag, feed_reaction, feed_comment / `20_notification`: notification)에 행이 있으면 아무것도 넣지 않고 에러로 끝난다. 다시 넣으려면 7번으로 초기화한다.
 - `-v salt=N`: 난수 salt(정수, 기본 217). 난수는 `random()`이 아니라 `hashint8extended(key, salt)`로 만들어 실행 계획과 관계없이 같은 값이 나온다. 다만 시각은 실행 시점의 `LOCALTIMESTAMP` 기준이라, 날짜 경계에 걸리는 데일리 답변 수는 실행일마다 조금 달라질 수 있다.
@@ -244,9 +249,11 @@ time docker compose -f loadtest/docker-compose.yml exec -T postgres \
 
 ```bash
 mkdir -p loadtest/k6/data
-docker compose -f loadtest/docker-compose.yml exec -T postgres \
-  psql -U tikitak -d tikitak -At -f - < loadtest/sql/30_targets.sql > loadtest/k6/data/targets.json
+bash loadtest/scripts/measure-lock.sh bash -c 'docker compose -f loadtest/docker-compose.yml exec -T postgres \
+  psql -U tikitak -d tikitak -At -f - < loadtest/sql/30_targets.sql > loadtest/k6/data/targets.json'
 ```
+
+잠금 메시지는 stderr로 나가므로 `targets.json`에 섞이지 않는다.
 
 | 키 | 내용 |
 |---|---|
@@ -410,13 +417,15 @@ PREWARM_DURATION=20s DURATION=10s bash loadtest/scripts/run-measure.sh solo comm
 
 `run-measure.sh`는 다음을 차례로 한다. `JWT_SECRET`이 env에 없으면 `loadtest/.env`에서 읽는다.
 
+0. PC 공용 잠금(10-4)을 잡는다. 다른 작업 폴더가 측정·시드 중이면 끝날 때까지 기다린다. 이미 `measure-lock.sh` 안에서 불렸으면 다시 잡지 않는다
 1. 앱 `$MANAGEMENT_URL/actuator/health`(기본 8081)와 입력 JSON 확인
-2. 측정 전 웜업(8-0): mixed 비중 k6(`WARMUP_ONLY=1`)를 돌리고, 앱에 남은 요청이 끝날 때까지 기다린다
-3. `pg_stat_statements_reset()`
-4. Hikari 샘플러를 백그라운드로 시작(`$MANAGEMENT_URL/actuator/prometheus`)
-5. `k6 run --quiet loadtest/k6/read-api-baseline.js` (ramp는 `--out csv=...-k6-metrics.csv.gz`를 더한다)
-6. 샘플러 종료, `pg_stat_statements` 덤프
-7. Hikari active/pending 최대값(ramp는 단계별로도) 출력
+2. 외부 부하 샘플러(10-5)를 시작한다. 호스트 샘플러가 준비될 때까지(10초 안팎) 기다린다
+3. 측정 전 웜업(8-0): mixed 비중 k6(`WARMUP_ONLY=1`)를 돌리고, 앱에 남은 요청이 끝날 때까지 기다린다
+4. `pg_stat_statements_reset()`
+5. Hikari 샘플러를 백그라운드로 시작(`$MANAGEMENT_URL/actuator/prometheus`)
+6. `k6 run --quiet loadtest/k6/read-api-baseline.js` (ramp는 `--out csv=...-k6-metrics.csv.gz`를 더한다)
+7. Hikari 샘플러와 외부 부하 샘플러 종료(외부 부하 요약 출력), `pg_stat_statements` 덤프
+8. Hikari active/pending 최대값(ramp는 단계별로도) 출력, 마지막에 `CONTAMINATION: NONE | POSSIBLE | UNKNOWN`을 다시 출력하고 잠금 해제
 
 2026-11-24 짧은 확인(`PREWARM_DURATION=20s DURATION=10s ... solo map_pins`)의 실제 순서(파일 시각과 샘플 시각): 웜업 k6 종료 20:09:19 → 남은 요청 대기 → reset·샘플러 첫 샘플 20:09:35(active 0, pending 0) → k6 setup 끝 20:09:36 → k6 종료 20:09:49 → 덤프 20:09:51.
 대기를 넣기 전에는 웜업 k6가 끝난 뒤에도 앱에 웜업 요청이 남아, 샘플러 첫 샘플이 active 10·pending 190이었다.
@@ -434,6 +443,8 @@ PREWARM_DURATION=20s DURATION=10s bash loadtest/scripts/run-measure.sh solo comm
 | `-pgss.csv` / `-pgss.txt` | `total_exec_time` 상위 50개 쿼리의 calls·rows·총/평균/최대 시간·공유 버퍼 hit/read·쿼리 전문(csv) / 합계와 표(txt) |
 | `-stages.csv` | ramp만. 단계별 구간의 절대 시각(epoch ms) |
 | `-k6-metrics.csv.gz` | ramp만. 요청 단위 원시 지표(단계별 `dropped_iterations` 시점 확인용) |
+| `-contamination.txt` | 외부 부하 요약과 판정(10-5). 결과 문서에 판정 줄을 옮긴다 |
+| `-load-host.csv` / `-load-docker.csv` / `-load-meta.txt` | 외부 부하 원시 기록(10-5) |
 
 스크립트를 따로 쓸 수도 있다.
 
@@ -541,7 +552,8 @@ REDIS_PORT=56380
 
 두 폴더의 앱·DB·k6는 같은 호스트 CPU와 메모리를 쓴다. 동시에 돌리면 서로의 지연에 섞인다.
 
-- 한쪽이 측정할 때 다른 쪽은 앱을 끄고 컨테이너를 멈춘다. 다른 폴더에서 `docker compose -f loadtest/docker-compose.yml stop`을 실행한다. 볼륨(시드 DB, Prometheus 데이터)은 남는다. 다시 쓸 때는 `up -d --wait`.
+- 시드와 측정은 PC 전체에서 한 번에 하나만 한다. `measure-lock.sh`(10-4)가 이것을 강제한다. 코드 작업과 gradle(빌드·테스트)은 막지 않는다. 대신 측정 중에 돈 다른 부하는 외부 부하 샘플러(10-5)가 기록한다.
+- 한쪽이 측정할 때 다른 쪽은 앱을 끄고 컨테이너를 멈춘다. 다른 폴더에서 `docker compose -f loadtest/docker-compose.yml stop`을 실행한다. 볼륨(시드 DB, Prometheus 데이터)은 남는다. 다시 쓸 때는 `up -d --wait`. 멈추지 않았으면 10-5 요약의 "다른 컨테이너" 목록에 나온다.
 - 측정 전에 `docker ps`로 자기 프로젝트 컨테이너만 떠 있는지 확인하고, 결과 문서에 다른 폴더 환경을 멈춘 상태였다고 적는다.
 
 #### 10-3. `down -v` 전에 프로젝트 이름을 확인한다
@@ -557,3 +569,87 @@ docker compose -f loadtest/docker-compose.yml config | grep '^name'
 
 `config`의 `name`이 `docker compose ls -a`에서 CONFIG FILES가 이 폴더인 행의 NAME과 같을 때만 `down -v`를 한다.
 다르면(예: `loadtest/.env`에 `LOADTEST_PROJECT`가 빠져 기본값 `tikitak-loadtest`로 풀림) 다른 폴더의 볼륨을 지운다. `.env`부터 고친다.
+
+#### 10-4. PC 공용 측정 잠금 (`measure-lock.sh`)
+
+시드와 측정은 `measure-lock.sh`로 감싼다. PC 전체에서 한 번에 하나만 돈다. 다른 쪽이 잡고 있으면 끝날 때까지 기다린다.
+
+```bash
+bash loadtest/scripts/measure-lock.sh <명령...>
+bash loadtest/scripts/measure-lock.sh --status        # 누가 잡고 있는지만 본다
+```
+
+- 잠금은 저장소 밖의 디렉터리 하나다. 기본 `$HOME/.tikitak-loadtest-lock`(Git Bash에서 `C:\Users\<사용자>\.tikitak-loadtest-lock`)이고 `LOADTEST_LOCK_DIR`로 바꾼다. **모든 작업 폴더가 같은 경로를 봐야 하므로, 실제 측정에서는 바꾸지 않는다**(스크립트 시험용으로만 바꾼다).
+- `mkdir`로 원자적으로 잡고, 안의 `owner` 파일에 작업 폴더, `LOADTEST_PROJECT`, Git Bash PID, Windows PID, 시작 시각, 명령을 적는다.
+- 기다리는 동안 `LOADTEST_LOCK_POLL`초(기본 15)마다 다시 시도하며 잡은 쪽을 출력한다. `LOADTEST_LOCK_TIMEOUT`초(기본 7200 = 2시간, 0이면 무제한)를 넘으면 종료 코드 75로 끝난다. ramp 1회가 약 15분, 처음부터 전체 재현이 약 10분이라 2시간이면 앞 작업 몇 개를 기다릴 수 있다.
+- 명령이 끝나면 정상·에러·Ctrl+C(INT)·TERM 모두 잠금을 푼다. 기다리던 쪽을 Ctrl+C로 끊으면 남의 잠금은 건드리지 않는다.
+- `run-measure.sh`는 스스로 잠금을 잡는다. 따로 감싸지 않아도 된다.
+
+**처음부터 재현 전체를 한 번에 감싸는 예.** 앱 기동(Flyway)부터 대상 추출까지 다른 폴더의 측정이 끼어들지 않는다. `down -v` 전에 10-3으로 프로젝트 이름을 확인한다.
+
+```bash
+bash loadtest/scripts/measure-lock.sh bash -c '
+  set -e
+  mkdir -p loadtest/results/raw loadtest/k6/data
+  dc="docker compose -f loadtest/docker-compose.yml"
+  $dc down -v && $dc up -d --wait
+  ( set -a; source loadtest/.env; set +a
+    nohup java -Duser.timezone=Asia/Seoul -jar build/libs/tikitak-0.0.1-SNAPSHOT.jar > loadtest/results/raw/app.log 2>&1 & echo $! > loadtest/results/raw/app.pid )
+  until curl -sf localhost:8081/actuator/health > /dev/null; do sleep 2; done   # 다른 폴더면 자기 MANAGEMENT_SERVER_PORT
+  kill "$(cat loadtest/results/raw/app.pid)"; sleep 5                          # 시드 중에는 앱을 끈다(6-1)
+  for f in 00_common 10_feed 20_notification; do
+    $dc exec -T postgres psql -U tikitak -d tikitak -v ON_ERROR_STOP=1 -f - < loadtest/sql/$f.sql
+  done
+  $dc exec -T postgres psql -U tikitak -d tikitak -At -f - < loadtest/sql/30_targets.sql > loadtest/k6/data/targets.json
+  bash loadtest/scripts/extract-comment-feeds.sh'
+```
+
+**중첩.** 잠금을 잡은 뒤 자식에게 `LOADTEST_LOCK_HELD=<토큰>`을 넘긴다. 자식이 `measure-lock.sh`나 `run-measure.sh`를 다시 부르면 토큰이 `owner`와 같은지 보고, 같으면 다시 잡지 않고 바로 실행한다(멈추지 않는다). 토큰이 다르면(env가 다른 셸로 새어 나간 경우) 경고하고 새로 잡는다.
+
+**개선 전/후는 잠금 한 번 안에서 연달아 측정한다.** 따로 잡으면 그 사이에 다른 폴더의 시드·측정이 끼어 캐시와 호스트 상태가 달라진다.
+
+```bash
+bash loadtest/scripts/measure-lock.sh bash -c '
+  RUN_ID=before-$(date +%Y%m%d-%H%M%S) bash loadtest/scripts/run-measure.sh mixed
+  # 앱을 개선 후 jar로 바꿔 띄운다(같은 시드 DB)
+  RUN_ID=after-$(date +%Y%m%d-%H%M%S) bash loadtest/scripts/run-measure.sh mixed'
+```
+
+**다른 측정 스크립트도 감싼다.** #215의 발송 배치 측정처럼 `run-measure.sh`를 쓰지 않는 측정·시드도 `bash loadtest/scripts/measure-lock.sh <명령>`으로 감싼다. 감싸지 않은 측정은 잠금을 무시하고 다른 쪽 측정과 겹친다. 가능하면 그 스크립트 안에서 `external-load-sampler.sh start/stop <접두사>`(10-5)로 외부 부하도 남긴다.
+
+**남은 잠금.** 잠금을 잡은 셸이 강제로 죽으면(창을 닫음, `taskkill /F`) 디렉터리가 남는다.
+
+- 자동 정리: 기다리는 쪽이 `owner`의 **Windows PID**를 `tasklist`로 확인해, 그 프로세스가 없다고 확실히 나올 때만 지운다. Git Bash PID는 Git Bash 안에서만 통하므로 보지 않는다. tasklist가 실패하거나, `owner` 파일이 없거나(잡은 직후 쓰는 중일 수 있다), 다른 호스트가 적은 것이면 지우지 않는다. 지우는 일은 `<잠금>.reap` 디렉터리를 잡은 한 프로세스만 하고, 잡은 뒤 다시 확인한다.
+- 2026-11-25 확인: 다른 프로세스 트리(PowerShell `Start-Process`로 띄운 Git Bash)가 잡은 살아 있는 잠금은 지우지 않고 기다렸다. 그 프로세스를 `taskkill /F`로 죽이자 다음 시도에서 지우고 잡았다. Git Bash PID는 죽었지만 Windows PID는 살아 있는 `owner`도 지우지 않았다.
+- 주의: 잠금을 잡은 셸만 강제로 죽이면 그 자식(k6, psql)은 계속 돌 수 있는데, 잠금은 자동 정리된다. 강제로 죽였으면 자식도 끝났는지 확인한다.
+- 사람이 지울 때: `--status`로 잡은 쪽을 보고, `tasklist //FI "PID eq <winpid>"`로 그 프로세스가 없고 그 작업 폴더에서 시드·측정이 돌지 않는 것을 확인한 뒤 `rm -rf ~/.tikitak-loadtest-lock ~/.tikitak-loadtest-lock.reap`.
+
+#### 10-5. 외부 부하 기록과 오염 표시
+
+`run-measure.sh`는 측정 구간(웜업 시작부터 k6 종료까지) 동안 `external-load-sampler.sh`를 돌려, 이 측정과 무관한 부하를 기록한다. 잠금은 시드·측정끼리만 막으므로 gradle, IDE, 백신 검사, 멈추지 않은 다른 폴더 컨테이너는 여기서 잡는다.
+
+| 기록 | 방법 | 빼는 것 |
+|---|---|---|
+| 호스트 프로세스 CPU (`-load-host.csv`) | PowerShell 1개를 계속 띄워 2초마다 성능 카운터 Process 범주를 한 번에 읽는다(`ReadCategory`, 1회 약 30ms). 단위는 논리 CPU 개수(1.00 = 1개를 다 씀) | 측정 앱(`SERVER_PORT`를 listen하는 PID), `k6`, `docker` CLI, Docker VM(`vmmem*`, `com.docker.*`), 샘플러 자신 |
+| 다른 컨테이너 CPU (`-load-docker.csv`) | `docker stats` 스트림 1개(약 1초마다 갱신). 단위 %(100 = CPU 1개) | 이 측정의 compose 프로젝트(`LOADTEST_PROJECT` 라벨) 컨테이너 |
+| 시작·끝 상태 (`-load-meta.txt`) | 호스트 여유 메모리, 떠 있는 다른 컨테이너 목록 | |
+
+- 끝에 요약(`-contamination.txt`)을 낸다: 외부 프로세스 합계의 평균·최대·기준을 넘은 샘플 수와 주요 프로세스, 다른 컨테이너 합계의 평균·최대와 주요 컨테이너, 여유 메모리, 다른 컨테이너 목록.
+- 기준을 넘으면 맨 끝에 `CONTAMINATION: POSSIBLE`과 이유가 나온다. 샘플이 없으면 `UNKNOWN`이다. 종료 코드는 바꾸지 않는다.
+- **오염 표시가 나오면 그 측정만 다시 한다.** 개선 전/후를 연달아 쟀으면 표시가 나온 쪽만 같은 잠금 안에서 다시 잰다. 결과 문서에는 판정 줄을 옮긴다.
+- 단독으로 돌릴 수도 있다: `bash loadtest/scripts/external-load-sampler.sh run loadtest/results/raw/<접두사> 30`. 다른 스크립트에서는 `start <접두사>` / `stop <접두사>`.
+- 비용: 호스트 샘플러는 시작할 때 카운터 초기화로 10초 안팎(샘플러 CPU 합계 4~5초 중 대부분)이 걸려, 준비될 때까지 기다린 뒤 웜업을 시작한다. 그 뒤로는 2초마다 수십 ms다. 샘플 사이에 시작하고 끝난 짧은 프로세스는 보이지 않는다. `hikari-sampler.sh`의 bash·curl도 외부 쪽에 들어간다(작다).
+- 이 Windows 성능 카운터 이름(`Process`, `% Processor Time`, `ID Process`)은 영어 표시 언어 Windows에서 확인했다. 다른 표시 언어에서는 확인하지 않았다.
+
+기준값(env로 바꾼다)과 근거:
+
+| env | 기본값 | 근거 |
+|---|---|---|
+| `LOAD_HOST_AVG_CPU` | 2.5 | 측정이 없을 때 이 PC(논리 CPU 8개, Orca·Claude Code·Chrome·백신이 떠 있음)의 외부 프로세스 평균이 1.0~1.5였다(2026-11-25, 30초 단독 실행 평균 1.49, 최대 3.30). 평소 수준 + 논리 CPU 1개를 기준으로 했다. 1.0으로 두면 평소에도 항상 표시된다 |
+| `LOAD_HOST_PEAK_CPU` | 4.0 | 논리 CPU의 절반. 평소 순간 최대(3.30)보다 높다. 이 값 이상인 샘플을 "기준을 넘은 구간"으로 센다 |
+| `LOAD_DOCKER_AVG_PCT` | 25 | 멈추지 않은 다른 폴더 compose 4개(#215)의 합계가 평균 5.8~11.6%, 순간 최대 20.4~39.4%였다(2026-11-25 세 번 실행). 그 2배 이상이면 놀고 있지 않은 것으로 본다. 시드 중인 Postgres는 CPU 2개를 다 쓴다(6-1) |
+| `LOAD_DOCKER_PEAK_PCT` | 100 | 컨테이너 CPU 1개분 |
+| `LOAD_PEAK_RATIO` | 0.05 | 기준을 넘은 샘플이 5% 이상이면 오염 가능으로 본다. P95는 느린 쪽 5% 요청으로 정해지므로, 측정 시간의 5% 이상 겹친 부하는 P95를 바꿀 수 있다 |
+| `LOAD_HOST_INTERVAL_MS` | 2000 | 호스트 샘플 간격 |
+
+2026-11-25 확인(스크립트 시험): 부하 없이 30초 → 평균 1.49로 기본 기준에서 `NONE`. CPU 루프 3개를 15초 건 30초 → 루프 구간 샘플 3.3~3.9, 평균 2.53으로 `POSSIBLE`(주요 프로세스 `bash`). 기준을 `LOAD_HOST_AVG_CPU=0.01 LOAD_DOCKER_AVG_PCT=0.01`로 낮춘 15초 → 그때의 배경 부하(#215 측정 시간대. 호스트 샘플 1개에 `java` 2.58 포함)로 `POSSIBLE`. 호스트 샘플이 1개뿐이었던 것은 시작 대기를 넣기 전이라 15초 중 대부분이 PowerShell 기동이었기 때문이다. 이 세 번 모두 앱이 없어 "측정 앱" 값은 0이다. `run-measure.sh` 안에서 샘플러를 돌린 측정은 아직 하지 않았다.
