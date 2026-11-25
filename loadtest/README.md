@@ -653,3 +653,134 @@ bash loadtest/scripts/measure-lock.sh bash -c '
 | `LOAD_HOST_INTERVAL_MS` | 2000 | 호스트 샘플 간격 |
 
 2026-11-25 확인(스크립트 시험): 부하 없이 30초 → 평균 1.49로 기본 기준에서 `NONE`. CPU 루프 3개를 15초 건 30초 → 루프 구간 샘플 3.3~3.9, 평균 2.53으로 `POSSIBLE`(주요 프로세스 `bash`). 기준을 `LOAD_HOST_AVG_CPU=0.01 LOAD_DOCKER_AVG_PCT=0.01`로 낮춘 15초 → 그때의 배경 부하(#215 측정 시간대. 호스트 샘플 1개에 `java` 2.58 포함)로 `POSSIBLE`. 호스트 샘플이 1개뿐이었던 것은 시작 대기를 넣기 전이라 15초 중 대부분이 PowerShell 기동이었기 때문이다. 이 세 번 모두 앱이 없어 "측정 앱" 값은 0이다. `run-measure.sh` 안에서 샘플러를 돌린 측정은 아직 하지 않았다.
+
+### 11. 대량 알림 배치 측정 (#215)
+
+오늘의 질문 공개 알림 배치(`DailyQuestionOpenedNotificationBatchService`)를 받는 사람 1만·10만·100만 규모로 돌려 처리 시간과 병목을 잰다.
+앱은 `dev,loadtest` 프로필로 띄운다. 이 프로필에서는 실제 FCM 대신 가짜 발송기(`LoadTestPushSender`)가 지연·실패를 흉내 내고, 기동 직후 `LoadTestDailyQuestionOpenedRunner`가 배치를 한 번 실행한다(`loadtest.daily-question-opened.run-on-startup=true`일 때만).
+결과 문서는 `results/` 아래에 따로 쓴다.
+
+#### 11-1. 전제
+
+- **#215 측정 DB에는 `00_common.sql`과 `40_bulk_notification.sql`만 넣는다.** `40_bulk_notification.sql`은 시작할 때 `notification`을 TRUNCATE하므로 `20_notification.sql`(#217)이 넣은 알림을 지운다. 두 파일을 같은 DB에서 쓰지 않는다. `10_feed.sql`도 배치와 관계없어 넣지 않는다.
+- 같은 PC에서 #217 폴더도 이 환경을 쓰면 10번대로 폴더를 분리한다. #215 폴더의 `loadtest/.env`는 10-1의 "#215 폴더 예" 값(`LOADTEST_PROJECT=tikitak-loadtest-push`, Postgres 55433, Redis 56380, Prometheus 59091, Grafana 53001, 앱 8082·8083, `DB_URL`·`REDIS_PORT`도 새 포트)이다. `docker compose -f loadtest/docker-compose.yml config | grep -E '^name|container_name|published'`로 확인한다.
+- 측정은 #217과 번갈아 한다(10-2). 측정 전에 #217 폴더의 앱을 끄고 그 폴더에서 `docker compose -f loadtest/docker-compose.yml stop`(볼륨 유지)을 한다. #217 쪽 stop/start는 그 작업 세션과 먼저 맞춘다. 스크립트는 시작할 때 이 프로젝트 밖 컨테이너가 떠 있으면 경고를 내고 `-docker-ps.txt`에 남긴다(막지는 않는다).
+- `run-batch-measure.sh`는 `40_bulk_notification.sql`(TRUNCATE)을 실행하기 전에 `.env`의 `LOADTEST_PROJECT`와 `config`의 `name`이 같은지, 그리고 `<프로젝트>-postgres` 컨테이너의 compose `working_dir` 라벨이 이 폴더의 `loadtest`인지 확인하고, 다르면 멈춘다.
+- `loadtest` 프로필에서도 다른 `@Scheduled` 배치(30분 주기 `ObjectDeleteOutboxRetryBatchService`, 새벽 정리 배치들)는 그대로 돈다. 긴 회차(50ms × 10만 등)는 그 시각과 겹치는지 결과 문서에 적는다.
+- `down -v` 전에는 10-3대로 `config`의 `name`이 `tikitak-loadtest-push`이고 `docker compose ls -a`에서 이 폴더 행의 NAME과 같은지 확인한다. 다르면 #217 볼륨을 지운다.
+- Redis 키 프리픽스: `application.yaml`의 OAuth state·로그인 코드 프리픽스(`:56`, `:73`)는 `${spring.profiles.active}`를 쓰므로 `dev,loadtest`면 값에 쉼표가 들어간다(예상 `tikitak:dev,loadtest:oauth:state:`, 실제 값은 미확인). 이 프리픽스를 쓰는 곳은 `RedisOAuthStateStore`·`RedisLoginCodeStore`(OAuth 로그인)뿐이고, 배치·`NotificationService` 경로는 Redis를 쓰지 않으므로 배치 측정에는 영향이 없다(2026-11-25 `src/main/java`에서 `RedisTemplate` 사용처를 grep으로 확인).
+
+#### 11-2. 규모별 준비
+
+규모를 바꿀 때마다 빈 DB에서 다시 시드한다(`00_common.sql`은 빈 DB 전제). 명령은 저장소 루트에서 Git Bash로 실행한다.
+
+```bash
+# 0) 이 폴더의 프로젝트인지 확인 (10-3). name: tikitak-loadtest-push 여야 한다
+docker compose ls -a
+docker compose -f loadtest/docker-compose.yml config | grep '^name'
+
+# 1) 초기화와 기동 (앱이 떠 있으면 먼저 끈다)
+docker compose -f loadtest/docker-compose.yml down -v
+docker compose -f loadtest/docker-compose.yml up -d --wait
+
+# 2) jar 빌드 (코드가 바뀌었을 때만)
+./gradlew bootJar
+
+# 3) 앱을 한 번 띄워 Flyway(V1~V25)를 적용하고 끈다. 프로필은 .env의 dev 그대로라 배치가 돌지 않는다
+mkdir -p loadtest/results/raw
+( set -a; source loadtest/.env; set +a
+  nohup java -Duser.timezone=Asia/Seoul -jar build/libs/tikitak-0.0.1-SNAPSHOT.jar \
+    > loadtest/results/raw/flyway-app.log 2>&1 & echo $! > loadtest/results/raw/flyway-app.pid )
+until curl -sf localhost:8083/actuator/health; do sleep 1; done   # 8083 = 이 폴더의 MANAGEMENT_SERVER_PORT
+grep -E 'Successfully applied|Started Tikitak' loadtest/results/raw/flyway-app.log
+kill "$(cat loadtest/results/raw/flyway-app.pid)"
+
+# 4) 공통 시드. normal_teams는 아래 표
+time docker compose -f loadtest/docker-compose.yml exec -T postgres \
+  psql -U tikitak -d tikitak -v normal_teams=2340 -f - < loadtest/sql/00_common.sql
+
+# 5) 디바이스 토큰 시드와 확인 (측정 스크립트도 매 회차 실행한다. 여기서는 분포 확인용)
+time docker compose -f loadtest/docker-compose.yml exec -T postgres \
+  psql -U tikitak -d tikitak -f - < loadtest/sql/40_bulk_notification.sql
+```
+
+| 규모(받는 사람) | `normal_teams` | 근거 |
+|---|---|---|
+| 1만 | 2,340 | 실측: 회원 10,024명, 받는 사람 10,024명 (2026-11-25, 11-5) |
+| 10만 | 23,340 | **추정**: 1만 실측의 팀당 회원 수(10,024 ÷ 2,343팀 ≈ 4.28)에 비례. 실제 수는 측정 후 `recipientCount`로 적는다 |
+| 100만 | 233,400 | **추정**: 같은 비례. `team_id` ≥ 100000이면 `00_common.sql`의 팀 이름(`lpad(team_id, 5)`)이 잘려 겹친다(unique 없음, 측정 영향 없음으로 추정, 미확인). 시드 시간·디스크 용량 미확인 |
+
+`40_bulk_notification.sql`이 하는 일:
+
+- `TRUNCATE notification, member_device_token RESTART IDENTITY`. 두 테이블을 FK로 참조하는 테이블은 없다(마이그레이션 grep). identity가 1부터 다시 시작하고 토큰 id는 identity 기본값으로 넣으므로 시퀀스를 따로 맞추지 않는다.
+- `status = 'ACTIVE'`인 회원마다 토큰 0개 10% / 1개 75% / 2개 15%, 토큰마다 ANDROID 60% / IOS 40%. `fcm_token = 'loadtest-' || member_id || '-' || n`(n = 1, 2).
+- `-v seed=X`: `setseed` 값(-1.0~1.0, 기본 0.215). 회원 ID 순으로 정렬한 뒤 `random()`을 부르므로 같은 seed·같은 회원이면 같은 분포가 나온다.
+- 끝에서 확인 쿼리(건수, 토큰 수 분포, 플랫폼 비율, 무결성, 배치와 같은 조건의 받는 사람 수)를 출력한다. 마지막 표의 `recipients`가 배치 로그 `recipientCount`의 예상값, `recipient_tokens`가 가짜 발송기가 받는 토큰 수(`loadtest_push_results_total` 합)의 예상값이다.
+- 매 측정 전에 다시 실행하면, 앞 회차가 쌓은 알림과 가짜 발송기가 `INVALID_TOKEN`으로 판정해 앱이 지운 토큰이 처음 상태로 돌아간다. 앱이 떠 있을 때 실행하지 않는다.
+
+#### 11-3. 측정 실행 (`scripts/run-batch-measure.sh`)
+
+```bash
+bash loadtest/scripts/run-batch-measure.sh --delay-ms 0  --label 10k-0ms
+bash loadtest/scripts/run-batch-measure.sh --delay-ms 50 --label 10k-50ms
+bash loadtest/scripts/run-batch-measure.sh --delay-ms 0 --failure-rate 0.01 --invalid-token-rate 0.005 --seed 7 --label 10k-0ms-fail
+bash loadtest/scripts/run-batch-measure.sh --help
+```
+
+스크립트는 매 회차 앱을 새로 띄우고 끈다. 이 폴더의 actuator 포트에 이미 앱이 떠 있으면 시작하지 않는다.
+
+1. 확인: `compose config`의 `name` = `.env`의 `LOADTEST_PROJECT`, `<프로젝트>-postgres` 컨테이너 실행 중, `.env` 줄 끝이 LF, actuator 포트 비어 있음, `build/libs/*-SNAPSHOT.jar` 있음
+2. `40_bulk_notification.sql` 실행(토큰·알림 초기화)
+3. `pg_stat_statements` reset
+4. Hikari 샘플러(1초)와 JVM 샘플러(`JVM_INTERVAL`, 기본 5초) 시작. 주소는 `.env`의 `MANAGEMENT_SERVER_PORT`
+5. `.env`를 읽고 `SPRING_PROFILES_ACTIVE=dev,loadtest`, `LOADTEST_DAILY_QUESTION_OPENED_RUN_ON_STARTUP=true`, `DAILY_QUESTION_OPENED_NOTIFICATION_CRON=-`(스케줄 끔), `LOADTEST_PUSH_*`를 덮어써 jar를 백그라운드로 기동
+6. 앱 로그에 `Load test daily question opened batch run finished.`가 나올 때까지 기다린다(`BATCH_TIMEOUT`, 기본 21600초). 기동 실패·Runner 미실행·시간 초과면 실패로 끝낸다
+7. `/actuator/prometheus` 스냅샷 저장 → 샘플러 종료 → `pg_stat_statements` 덤프 → 앱 종료
+
+가짜 발송기 값은 인자 > 셸 env(`LOADTEST_PUSH_DELAY_MS` 등) > `loadtest/.env` > 기본값(0) 순으로 정한다. 지연은 `send()` 호출(회원 한 명)마다 한 번이다. 종료 코드는 0(배치 종료 확인), 1(실패), 2(사전 확인 실패)이고, 어느 경우든 샘플러와 앱은 끈다.
+
+결과 파일은 `loadtest/results/raw/<RUN_ID>-batch[-<label>]-*`로 남는다.
+
+| 파일 | 내용 |
+|---|---|
+| `-summary.txt` | 조건(지연·실패율·무효율·seed, 프로필, 풀 크기, 다른 컨테이너), 시드 결과(회원·토큰 수, 예상 받는 사람 수), 배치 로그의 `recipientCount`·`successCount`·`failureCount`·`elapsedMs`와 초당 처리 수, Prometheus 스냅샷 요약(배치·받는 사람 조회·발송 루프 시간, 가짜 발송기 토큰별 결과), 샘플러 최대값 |
+| `-app.log` | 앱 로그 전체. 배치 시작(`batch started. recipientCount=`)·종료(`batch completed. ... elapsedMs=`) 줄 |
+| `-seed.log` | `40_bulk_notification.sql` 출력(확인 쿼리 포함) |
+| `-prometheus.txt` / `-prometheus-batch.txt` | 배치 종료 직후 `/actuator/prometheus` 전체 / `notification_batch_*`, `loadtest_push_results_*`, `hikaricp_*`, `process_cpu_usage`, `jvm_memory_used_bytes`만 |
+| `-hikari.csv` | 8-4와 같은 형식. 앱이 뜨기 전 샘플은 값이 비어 있다 |
+| `-jvm.csv` | `epoch_ms,time,process_cpu_usage,heap_used_bytes,live_threads`. 앱이 뜨기 전 샘플은 값이 비어 있다 |
+| `-pgss.csv` / `-pgss.txt` | 8-4와 같다. reset 뒤 앱 기동(Flyway 확인, JDBC 메타데이터) 쿼리도 몇 개 섞인다 |
+| `-docker-ps.txt` | 시작 시점 `docker ps` (10-2 확인용) |
+
+#### 11-4. 결과를 읽을 때
+
+- 전체 소요는 `elapsedMs`(배치 메서드 안: 받는 사람 조회 + 발송 루프)다. 단계별로는 `-summary.txt`의 `recipient_query_duration_seconds_sum`(받는 사람 조회)과 `send_duration_seconds_sum`(발송 루프)을 본다. 매 회차 새 JVM이라 JIT 웜업 전 구간이 포함된다.
+- `notification.batch.sends`는 회원 단위이고 토큰별 `FAILED`도 success로 센다. 토큰별 결과는 `loadtest_push_results_total{status=...}`로 본다.
+- 회원당 쿼리 수: `-pgss.csv`의 `calls` ÷ `recipientCount`.
+- 샘플러와 대기 루프도 같은 호스트 CPU를 쓴다. Git Bash는 외부 명령 실행이 무거워 간격을 넓게 뒀다(로그 확인 2초 `POLL_INTERVAL`, JVM 5초 `JVM_INTERVAL`, Hikari 1초).
+- 앱 기동 중 샘플러의 `curl --max-time 2`가 끊기면 앱 로그에 `AsyncRequestNotUsableException`(actuator 응답 쓰기 실패) ERROR가 남는다. 배치와는 관계없다(2026-11-25 첫 스모크에서 2건).
+- Prometheus·Grafana(이 폴더는 59091·53001)에도 같은 지표가 1초 간격으로 쌓인다. 구간은 `-summary.txt`의 배치 시작·종료 로그 시각으로 고른다.
+
+#### 11-5. 실행 기록
+
+**2026-11-25, 1만 규모 준비** (`normal_teams=2340`, 00 `seed=0.217`, 40 `seed=0.215`)
+
+`docker compose ls -a`에 `tikitak-loadtest-push`가 없던 상태(이 폴더 첫 기동)라 `down -v`는 하지 않았다. `up -d --wait`(31초) → `bootJar` → 앱 기동(`Successfully applied 25 migrations`, `Started TikitakApplication in 22.852 seconds`) → 앱 종료 → 00 → 40 순서로 실행했다. 이때 #217 폴더의 컨테이너 4개(`tikitak-loadtest-*`)는 떠 있었다.
+
+| 항목 | 값 |
+|---|---|
+| `00_common.sql` | 약 3초 (`time` real 2.968s). team 2,343, member 10,024, team_member 10,483 |
+| `40_bulk_notification.sql` | 약 1.6초 (`time` real 1.585s) |
+| 토큰 | 10,548 (알림 0) |
+| ACTIVE 회원의 토큰 수 분포 | 0개 1,006명(0.100), 1개 7,488명(0.747), 2개 1,530명(0.153) |
+| 플랫폼 | ANDROID 6,423(0.609), IOS 4,125(0.391) |
+| 무결성 | `fcm_token` 중복 0, 512자 초과 0, ACTIVE 아닌 회원의 토큰 0 (최대 길이 16) |
+| 배치와 같은 조건의 받는 사람 | 10,024명 (토큰 있는 사람 9,018명, 그 토큰 10,548개) |
+
+**2026-11-25, 스크립트 스모크** (1만 규모, `--delay-ms 0`, 실패율·무효율 0. 베이스라인이 아니다)
+
+`run-batch-measure.sh --delay-ms 0 --label smoke-10k-0ms`를 두 번 실행해 둘 다 종료 코드 0으로 끝까지 돌았다(두 번째는 대기 루프·JVM 샘플러 간격을 늘린 뒤). #217 컨테이너가 떠 있던 상태라 수치는 결과로 쓰지 않는다.
+두 회차 모두 `-seed.log`의 확인 쿼리 결과가 위 표와 같았고, 배치 로그 `recipientCount`가 확인 쿼리의 `recipients`(10,024)와, `loadtest_push_results_total{status="SUCCESS"}`가 `recipient_tokens`(10,548)와 같았다. 종료 뒤 actuator 포트(8083)가 닫힌 것을 확인했다.
+`--failure-rate 0.6 --invalid-token-rate 0.6`(합 > 1)으로는 앱이 `LoadTestProperties` 검증으로 기동에 실패하고, 스크립트가 `app-failed`·종료 코드 1로 끝나며 샘플러를 정리하는 것을 확인했다. 이 회차의 원시 파일은 지웠다(RUN_ID 기록 없음, 콘솔 출력으로만 확인).
+
+`.env`에서 `LOADTEST_PROJECT` 줄을 지운 상태(이름이 기본값 `tikitak-loadtest`로 풀림)로 실행하면, 스크립트가 `<프로젝트>-postgres` 컨테이너의 `com.docker.compose.project.working_dir` 라벨이 이 폴더의 `loadtest`가 아니라는 이유로 종료 코드 2로 멈추고 아무 SQL도 실행하지 않는 것을 확인했다(2026-11-25, #217 폴더 컨테이너가 떠 있는 상태. `.env`는 백업 후 되돌림).
