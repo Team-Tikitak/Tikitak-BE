@@ -737,7 +737,7 @@ bash loadtest/scripts/run-batch-measure.sh --help
 6. 앱 로그에 `Load test daily question opened batch run finished.`가 나올 때까지 기다린다(`BATCH_TIMEOUT`, 기본 21600초). 기동 실패·Runner 미실행·시간 초과면 실패로 끝낸다
 7. `/actuator/prometheus` 스냅샷 저장 → 샘플러 종료 → `pg_stat_statements` 덤프 → 앱 종료
 
-가짜 발송기 값은 인자 > 셸 env(`LOADTEST_PUSH_DELAY_MS` 등) > `loadtest/.env` > 기본값(0) 순으로 정한다. 지연은 `send()` 호출(회원 한 명)마다 한 번이다. 종료 코드는 0(배치 종료 확인), 1(실패), 2(사전 확인 실패)이고, 어느 경우든 샘플러와 앱은 끈다.
+가짜 발송기 값은 인자 > 셸 env(`LOADTEST_PUSH_DELAY_MS` 등) > `loadtest/.env` > 기본값(0) 순으로 정한다. 지연은 `send()` 호출(회원 한 명)마다 한 번이다. 종료 코드는 0(배치 종료 확인), 1(실패. 배치는 끝났지만 Prometheus 스냅샷에 `notification_batch_` 지표가 3회 시도 뒤에도 없으면 `snapshot-failed`), 2(사전 확인 실패)이고, 어느 경우든 샘플러와 앱은 끈다. 스크립트는 스스로 `measure-lock.sh`(10-4) 안에서 다시 실행되므로 따로 감싸지 않아도 된다(`--help`는 잠금 없이 본다).
 
 결과 파일은 `loadtest/results/raw/<RUN_ID>-batch[-<label>]-*`로 남는다.
 

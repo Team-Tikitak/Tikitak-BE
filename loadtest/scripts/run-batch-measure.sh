@@ -44,6 +44,15 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# PC 공용 측정 잠금(README 10-4) 안에서 다시 실행한다. 이미 잠금 안이면 measure-lock.sh가 다시 잡지 않고 바로 실행한다.
+# --help는 잠금 없이 본다. 잠금은 이 스크립트가 끝날 때(앱 종료 뒤)까지 유지된다.
+case " $* " in *" -h "* | *" --help "*) ;; *)
+	if [ "${_RUN_BATCH_MEASURE_IN_LOCK:-}" != 1 ]; then
+		_RUN_BATCH_MEASURE_IN_LOCK=1 exec bash "$ROOT/loadtest/scripts/measure-lock.sh" bash "$ROOT/loadtest/scripts/run-batch-measure.sh" "$@"
+	fi
+	unset _RUN_BATCH_MEASURE_IN_LOCK ;;
+esac
+
 usage() {
 	awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
 }
@@ -332,9 +341,18 @@ echo "   ${WAIT_SECONDS}초 ($RESULT)"
 # ---------------------------------------------------------------------------
 # 6) Prometheus 스냅샷
 # ---------------------------------------------------------------------------
-curl -s --max-time 10 "$MANAGEMENT_URL/actuator/prometheus" > "$PREFIX-prometheus.txt" 2>/dev/null || true
+# 최대 3회 시도한다. 배치가 끝난 회차인데 notification_batch_ 지표가 끝내 없으면 산출물은 남기고 실패(종료 코드 1)로 바꾼다.
+for attempt in 1 2 3; do
+	curl -s --max-time 10 "$MANAGEMENT_URL/actuator/prometheus" > "$PREFIX-prometheus.txt" 2>/dev/null
+	grep -q '^notification_batch_' "$PREFIX-prometheus.txt" 2>/dev/null && break
+	[ "$attempt" -lt 3 ] && sleep 2
+done
 grep -E '^(notification_batch_|loadtest_push_results_|hikaricp_|process_cpu_usage|jvm_memory_used_bytes)' \
 	"$PREFIX-prometheus.txt" > "$PREFIX-prometheus-batch.txt" 2>/dev/null || true
+if [ "$RESULT" = "ok" ] && ! grep -q '^notification_batch_' "$PREFIX-prometheus-batch.txt"; then
+	echo "Prometheus 스냅샷에 notification_batch_ 지표가 없다(3회 시도). 산출물은 남기고 실패로 끝낸다." >&2
+	RESULT="snapshot-failed"
+fi
 
 # ---------------------------------------------------------------------------
 # 7) 샘플러 종료  8) pg_stat_statements 덤프  9) 앱 종료
