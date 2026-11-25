@@ -21,6 +21,12 @@
 #   http://localhost:<포트>를 만든다(그 줄이 없으면 8080·8081). 같은 PC의 다른 작업 폴더가 앱 포트를 바꿔도
 #   그 폴더의 앱을 재게 하려는 것이다(README "같은 PC에서 여러 작업 폴더가 이 환경을 쓸 때").
 #
+# PC 공용 잠금(README 10-4): 잠금을 쥐고 있지 않으면 measure-lock.sh로 스스로 잡고 다시 실행된다. 이미 measure-lock.sh 안이면
+#   (개선 전/후를 잠금 한 번 안에서 연달아 돌리는 경우) 다시 잡지 않는다. 다른 작업 폴더가 측정·시드 중이면 끝날 때까지 기다린다.
+# 외부 부하 기록(README 10-5): 웜업부터 k6 종료까지 external-load-sampler.sh를 돌려 이 측정과 무관한 호스트 프로세스·컨테이너
+#   CPU를 남기고, 끝에 요약(<접두사>-contamination.txt)을 낸다. 기준을 넘으면 마지막에 "CONTAMINATION: POSSIBLE"이 나온다.
+#   이 표시는 종료 코드를 바꾸지 않는다. 기준값 env(LOAD_*)는 external-load-sampler.sh 머리말을 본다.
+#
 # 종료 코드는 k6의 것을 돌려준다(threshold 실패면 99). 실패해도 샘플러 종료와 덤프는 한다.
 set -uo pipefail
 
@@ -33,6 +39,11 @@ if [ "$MODE" = "solo" ] && [ -z "$API" ]; then
 	echo "usage: $0 solo <api>" >&2
 	exit 2
 fi
+# 잠금 안에서 다시 실행한다. 중첩이면 measure-lock.sh가 다시 잡지 않고 바로 실행한다.
+if [ "${_RUN_MEASURE_IN_LOCK:-}" != 1 ]; then
+	_RUN_MEASURE_IN_LOCK=1 exec bash "$ROOT/loadtest/scripts/measure-lock.sh" bash "$ROOT/loadtest/scripts/run-measure.sh" "$@"
+fi
+unset _RUN_MEASURE_IN_LOCK
 export MODE API
 # loadtest/.env에서 KEY=값 한 줄을 읽는다(없으면 빈 값)
 env_file_value() {
@@ -72,6 +83,26 @@ PREFIX="$RAW/$RUN_ID-$LABEL"
 
 echo "== run $RUN_ID ($LABEL) =="
 echo "== app: BASE_URL=$BASE_URL MANAGEMENT_URL=$MANAGEMENT_URL =="
+# 외부 부하 샘플러: 웜업 전에 시작해 k6가 끝나면 멈춘다. 중간에 끝나도(웜업 실패, INT 등) EXIT trap이 멈추고 요약한다.
+# 앱 PID는 BASE_URL의 포트를 listen하는 프로세스로 찾는다.
+APP_LISTEN_PORT="${BASE_URL##*:}"
+APP_LISTEN_PORT="${APP_LISTEN_PORT%%/*}"
+LOAD_SAMPLER_RUNNING=0
+stop_load_sampler() {
+	if [ "$LOAD_SAMPLER_RUNNING" = 1 ]; then
+		LOAD_SAMPLER_RUNNING=0
+		echo "== 외부 부하 요약 ==" >&2
+		bash loadtest/scripts/external-load-sampler.sh stop "$PREFIX"
+	fi
+}
+trap stop_load_sampler EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+if SERVER_PORT="$APP_LISTEN_PORT" bash loadtest/scripts/external-load-sampler.sh start "$PREFIX"; then
+	LOAD_SAMPLER_RUNNING=1
+else
+	echo "외부 부하 샘플러를 시작하지 못했다. 측정은 계속하지만 오염 여부를 알 수 없다." >&2
+fi
 if [ "$PREWARM_DURATION" = "0" ] || [ "$PREWARM_DURATION" = "off" ]; then
 	echo "== prewarm: 건너뜀 (PREWARM_DURATION=$PREWARM_DURATION) =="
 else
@@ -131,7 +162,9 @@ k6 run --quiet "${K6_ARGS[@]}" loadtest/k6/read-api-baseline.js 2>&1 | tee "$PRE
 K6_STATUS=${PIPESTATUS[0]}
 
 stop_sampler
-trap - INT TERM
+trap 'exit 130' INT
+trap 'exit 143' TERM
+stop_load_sampler
 bash loadtest/scripts/pgss.sh dump "$PREFIX"
 
 echo "== hikari max (active / pending) =="
@@ -153,4 +186,10 @@ fi
 echo "== files =="
 ls -1 "$RAW" | grep "^$RUN_ID-" | sed "s|^|$RAW/|"
 echo "k6 exit code: $K6_STATUS"
+# 외부 부하 판정은 마지막에 다시 보여 준다(요약 전문은 위와 <접두사>-contamination.txt)
+if [ -s "$PREFIX-contamination.txt" ]; then
+	awk '/^(#####|CONTAMINATION:)/ { f = 1 } f' "$PREFIX-contamination.txt"
+else
+	echo "CONTAMINATION: UNKNOWN (외부 부하 요약 없음)"
+fi
 exit "$K6_STATUS"
