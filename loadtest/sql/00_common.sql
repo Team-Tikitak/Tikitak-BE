@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 00_common.sql : 공통 시드 (member, team, team_member)  — #217, #215 공용
 --
--- 전제: **빈 DB**. 앱을 한 번 기동해 Flyway V1~V25가 적용된 직후에만 실행한다.
+-- 전제: **빈 DB**. 앱을 한 번 기동해 Flyway V1~V26가 적용된 직후에만 실행한다.
 --       member/team/team_member에 행이 하나라도 있으면 아무것도 넣지 않고 에러로 멈춘다.
 --       다시 넣으려면 README의 초기화 절차(docker compose down -v → up -d → 앱 기동)로 비운다.
 -- 실행:  docker compose -f loadtest/docker-compose.yml exec -T postgres \
