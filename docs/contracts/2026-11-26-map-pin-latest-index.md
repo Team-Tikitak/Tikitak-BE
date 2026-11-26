@@ -2,7 +2,7 @@
 
 - **관련 이슈**: #220
 - **브랜치**: `Refactor/#220-map-pin-index` (origin/develop 2579dba 기준. Orca 브랜치에서 이름 변경 완료)
-- **상태**: 승인됨 (2026-11-26)
+- **상태**: 완료 (2026-11-26, PR #230)
 
 ## 목표
 `GET /api/v1/teams/{teamId}/map/pins`가 쓰는 `FeedRepository.findMapPinsByTeamId`는 지금 팀의 장소 있는 피드를 전부 읽고 정렬합니다. 이것을 새 인덱스로 장소마다 최신 1건만 찾는 쿼리로 바꿉니다. **응답 내용(핀 집합, feedCount, 썸네일)은 바꾸지 않습니다.** 같은 시드 위에서 개선 전후를 측정해 결과를 남깁니다.
