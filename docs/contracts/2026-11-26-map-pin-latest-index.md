@@ -47,6 +47,7 @@ CREATE INDEX idx_feed_team_place_latest
 - `loadtest/results/2026-11-26-map-pins-index.md` (새 파일)
 - `loadtest/README.md` (V1~V25 문구를 V26까지로 고치고, 결과 문서를 가리키는 한 줄)
 - `docs/decisions/2026-11-26-map-pin-latest-index.md`, `docs/decisions/README.md` (인덱스 한 줄)
+- `loadtest/sql/00_common.sql`, `loadtest/sql/10_feed.sql`, `loadtest/sql/20_notification.sql` (초기화 안내 문구만. critic 지적으로 2026-11-26 사람 승인해 범위 추가: #229에서 README 7번이 pgdata만 지우도록 바뀌었는데 시드 SQL 주석·에러 메시지는 `down -v`로 남아 있었음)
 - 이 계약 파일
 
 ## 측정 절차
@@ -98,6 +99,7 @@ ramp는 이번에 재지 않습니다. 결과 문서에 "미측정"으로 적습
 ## 커밋 구성
 1. V26 마이그레이션 + `findMapPinsByTeamId` SQL 교체 + 비교 통합 테스트 + 이 계약
 2. `loadtest/sql/explain-map-pins.sql` + 결과 문서 + README 수정 + 결정 기록·인덱스
+3. (critic 반영, 2026-11-26 추가) 시드 SQL 3개의 초기화 안내를 README 7번(pgdata만 삭제)에 맞춤
 
 ## 남은 리스크
 - **운영 인덱스 생성 중 쓰기 차단**: 운영 feed 행 수는 미확인입니다. blue/green 배포 중 새 인스턴스가 V26을 적용하는 동안, 기존 인스턴스의 피드 작성·삭제가 기다립니다. 시드(약 100만 행)에서 잰 생성 시간을 참고값으로 결과 문서에 적습니다.
