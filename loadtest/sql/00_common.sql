@@ -1,9 +1,9 @@
 -- =============================================================================
 -- 00_common.sql : 공통 시드 (member, team, team_member)  — #217, #215 공용
 --
--- 전제: **빈 DB**. 앱을 한 번 기동해 Flyway V1~V25가 적용된 직후에만 실행한다.
+-- 전제: **빈 DB**. 앱을 한 번 기동해 Flyway V1~V26가 적용된 직후에만 실행한다.
 --       member/team/team_member에 행이 하나라도 있으면 아무것도 넣지 않고 에러로 멈춘다.
---       다시 넣으려면 README의 초기화 절차(docker compose down -v → up -d → 앱 기동)로 비운다.
+--       다시 넣으려면 README 7번 초기화 절차(down → pgdata 볼륨만 삭제 → up -d → 앱 기동)로 비운다. down -v는 Prometheus·Grafana 볼륨까지 지우므로 쓰지 않는다.
 -- 실행:  docker compose -f loadtest/docker-compose.yml exec -T postgres \
 --          psql -U tikitak -d tikitak -v normal_teams=2000 -f - < loadtest/sql/00_common.sql
 -- 변수:  normal_teams  일반 팀 수 (기본 2000)
@@ -53,7 +53,7 @@ BEGIN
 	IF EXISTS (SELECT 1 FROM member)
 		OR EXISTS (SELECT 1 FROM team)
 		OR EXISTS (SELECT 1 FROM team_member) THEN
-		RAISE EXCEPTION '00_common.sql은 빈 DB 전제다. member/team/team_member에 이미 행이 있다. README의 초기화(down -v) 절차로 비운 뒤 다시 실행한다.';
+		RAISE EXCEPTION '00_common.sql은 빈 DB 전제다. member/team/team_member에 이미 행이 있다. README 7번 초기화(pgdata 볼륨만 삭제) 절차로 비운 뒤 다시 실행한다.';
 	END IF;
 END $$;
 

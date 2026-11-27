@@ -2,7 +2,7 @@
 -- 20_notification.sql : 알림 시드 (notification) — #217
 --
 -- 전제: 00_common.sql, 10_feed.sql을 실행한 직후. notification이 비어 있어야 한다.
---       행이 있으면 아무것도 넣지 않고 에러로 멈춘다. 다시 넣으려면 README의 초기화(down -v) 절차로 비운다.
+--       행이 있으면 아무것도 넣지 않고 에러로 멈춘다. 다시 넣으려면 README 7번 초기화(pgdata 볼륨만 삭제) 절차로 비운다.
 -- 실행:  docker compose -f loadtest/docker-compose.yml exec -T postgres \
 --          psql -U tikitak -d tikitak -f - < loadtest/sql/20_notification.sql
 -- 변수:  salt      난수 salt 정수 (기본 217). 같은 값이면 건수·팀·작성자는 같다. 시각은 실행 시점 LOCALTIMESTAMP 기준이라 날짜 경계에 걸리는 데일리 수 등은 조금 달라질 수 있다.
@@ -60,7 +60,7 @@ SET LOCAL session_replication_role = replica;
 DO $$
 BEGIN
 	IF EXISTS (SELECT 1 FROM notification) THEN
-		RAISE EXCEPTION '20_notification.sql은 notification이 빈 상태 전제다. 이미 행이 있다. README의 초기화(down -v) 절차로 비운 뒤 다시 실행한다.';
+		RAISE EXCEPTION '20_notification.sql은 notification이 빈 상태 전제다. 이미 행이 있다. README 7번 초기화(pgdata 볼륨만 삭제) 절차로 비운 뒤 다시 실행한다.';
 	END IF;
 	IF NOT EXISTS (SELECT 1 FROM feed) THEN
 		RAISE EXCEPTION '10_feed.sql을 먼저 실행해야 한다(feed가 비어 있다).';

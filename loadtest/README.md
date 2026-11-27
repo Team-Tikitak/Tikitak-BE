@@ -113,7 +113,7 @@ cp loadtest/.env.example loadtest/.env
 모니터링 추가(커밋 4) 전에 복사한 `.env`에는 `MANAGEMENT_SERVER_PORT=8081`이 없다. 다시 복사하거나 그 줄을 추가한다. 없으면 actuator가 8080에 그대로 있어 스크립트·Prometheus가 앱을 찾지 못한다.
 Windows에서 `.env`를 편집기로 열어 저장했다면 줄 끝이 CRLF가 되지 않았는지 확인한다(Git Bash의 `source`는 값 끝에 `\r`을 붙인다).
 
-### 4. 앱 실행 (Flyway가 V1~V25를 적용한다)
+### 4. 앱 실행 (Flyway가 V1~V26을 적용한다)
 
 JDK 21 이상이 필요하다. 앱은 API에 포트 8080, actuator(`/actuator/health`, `/actuator/prometheus`)에 포트 8081을 쓴다.
 actuator를 분리하는 이유: management 포트는 별도 Tomcat(스레드 이름 `http-nio-8081-exec-*`)이라, API 요청이 몰려 8080 스레드가 밀려도 Prometheus 수집과 Hikari 샘플러가 응답을 받는다.
@@ -150,7 +150,7 @@ PowerShell은 env를 현재 세션에만 넣는다. 값이 빈 항목(`REDIS_PAS
 
 ### 5. 기동·Flyway 확인
 
-로그에 `Successfully applied 25 migrations`(빈 DB일 때)와 `Started TikitakApplication`이 나와야 한다.
+로그에 `Successfully applied 26 migrations`(빈 DB일 때)와 `Started TikitakApplication`이 나와야 한다.
 
 ```bash
 curl -s localhost:8081/actuator/health
@@ -158,7 +158,7 @@ curl -s localhost:8081/actuator/health
 
 docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -Atc \
   "SELECT count(*) FILTER (WHERE success), max(version::int) FROM flyway_schema_history"
-# 25|25
+# 26|26
 
 curl -s localhost:8081/actuator/prometheus | grep -E '^hikaricp_connections_(max|active|pending)'
 # hikaricp_connections_max{...} 10.0
@@ -345,9 +345,11 @@ $dc up -d --wait
 
 DB를 다시 시드할 때는 `pgdata` 볼륨만 지운다. `down -v`는 Prometheus·Grafana 볼륨(`<프로젝트>-prometheus`, `<프로젝트>-grafana`)까지 지워 지난 측정의 시계열이 사라지므로(#217, #215에서 두 번 겪음), 측정 환경 전체를 버릴 때만 쓴다. 그때도 비교에 쓸 그래프는 먼저 9-3대로 스크린샷을 남긴다.
 같은 PC의 다른 작업 폴더도 이 환경을 쓰면 볼륨을 지우기 전에 10-3대로 프로젝트 이름을 확인한다.
-다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V25를 처음부터 적용한다(4번부터 다시).
+다시 `up -d` 하면 빈 DB가 뜨고, 앱을 기동하면 Flyway가 V1~V26을 처음부터 적용한다(4번부터 다시).
 
 ### 8. 측정 (#217)
+
+개선 전후 측정 결과: 지도 핀 인덱스(#220) [results/2026-11-26-map-pins-index.md](results/2026-11-26-map-pins-index.md).
 
 명령은 저장소 루트에서 Git Bash로 실행한다. 앱이 떠 있어야 한다(4·5번). k6는 v2.2.0에서 확인했다.
 
@@ -690,7 +692,7 @@ docker compose -f loadtest/docker-compose.yml up -d --wait
 # 2) jar 빌드 (코드가 바뀌었을 때만)
 ./gradlew bootJar
 
-# 3) 앱을 한 번 띄워 Flyway(V1~V25)를 적용하고 끈다. 프로필은 .env의 dev 그대로라 배치가 돌지 않는다
+# 3) 앱을 한 번 띄워 Flyway(V1~V26)를 적용하고 끈다. 프로필은 .env의 dev 그대로라 배치가 돌지 않는다
 mkdir -p loadtest/results/raw
 ( set -a; source loadtest/.env; set +a
   nohup java -Duser.timezone=Asia/Seoul -jar build/libs/tikitak-0.0.1-SNAPSHOT.jar \

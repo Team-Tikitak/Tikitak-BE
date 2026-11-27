@@ -2,7 +2,7 @@
 -- 10_feed.sql : 피드 시드 (place, feed, feed_image, feed_tag, feed_reaction, feed_comment) — #217
 --
 -- 전제: 00_common.sql을 실행한 직후. place/feed/feed_image/feed_tag/feed_reaction/feed_comment가 모두 비어 있어야 한다.
---       하나라도 행이 있으면 아무것도 넣지 않고 에러로 멈춘다. 다시 넣으려면 README의 초기화(down -v) 절차로 비운다.
+--       하나라도 행이 있으면 아무것도 넣지 않고 에러로 멈춘다. 다시 넣으려면 README 7번 초기화(pgdata 볼륨만 삭제) 절차로 비운다.
 -- 실행:  docker compose -f loadtest/docker-compose.yml exec -T postgres \
 --          psql -U tikitak -d tikitak -f - < loadtest/sql/10_feed.sql
 -- 변수:  salt          난수 salt 정수 (기본 217). 같은 값이면 건수·팀·작성자는 같다. 시각은 실행 시점 LOCALTIMESTAMP 기준이라 날짜 경계에 걸리는 데일리 수 등은 조금 달라질 수 있다.
@@ -78,7 +78,7 @@ BEGIN
 		OR EXISTS (SELECT 1 FROM feed_tag)
 		OR EXISTS (SELECT 1 FROM feed_reaction)
 		OR EXISTS (SELECT 1 FROM feed_comment) THEN
-		RAISE EXCEPTION '10_feed.sql은 피드 테이블이 빈 상태 전제다. place/feed/feed_image/feed_tag/feed_reaction/feed_comment에 이미 행이 있다. README의 초기화(down -v) 절차로 비운 뒤 다시 실행한다.';
+		RAISE EXCEPTION '10_feed.sql은 피드 테이블이 빈 상태 전제다. place/feed/feed_image/feed_tag/feed_reaction/feed_comment에 이미 행이 있다. README 7번 초기화(pgdata 볼륨만 삭제) 절차로 비운 뒤 다시 실행한다.';
 	END IF;
 	IF NOT EXISTS (SELECT 1 FROM team WHERE description = 'loadtest:big') THEN
 		RAISE EXCEPTION '00_common.sql을 먼저 실행해야 한다(큰 팀이 없다).';

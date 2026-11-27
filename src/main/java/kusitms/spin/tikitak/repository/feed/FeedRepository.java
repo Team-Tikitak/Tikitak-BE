@@ -101,17 +101,15 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 	);
 
 	@Query(value = """
-			WITH ranked AS (
+			WITH counts AS (
 				SELECT
 					f.place_id,
-					f.id AS feed_id,
-					COUNT(*) OVER (PARTITION BY f.place_id) AS feed_count,
-					ROW_NUMBER() OVER (PARTITION BY f.place_id
-									ORDER BY f.created_at DESC, f.id DESC) AS rn
+					COUNT(*) AS feed_count
 				FROM feed f
 				WHERE f.team_id = :teamId
 				AND f.deleted_at IS NULL
 				AND f.place_id IS NOT NULL
+				GROUP BY f.place_id
 			)
 			SELECT
 				p.external_place_id AS externalPlaceId,
@@ -119,13 +117,21 @@ public interface FeedRepository extends JpaRepository<Feed, Long>, DailyQuestion
 				p.latitude,
 				p.longitude,
 				p.address,
-				r.feed_count AS feedCount,
+				c.feed_count AS feedCount,
 				fi.img_url AS thumbnailUrl
-			FROM ranked r
-			JOIN place p ON p.id = r.place_id
-			LEFT JOIN feed_image fi ON fi.feed_id = r.feed_id
+			FROM counts c
+			CROSS JOIN LATERAL (
+				SELECT f.id AS feed_id
+				FROM feed f
+				WHERE f.team_id = :teamId
+				AND f.place_id = c.place_id
+				AND f.deleted_at IS NULL
+				ORDER BY f.created_at DESC, f.id DESC
+				LIMIT 1
+			) latest
+			JOIN place p ON p.id = c.place_id
+			LEFT JOIN feed_image fi ON fi.feed_id = latest.feed_id
 			AND fi.order_index = 0
-			WHERE r.rn = 1
 			""", nativeQuery = true)
 	List<MapPinRow> findMapPinsByTeamId(@Param("teamId") Long teamId);
 
