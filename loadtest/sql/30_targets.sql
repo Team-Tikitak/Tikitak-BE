@@ -6,15 +6,22 @@
 --          mkdir -p loadtest/k6/data
 --          docker compose -f loadtest/docker-compose.yml exec -T postgres \
 --            psql -U tikitak -d tikitak -At -f - < loadtest/sql/30_targets.sql > loadtest/k6/data/targets.json
--- 변수:  big_top_places   큰 팀에서 내보낼 장소 수(피드 수 상위, 기본 100). 일반 팀은 장소를 모두 내보낸다.
+-- 변수(-v 이름=값). 기본값은 #217 스트레스 시드용이고, 기본값으로 실행한 출력은 #217 때와 같다(generatedAt 제외).
+--   big_top_places   큰 팀(isBig)에서 내보낼 장소 수(피드 수 상위, 기본 100). 0이면 자르지 않는다. 일반 팀은 항상 모두 내보낸다.
+--   heavy_min        commentHeavyFeeds에 넣을 활성 댓글 수 하한(기본 500)
+--   deep_positions   deepCursors로 내보낼 위치 목록, 쉼표 구분(기본 '10000,50000,90000')
+--   deep_teams       깊은 커서 대상 팀. 0(기본)이면 큰 팀(isBig) 전부, N > 0이면 활성 피드 수 상위 N개 팀
+--                    (피드 수 내림차순, 같으면 team id 오름차순). 그 위치까지 피드가 없는 팀·위치는 빠진다.
+--   growth 시드 예:  -v deep_positions=100,400,700 -v deep_teams=10 -v heavy_min=1000000 -v big_top_places=0
 --
 -- JSON 구조
 --   generatedAt        : 추출 시각(KST, 참고용)
 --   teams[]            : 모든 팀. teamId, isBig, members[{memberId, teamMemberId}],
 --                        places[{externalPlaceId, feedCount}] (그 팀에서 피드가 있는 장소, 피드 수 내림차순.
 --                        GET /teams/{teamId}/feeds?placeId=<externalPlaceId> 에 쓴다)
---   commentHeavyFeeds[]: 활성 댓글이 500개 이상인 피드. teamId, feedId, commentCount, memberId(그 팀 멤버인 작성자의 회원 ID)
---   deepCursors[]      : 큰 팀별로 피드 목록(created_at desc, id desc)의 1만·5만·9만 번째 피드.
+--   commentHeavyFeeds[]: 활성 댓글이 heavy_min(기본 500)개 이상인 피드. teamId, feedId, commentCount, memberId(그 팀 멤버인 작성자의 회원 ID)
+--   deepCursors[]      : 대상 팀(deep_teams)별로 피드 목록(created_at desc, id desc)의 deep_positions번째 피드
+--                        (기본: 큰 팀의 1만·5만·9만 번째).
 --                        teamId, position, cursor. cursor = FeedService.encodeCursor와 같은 `LocalDateTime.toString() + "_" + id`.
 --                        이 cursor로 요청하면 position번째 다음 피드부터 나온다.
 -- =============================================================================
@@ -25,6 +32,18 @@
 \if :{?big_top_places}
 \else
 	\set big_top_places 100
+\endif
+\if :{?heavy_min}
+\else
+	\set heavy_min 500
+\endif
+\if :{?deep_positions}
+\else
+	\set deep_positions '10000,50000,90000'
+\endif
+\if :{?deep_teams}
+\else
+	\set deep_teams 0
 \endif
 
 SET TIME ZONE 'Asia/Seoul';
@@ -71,7 +90,7 @@ places AS (
 			ORDER BY pc.rk) AS places
 	FROM place_counts pc
 	JOIN team t ON t.id = pc.team_id
-	WHERE t.description <> 'loadtest:big' OR pc.rk <= (:big_top_places)
+	WHERE t.description <> 'loadtest:big' OR (:big_top_places) = 0 OR pc.rk <= (:big_top_places)
 	GROUP BY pc.team_id
 ),
 teams AS (
@@ -94,17 +113,29 @@ heavy AS (
 			'memberId', tm.member_id
 		) ORDER BY f.id) AS feeds
 	FROM (
-		SELECT feed_id, count(*) AS cnt FROM feed_comment WHERE NOT is_deleted GROUP BY feed_id HAVING count(*) >= 500
+		SELECT feed_id, count(*) AS cnt FROM feed_comment WHERE NOT is_deleted GROUP BY feed_id HAVING count(*) >= (:heavy_min)
 	) c
 	JOIN feed f ON f.id = c.feed_id AND f.deleted_at IS NULL
 	JOIN team_member tm ON tm.id = f.team_member_id
+),
+-- 깊은 커서 대상 팀: deep_teams = 0이면 큰 팀, N > 0이면 활성 피드 수 상위 N개 팀
+deep_teams AS (
+	SELECT id AS team_id FROM team WHERE (:deep_teams) = 0 AND description = 'loadtest:big'
+	UNION ALL
+	SELECT team_id FROM (
+		SELECT f.team_id FROM feed f
+		WHERE (:deep_teams) > 0 AND f.deleted_at IS NULL
+		GROUP BY f.team_id
+		ORDER BY count(*) DESC, f.team_id
+		LIMIT greatest((:deep_teams), 0)
+	) top
 ),
 ranked AS (
 	SELECT f.team_id, f.id, f.created_at,
 		row_number() OVER (PARTITION BY f.team_id ORDER BY f.created_at DESC, f.id DESC) AS position
 	FROM feed f
 	WHERE f.deleted_at IS NULL
-		AND f.team_id IN (SELECT id FROM team WHERE description = 'loadtest:big')
+		AND f.team_id IN (SELECT team_id FROM deep_teams)
 ),
 cursors AS (
 	SELECT json_agg(json_build_object(
@@ -113,7 +144,7 @@ cursors AS (
 			'cursor', pg_temp.lt_java_ldt(r.created_at) || '_' || r.id
 		) ORDER BY r.team_id, r.position) AS cursors
 	FROM ranked r
-	WHERE r.position IN (10000, 50000, 90000)
+	WHERE r.position = ANY (string_to_array(:'deep_positions', ',')::int[])
 )
 SELECT json_build_object(
 	'generatedAt', pg_temp.lt_java_ldt(date_trunc('second', LOCALTIMESTAMP)),

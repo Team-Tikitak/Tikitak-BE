@@ -257,9 +257,20 @@ bash loadtest/scripts/measure-lock.sh bash -c 'docker compose -f loadtest/docker
 
 | 키 | 내용 |
 |---|---|
-| `teams[]` | 모든 팀. `teamId`, `isBig`, `members[{memberId, teamMemberId}]`, `places[{externalPlaceId, feedCount}]`(피드 수 내림차순. 큰 팀은 상위 100개, `-v big_top_places=N`으로 변경) |
-| `commentHeavyFeeds[]` | 댓글 500개 이상인 피드. `teamId`, `feedId`, `commentCount`, `memberId`(작성자) |
-| `deepCursors[]` | 큰 팀별 피드 목록의 10,000·50,000·90,000번째 피드. `teamId`, `position`, `cursor`(`FeedService.encodeCursor`와 같은 `LocalDateTime.toString() + "_" + id`. 초·소수점이 0이면 생략하는 Java 규칙을 따른다) |
+| `teams[]` | 모든 팀. `teamId`, `isBig`, `members[{memberId, teamMemberId}]`, `places[{externalPlaceId, feedCount}]`(피드 수 내림차순. 큰 팀은 상위 `big_top_places`개) |
+| `commentHeavyFeeds[]` | 댓글 `heavy_min`개 이상인 피드. `teamId`, `feedId`, `commentCount`, `memberId`(작성자) |
+| `deepCursors[]` | 대상 팀(`deep_teams`)별 피드 목록의 `deep_positions`번째 피드. `teamId`, `position`, `cursor`(`FeedService.encodeCursor`와 같은 `LocalDateTime.toString() + "_" + id`. 초·소수점이 0이면 생략하는 Java 규칙을 따른다) |
+
+psql 변수(`psql ... -v 이름=값 -f -`). 기본값은 이 스트레스 시드용이고, 기본값으로 실행한 출력은 변수를 넣기 전 버전(develop d82b2f1)과 `generatedAt`만 다르다(2026-11-27, #220 시점 220 DB에서 `generatedAt`을 뺀 바이트 비교와 키 정렬 JSON diff 0줄).
+
+| 변수 | 기본값 | 뜻 |
+|---|---|---|
+| `big_top_places` | `100` | 큰 팀(`isBig`)에서 내보낼 장소 수(피드 수 상위). `0`이면 자르지 않는다. 일반 팀은 항상 전부 |
+| `heavy_min` | `500` | `commentHeavyFeeds`에 넣을 활성 댓글 수 하한 |
+| `deep_positions` | `10000,50000,90000` | `deepCursors` 위치 목록(쉼표 구분) |
+| `deep_teams` | `0` | `0`이면 큰 팀 전부, `N > 0`이면 활성 피드 수 상위 N개 팀(같으면 team id 오름차순). 그 위치까지 피드가 없는 팀·위치는 빠진다 |
+
+growth 시드에서 쓸 값의 예(절차는 growth 시드 절에서): `-v deep_positions=100,400,700 -v deep_teams=<N> -v heavy_min=<시드 댓글 최대보다 큰 값> -v big_top_places=0`. growth에는 큰 팀(`isBig`)과 댓글 많은 피드가 없으므로 k6는 `BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0`으로 돌린다(8-3 k6 env).
 
 파일 크기는 약 2MB다. `loadtest/k6/data/`는 커밋하지 않는다.
 
@@ -387,15 +398,15 @@ k6 `setup()`에서 API로 가져오지 않는 이유는, solo 측정의 `pg_stat
 | `notifications` | `GET /api/v1/me/notifications` | 10% | 팀 → 회원. `teamId` 없이 회원 전체 알림 |
 | `unread_count` | `GET /api/v1/me/notifications/unread-count` | 15% | 팀 → 회원. `teamId` 없이 |
 
-- "팀"은 30% 확률로 큰 팀 3개 중 하나, 70%는 일반 팀 2,000개 중 하나다. 회원은 고른 팀의 멤버 중 무작위다. 댓글 많은 피드와 깊은 커서는 그 피드의 팀 멤버 중에서 고른다(댓글 많은 피드는 약 30%가 큰 팀이다).
+- 위 표는 기본값(`PICK=team`, `BIG_TEAM_RATIO=0.3`, `HEAVY_COMMENT_RATIO=0.2`, 8-3 k6 env)일 때다. "팀"은 30% 확률로 큰 팀 3개 중 하나, 70%는 일반 팀 2,000개 중 하나다. 회원은 고른 팀의 멤버 중 무작위다. 댓글 많은 피드와 깊은 커서는 그 피드의 팀 멤버 중에서 고른다(댓글 많은 피드는 약 30%가 큰 팀이다).
 - `size`, `type` 등 나머지 쿼리 파라미터는 보내지 않는다(서버 기본값: 페이지 20건).
 - 댓글 많은 피드를 20%로 둔 이유: 실제 비율(피드의 0.1%)로 두면 측정 5분 동안 몇 건만 나와 그 경로의 지연이 보이지 않는다. 반대로 절반 이상이면 댓글 API 지연이 이 피드들로만 정해진다. 두 경우가 모두 P95에 드러나도록 고른 값이다.
 - 요청마다 `tags: {api, name}`을 붙인다(`name`은 경로 템플릿이라 URL별 시계열이 늘지 않는다). ramp에서는 `stage` 태그도 붙는다.
 - check: 상태 200, 응답 `success == true`, `feed_by_place`는 `data.items`가 1건 이상. 200이 아니면 응답 앞부분을 경고 로그로 남긴다(`LOG_ERRORS=0`이면 끈다).
 
-**토큰**: `setup()`이 `JWT_SECRET`으로 `targets.json`의 모든 회원(8,557명)에게 HS256 access token을 서명한다. 형식은 `TokenService.createToken`과 같다.
+**토큰**: 각 VU가 회원의 첫 요청 때 `JWT_SECRET`으로 HS256 access token을 서명하고 VU 안에 캐시한다(모든 `PICK`. #232 전에는 `setup()`이 `targets.json`의 모든 회원에게 서명했다). 서명은 `http.get` 전에 하므로 `http_req_duration`에 들어가지 않는다. 서명 횟수는 요약의 `tokens_signed`·`meta.tokensSigned`(VU마다 따로 센 합)다. 형식은 `TokenService.createToken`과 같다.
 header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"access","iat":..,"exp":..,"jti":"<uuid>"}`(만료 24시간), base64url 패딩 없음, 서명은 `crypto.hmac('sha256', secret, data, 'base64rawurl')`이다(k6 v2.2.0에서 `base64rawurl` 출력이 Java `Base64.getUrlEncoder().withoutPadding()`과 같은 것을 확인했다).
-앱은 서명을 문자열로 비교하므로 인코딩이 다르면 401(AUTH009)이 난다. k6 시작부터 첫 요청까지(init과 서명 포함) 약 1.5초 걸렸다(2026-11-24).
+앱은 서명을 문자열로 비교하므로 인코딩이 다르면 401(AUTH009)이 난다. k6 시작부터 첫 요청까지(init과 setup 전원 서명 포함) 약 1.5초 걸렸다(2026-11-24, setup에서 서명하던 때).
 
 #### 8-3. 모드
 
@@ -410,6 +421,20 @@ header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"acces
 - 공통 env: `BASE_URL`(API, 기본 `http://localhost:8080`), `MANAGEMENT_URL`(actuator, 기본 `http://localhost:8081`. setup의 health 확인), `MAX_VUS`(기본 300), `JWT_SECRET`(필수), `RUN_ID`, `SUMMARY_DIR`(기본 `loadtest/results/raw`).
 - mixed 웜업 시나리오 env: `WARMUP`(기본 1m), `WARMUP_RATE`(기본 20), `WARMUP_ONLY=1`(웜업 시나리오만 돌리고 판정하지 않는다. `run-measure.sh`의 측정 전 웜업이 쓴다).
 - 짧게 확인할 때는 `WARMUP=10s DURATION=30s`, `DURATION=10s`, `RAMP_RATES=5,10 STAGE_DURATION=10s TRANSITION=5s`처럼 줄이고, 측정 전 웜업도 `PREWARM_DURATION=20s`처럼 줄인다.
+
+**k6 env: 대상 고르기** (#232). 기본값은 이 스트레스 시드용이고, 기본값일 때 요청 비중·threshold·시나리오와 대상 고르는 방식은 #217과 같다. `run-measure.sh`는 env를 그대로 넘기므로(k6는 시스템 env를 `__ENV`로 읽는다) 앞에 붙여 실행한다. 예: `PICK=member BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0 bash loadtest/scripts/run-measure.sh mixed`.
+
+| env | 기본값 | 뜻 |
+|---|---|---|
+| `PICK` | `team` | `team`: 팀을 먼저 고르고(`BIG_TEAM_RATIO` 확률로 큰 팀) 그 팀 회원 중 하나(8-2 표). `member`(growth 시드용): 회원 전체에서 균등하게 하나, 두 팀 소속이면 그중 한 팀. 회원→팀은 `targets.json`의 `teams[].members`로 만든다 |
+| `BIG_TEAM_RATIO` | `0.3` | `PICK=team`에서 큰 팀을 고를 확률(0~1). `PICK=member`는 쓰지 않으므로 `0`이어야 한다(아니면 init에서 실패) |
+| `HEAVY_COMMENT_RATIO` | `0.2` | `comments` 요청 중 `commentHeavyFeeds`를 고를 확률(0~1). 나머지는 팀 최신 피드 20개(`comment-feeds.json`) 중 하나 |
+
+- `PICK=member`에서 고른 팀에 그 API의 대상이 없으면(`feed_by_place`: 장소 없는 팀, `comments`: 최신 피드 없는 팀) 회원부터 다시 고른다. 20번 안에 못 찾으면 요청하지 않고 에러로 센다: `pick_failures` 카운터(api 태그)를 올리고 `checks`에 `target picked` 실패를 하나 넣는다. 요약 stdout의 `pick_failures: N` 줄과 `meta.pickFailures`에 항상 나온다(`PICK=team`은 항상 0).
+- 두 `PICK` 모두 `feed_deep`은 커서를 먼저 고르고, 댓글 많은 피드는 피드를 먼저 고른 뒤 그 팀 회원으로 요청한다.
+- 비율이 0보다 큰데 대상 배열이 비어 있으면 `setup()`이 원인을 모두 출력하고 실패한다(종료 코드 107). 검사하는 것: `PICK=team`의 큰 팀(`BIG_TEAM_RATIO > 0`)·일반 팀(`< 1`), `PICK=member`의 회원, `comments`를 요청할 때 `commentHeavyFeeds`(`HEAVY_COMMENT_RATIO > 0`), `feed_deep`을 요청할 때 `deepCursors`. solo는 그 API에 필요한 것만 본다. 실패해도 `handleSummary`는 돌아 요약 표(요청 0건)와 `thresholds: all passed`가 찍히므로 종료 코드와 `level=error` 줄로 판단한다.
+- `meta`에 실제로 쓴 `pick`, `bigTeamRatio`, `heavyCommentRatio`, `maxPickAttempts`, `pickFailures`, `targets`(배열별 개수)를 기록한다.
+- `targets.json`을 만드는 `30_targets.sql`의 변수는 6-2 표에 있다.
 
 #### 8-4. 실행
 
