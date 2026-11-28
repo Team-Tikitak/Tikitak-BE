@@ -5,7 +5,7 @@
   - 2026-11-27에 사람 요청으로 refactor 폴더에서 옮겼다. refactor 폴더는 detached HEAD로 두었다.
   - `loadtest/.env`(`LOADTEST_PROJECT=tikitak-loadtest-220`)와 `k6/data/`는 refactor에서 복사했다. 그래서 `docker compose config`의 name이 `tikitak-loadtest-220`이다.
   - 실행 중인 컨테이너의 `working_dir` 라벨은 커밋 2에서 이 폴더로 다시 띄울 때까지 refactor다. 그동안 refactor 폴더에서는 이 compose를 쓰지 않는다.
-- **상태**: 구현·검증 완료 (2026-11-28, PR 전)
+- **상태**: 완료 (2026-11-28, PR #237)
 
 ## 목표
 운영 분포(2026-11-27 집계: 활성 팀 30, 팀당 피드 최대 107, 회원당 알림 최대 216)를 바탕으로, "이 서비스가 회원 약 10만 명까지 성장했다면 데이터가 이렇게 쌓인다"는 시드를 `loadtest/sql/growth/`에 만든다. 그 위에서 앱 한 대의 최대 RPS와 요청당 DB 비용을 다시 잰다. 그 결과로 #221~#225 가운데 실제 병목인 것만 ② 단계 대상으로 남긴다. #217 스트레스 시드는 지금처럼 재현할 수 있어야 한다. **앱 코드(`src/`)는 바꾸지 않는다.**
