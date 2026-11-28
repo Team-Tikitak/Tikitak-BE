@@ -593,6 +593,7 @@ growth에는 큰 팀과 댓글 많은 피드가 없으므로 k6는 `PICK=member 
 
 스모크의 지연은 버퍼 캐시가 거의 빈 상태(웜업 30초, DB 6.5GB)에서 100 RPS를 건 결과라 측정값으로 쓰지 않는다. 같은 구간 `pg_stat_statements` 실행 시간 합은 117초(`-pgss.txt`, reset 뒤 전체)로, Hikari 샘플 구간(17:39:19 ~ 17:40:47 k6 끝, 약 88초) 평균 커넥션 약 1.3개분이다. pending이 쌓인 구간(29샘플)에 active 10이 찬 것보다 훨씬 작다. 앱 쪽 대기인지(호스트 여유 메모리 약 1GB, k6 약 750MB) 결과 문서 측정에서 2분 웜업 뒤 다시 본다(원인 미확인).
 `CONTAMINATION: POSSIBLE`에는 이전 측정(#220 5쌍, 이 스모크 1쌍)의 외부 부하 샘플러가 남긴 `docker stats`/awk 프로세스가 섞였을 수 있다(스모크 뒤 오케스트레이터가 모두 종료했다. 스크립트는 이번 범위 밖이라 고치지 않았다).
+2026-11-28 결과 문서 측정(2분 웜업 뒤)에서는 이 7초가 재현되지 않았다. 측정 결과와 남은 `docker stats` 누수는 [results/2026-11-28-growth-baseline.md](results/2026-11-28-growth-baseline.md) 1절에 있다.
 
 
 ### 7. 초기화
@@ -612,7 +613,7 @@ DB를 다시 시드할 때는 `pgdata` 볼륨만 지운다. `down -v`는 Prometh
 
 ### 8. 측정 (#217)
 
-개선 전후 측정 결과: 지도 핀 인덱스(#220) [results/2026-11-26-map-pins-index.md](results/2026-11-26-map-pins-index.md).
+개선 전후 측정 결과: 지도 핀 인덱스(#220) [results/2026-11-26-map-pins-index.md](results/2026-11-26-map-pins-index.md). 성장 시드 베이스라인(#232): [results/2026-11-28-growth-baseline.md](results/2026-11-28-growth-baseline.md).
 
 명령은 저장소 루트에서 Git Bash로 실행한다. 앱이 떠 있어야 한다(4·5번). k6는 v2.2.0에서 확인했다.
 
