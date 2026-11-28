@@ -17,7 +17,8 @@ loadtest/
 │   ├── 00_common.sql         # 공통 시드: member, team, team_member (#217, #215 공유)
 │   ├── 10_feed.sql           # 피드 시드: place, feed, feed_image, feed_tag, feed_reaction, feed_comment (#217)
 │   ├── 20_notification.sql   # 알림 시드: notification (#217)
-│   ├── 30_targets.sql        # k6 입력 JSON 추출 (읽기 전용, #217)
+│   ├── 30_targets.sql        # k6 입력 JSON 추출 (읽기 전용, #217. growth도 변수로 공용)
+│   ├── growth/               # 성장 시나리오 시드 00_common / 10_feed / 20_notification (#232, 6-4). 스트레스 시드와 같은 DB에 넣지 않는다
 │   └── NN_<기능>.sql          # 기능별 시드. 00_common 다음에 번호 순서대로 실행한다
 ├── k6/
 │   ├── read-api-baseline.js  # 조회 API 측정 시나리오 (mixed / ramp / solo, #217)
@@ -257,9 +258,20 @@ bash loadtest/scripts/measure-lock.sh bash -c 'docker compose -f loadtest/docker
 
 | 키 | 내용 |
 |---|---|
-| `teams[]` | 모든 팀. `teamId`, `isBig`, `members[{memberId, teamMemberId}]`, `places[{externalPlaceId, feedCount}]`(피드 수 내림차순. 큰 팀은 상위 100개, `-v big_top_places=N`으로 변경) |
-| `commentHeavyFeeds[]` | 댓글 500개 이상인 피드. `teamId`, `feedId`, `commentCount`, `memberId`(작성자) |
-| `deepCursors[]` | 큰 팀별 피드 목록의 10,000·50,000·90,000번째 피드. `teamId`, `position`, `cursor`(`FeedService.encodeCursor`와 같은 `LocalDateTime.toString() + "_" + id`. 초·소수점이 0이면 생략하는 Java 규칙을 따른다) |
+| `teams[]` | 모든 팀. `teamId`, `isBig`, `members[{memberId, teamMemberId}]`, `places[{externalPlaceId, feedCount}]`(피드 수 내림차순. 큰 팀은 상위 `big_top_places`개) |
+| `commentHeavyFeeds[]` | 댓글 `heavy_min`개 이상인 피드. `teamId`, `feedId`, `commentCount`, `memberId`(작성자) |
+| `deepCursors[]` | 대상 팀(`deep_teams`)별 피드 목록의 `deep_positions`번째 피드. `teamId`, `position`, `cursor`(`FeedService.encodeCursor`와 같은 `LocalDateTime.toString() + "_" + id`. 초·소수점이 0이면 생략하는 Java 규칙을 따른다) |
+
+psql 변수(`psql ... -v 이름=값 -f -`). 기본값은 이 스트레스 시드용이고, 기본값으로 실행한 출력은 변수를 넣기 전 버전(develop d82b2f1)과 `generatedAt`만 다르다(2026-11-27, #220 시점 220 DB에서 `generatedAt`을 뺀 바이트 비교와 키 정렬 JSON diff 0줄).
+
+| 변수 | 기본값 | 뜻 |
+|---|---|---|
+| `big_top_places` | `100` | 큰 팀(`isBig`)에서 내보낼 장소 수(피드 수 상위). `0`이면 자르지 않는다. 일반 팀은 항상 전부 |
+| `heavy_min` | `500` | `commentHeavyFeeds`에 넣을 활성 댓글 수 하한 |
+| `deep_positions` | `10000,50000,90000` | `deepCursors` 위치 목록(쉼표 구분) |
+| `deep_teams` | `0` | `0`이면 큰 팀 전부, `N > 0`이면 활성 피드 수 상위 N개 팀(같으면 team id 오름차순). 그 위치까지 피드가 없는 팀·위치는 빠진다 |
+
+growth 시드에서 쓸 값의 예(절차는 growth 시드 절에서): `-v deep_positions=100,400,700 -v deep_teams=<N> -v heavy_min=<시드 댓글 최대보다 큰 값> -v big_top_places=0`. growth에는 큰 팀(`isBig`)과 댓글 많은 피드가 없으므로 k6는 `BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0`으로 돌린다(8-3 k6 env).
 
 파일 크기는 약 2MB다. `loadtest/k6/data/`는 커밋하지 않는다.
 
@@ -332,6 +344,258 @@ SELECT
 
 FEED_COMMENT가 많은 이유: 고른 피드의 작성자가 알림을 받는 회원 자신이면 FEED_COMMENT로 바꾸기 때문이다. 팀이 작아 이런 경우가 약 1/4이다.
 
+### 6-4. 성장 시드 (#232)
+
+"회원 약 10만 명까지 성장했다면" 데이터가 이렇게 쌓인다는 시드다. 수치는 [계약](../docs/contracts/2026-11-27-growth-seed-baseline.md) "결정 사항"을 따른다. 6~6-3의 스트레스 시드 대신 쓴다. **두 시드를 같은 DB에 넣지 않는다**(growth 10·20은 growth가 아닌 팀이 있으면 멈춘다). 스트레스 시드로 돌아가려면 7번으로 초기화하고 6번부터 한다.
+
+| 파일 | 만드는 것 |
+|---|---|
+| `growth/00_common.sql` | 팀 `teams`개(기본 15,000, `description = 'loadtest:growth'` → `30_targets.sql`의 `isBig`은 false). 팀원 2~3명 10%, 4~5명 20%, 6~8명 45%, 9~12명 25%. 팀 생성은 `base_ts`에서 0~1,095일 전 균등. slot 0이 OWNER(주 소속 회원). slot 1 이후는 확률 `guest_p`(기본 0.058, 전체 slot의 약 5%)로 다른 팀이 주 소속인 회원(게스트, 한 회원은 최대 한 번)이 채운다 |
+| `growth/10_feed.sql` | place `places`개(기본 50,000). 팀마다 월간 비율 `rate` = min(23, 로그정규(중앙값 5, σ 0.9076) × (팀원 수/7)^0.4), 피드 수 = max(1, round(rate × 나이(월)))(23 × 나이(월)을 넘지 않게 자름). 시각은 팀 생성~`base_ts` 균등. 2025-01-01 이후 피드의 약 20.5%를 데일리 후보로 (팀, 작성자, 날짜)마다 1건(이미지 1장, 작성자 태그만, 장소 없음, key 형식은 6-1과 같음). 장소 약 50%(데일리가 아닌 피드에서 맞춤), 팀 장소 풀 max(1, ceil(장소 피드 수 × 0.4))개 중 `u^2` 순위. 이미지 1~3장, 태그 작성자 + 0~2명, 반응 0~4개(팀원 수 이하), 댓글 `floor(18 × u^4)`개(0~17). soft delete 없음 |
+| `growth/20_notification.sql` | 회원 30%는 0건, 나머지는 min(1300, 로그정규(평균 약 143, σ 1.0))건. 회원의 팀(두 팀이면 균등) → 그 팀 피드(균등), `created_at` = max(피드 시각, 그 팀 가입 시각) + 0~6시간. type 5종(`DAILY_QUESTION_OPENED` 없음, 문구·actor 규칙은 6-1과 같음). 읽는 성향 `p = u^(2/3)`, 30일 이내는 확률 `p`, 그보다 오래되면 `1 - (1 - p) × 0.2`로 읽음 |
+
+난수는 6-1과 같은 `pg_temp.lt_r`(salt 해시)이고 시각은 모두 `base_ts` 기준이다. 그래서 **같은 `salt`·`base_ts`면 결과가 같다**. 분포 상수는 각 파일 머리말의 psql 변수로 바꿀 수 있다.
+
+#### 6-4-1. base_ts 정하기
+
+`base_ts`는 세 파일에 같은 값을 넘긴다. 주지 않으면 파일마다 실행 시각을 써서 파일 사이 기준이 어긋나고, 다시 넣었을 때 결과가 달라진다. 지금보다 미래 값은 00이 거부한다. 결과 문서에는 쓴 `base_ts`와 `salt`를 적는다.
+
+```bash
+BASE_TS="$(date '+%Y-%m-%dT%H:00:00')"   # 예: 정각으로 내린 지금. 재현할 때는 결과 문서의 값을 그대로 쓴다
+echo "$BASE_TS"
+```
+
+#### 6-4-2. 실행
+
+빈 DB(7번 초기화 → 4번 앱 기동으로 Flyway V1~V26 적용 → 앱 종료)에서 00 → 10 → 20 순서로 실행한다. 앱은 꺼 둔다(6-1과 같은 이유).
+
+```bash
+export BASE_TS   # 6-4-1
+time bash loadtest/scripts/measure-lock.sh bash -c '
+  set -e
+  for f in 00_common 10_feed 20_notification; do
+    echo "[$(date +%T)] $f"
+    docker compose -f loadtest/docker-compose.yml exec -T postgres \
+      psql -U tikitak -d tikitak -v salt=232 -v base_ts="$BASE_TS" -f - < loadtest/sql/growth/$f.sql
+  done
+  echo "[$(date +%T)] done"'
+```
+
+- `-v teams=N`(00만): 팀 수(기본 15000). `-v salt=N`: 세 파일 같은 값(기본 232).
+- 각 파일은 대상 테이블에 행이 있으면 아무것도 넣지 않고 멈춘다. 한 트랜잭션 안에서만 `work_mem=128MB`, `session_replication_role=replica`(FK 트리거 끔)를 쓰고, 커밋 뒤 `VACUUM (ANALYZE)`와 FK 고아·무결성 검사를 출력한다(6-1과 같은 방식).
+- 00은 한 팀에 같은 회원이 두 번 들어가면(게스트 대체 회원도 같은 팀인 경우, 확률이 아주 낮다) 멈춘다. 그때는 salt를 바꾼다.
+
+#### 6-4-3. 확인 쿼리
+
+계약 완료 조건을 한 번에 확인한다. 각 줄의 `\echo`에 기준을 적었다. 마지막 "지문"은 테이블별 행 수와 행 해시 합이고, 같은 salt·base_ts로 두 번 넣은 결과를 비교할 때 쓴다(행 해시 합이 같으면 모든 컬럼 값이 같다고 본다).
+
+```bash
+docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -v base_ts="$BASE_TS" -f - <<'SQL' \
+  | tee loadtest/results/raw/growth-check-$(date +%Y%m%d-%H%M%S).txt
+\set ON_ERROR_STOP on
+SET TIME ZONE 'Asia/Seoul';
+\echo '== 팀·회원 (teams = 15000, one_member_teams = 0, two_team_member_ratio 0.03~0.07)'
+SELECT
+  (SELECT count(*) FROM team) AS teams,
+  (SELECT count(*) FROM member) AS members,
+  (SELECT count(*) FROM team_member) AS team_members,
+  (SELECT count(*) FROM (SELECT team_id FROM team_member GROUP BY team_id HAVING count(*) = 1) x) AS one_member_teams,
+  (SELECT round(avg((c = 2)::int), 4) FROM (SELECT count(*) AS c FROM team_member GROUP BY member_id) x) AS two_team_member_ratio;
+\echo '== 팀원 수 구간 비율 (목표 ±0.02)'
+SELECT bucket, count(*) AS teams, round(count(*)::numeric / sum(count(*)) OVER (), 4) AS ratio,
+  CASE bucket WHEN '2-3' THEN 0.10 WHEN '4-5' THEN 0.20 WHEN '6-8' THEN 0.45 WHEN '9-12' THEN 0.25 ELSE 0 END AS target
+FROM (SELECT CASE WHEN c = 1 THEN '1' WHEN c <= 3 THEN '2-3' WHEN c <= 5 THEN '4-5' WHEN c <= 8 THEN '6-8' ELSE '9-12' END AS bucket
+      FROM (SELECT team_id, count(*) AS c FROM team_member GROUP BY team_id) x) y
+GROUP BY bucket ORDER BY bucket;
+\echo '== 피드 (zero_feed_teams = 0, 나이 6개월 이상 팀 피드 수/나이(월): p50 4~6, p90 13~19, max <= 23)'
+WITH c AS (
+  SELECT t.id, count(f.id) AS n,
+    extract(epoch FROM ((:'base_ts')::timestamp - t.created_at)) / 86400.0 / 30.4375 AS age_months
+  FROM team t LEFT JOIN feed f ON f.team_id = t.id GROUP BY t.id)
+SELECT
+  (SELECT count(*) FROM feed) AS feeds,
+  count(*) FILTER (WHERE n = 0) AS zero_feed_teams,
+  count(*) FILTER (WHERE age_months >= 6) AS teams_6m,
+  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY n / age_months) FILTER (WHERE age_months >= 6))::numeric, 2) AS p50_rate_6m,
+  round((percentile_cont(0.9) WITHIN GROUP (ORDER BY n / age_months) FILTER (WHERE age_months >= 6))::numeric, 2) AS p90_rate_6m,
+  round((max(n / age_months) FILTER (WHERE age_months >= 6))::numeric, 3) AS max_rate_6m,
+  max(n) AS max_feeds_per_team
+FROM c;
+\echo '== 피드 내용 (place_ratio 0.45~0.55, daily_ratio_since_2025 0.15~0.25, 나머지 0, max_comments <= 17)'
+SELECT
+  (SELECT round(avg((place_id IS NOT NULL)::int), 4) FROM feed) AS place_ratio,
+  (SELECT round(avg((question_id IS NOT NULL)::int), 4) FROM feed WHERE created_at >= DATE '2025-01-01') AS daily_ratio_since_2025,
+  (SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM feed_comment GROUP BY feed_id) x) AS max_comments,
+  (SELECT count(*) FROM feed f WHERE NOT EXISTS (
+     SELECT 1 FROM feed_tag t WHERE t.feed_id = f.id AND t.team_member_id = f.team_member_id)) AS feeds_without_author_tag,
+  (SELECT count(*) FROM (SELECT 1 FROM feed_image GROUP BY feed_id, order_index HAVING count(*) > 1) x) AS dup_image_order,
+  (SELECT count(*) FROM feed WHERE question_id IS NOT NULL AND daily_answer_active_key IS DISTINCT FROM
+     team_id || ':' || team_member_id || ':' || question_id || ':' || to_char(question_answer_date, 'YYYY-MM-DD')) AS bad_daily_key,
+  (SELECT count(*) FROM feed WHERE deleted_at IS NOT NULL) AS soft_deleted;
+\echo '== 알림 (zero_member_ratio 0.27~0.33, avg_per_member 85~115, max <= 1300, daily_opened = 0)'
+SELECT
+  (SELECT count(*) FROM notification) AS notifications,
+  round((SELECT count(*) FROM member m WHERE NOT EXISTS (SELECT 1 FROM notification n WHERE n.member_id = m.id))::numeric
+    / (SELECT count(*) FROM member), 4) AS zero_member_ratio,
+  round((SELECT count(*) FROM notification)::numeric / (SELECT count(*) FROM member), 2) AS avg_per_member,
+  (SELECT max(c) FROM (SELECT count(*) AS c FROM notification GROUP BY member_id) x) AS max_per_member,
+  (SELECT count(*) FROM notification WHERE type = 'DAILY_QUESTION_OPENED') AS daily_opened;
+\echo '== 알림 읽음 (unread_recent30_lift >= 2, recent30_read_ratio_stddev >= 0.15)'
+-- unread_recent30_lift = (안 읽은 알림 중 30일 이내 비중) / (전체 알림 중 30일 이내 비중)
+-- recent30_read_ratio_stddev = 30일 이내 알림이 10건 이상인 회원(recent30_members명)의 30일 이내 읽음 비율 표준편차
+WITH s AS (
+  SELECT
+    count(*) FILTER (WHERE is_read) AS read_notifications,
+    avg((created_at >= (:'base_ts')::timestamp - interval '30 days')::int) FILTER (WHERE NOT is_read) AS unread_recent30_share,
+    avg((created_at >= (:'base_ts')::timestamp - interval '30 days')::int) AS all_recent30_share
+  FROM notification),
+r AS (
+  SELECT member_id, avg(is_read::int) AS ratio
+  FROM notification
+  WHERE created_at >= (:'base_ts')::timestamp - interval '30 days'
+  GROUP BY member_id HAVING count(*) >= 10)
+SELECT
+  s.read_notifications,
+  round(s.unread_recent30_share, 4) AS unread_recent30_share,
+  round(s.all_recent30_share, 4) AS all_recent30_share,
+  round(s.unread_recent30_share / nullif(s.all_recent30_share, 0), 3) AS unread_recent30_lift,
+  (SELECT count(*) FROM r) AS recent30_members,
+  (SELECT round(stddev_pop(ratio)::numeric, 4) FROM r) AS recent30_read_ratio_stddev
+FROM s;
+\echo '== FK 고아 (모두 0)'
+SELECT
+  (SELECT count(*) FROM team_member tm WHERE NOT EXISTS (SELECT 1 FROM team t WHERE t.id = tm.team_id)
+     OR NOT EXISTS (SELECT 1 FROM member m WHERE m.id = tm.member_id)) AS team_member_fk,
+  (SELECT count(*) FROM member m WHERE NOT EXISTS (SELECT 1 FROM team t WHERE t.id = m.active_team_id)) AS member_active_team_fk,
+  (SELECT count(*) FROM feed f WHERE NOT EXISTS (SELECT 1 FROM team t WHERE t.id = f.team_id)
+     OR NOT EXISTS (SELECT 1 FROM team_member tm WHERE tm.id = f.team_member_id)
+     OR (f.place_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM place p WHERE p.id = f.place_id))
+     OR (f.question_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM question q WHERE q.id = f.question_id))) AS feed_fk,
+  (SELECT count(*) FROM feed_image i WHERE NOT EXISTS (SELECT 1 FROM feed f WHERE f.id = i.feed_id)) AS image_fk,
+  (SELECT count(*) FROM feed_tag t WHERE NOT EXISTS (SELECT 1 FROM feed f WHERE f.id = t.feed_id)
+     OR NOT EXISTS (SELECT 1 FROM team_member tm WHERE tm.id = t.team_member_id)) AS tag_fk,
+  (SELECT count(*) FROM feed_reaction r WHERE NOT EXISTS (SELECT 1 FROM feed f WHERE f.id = r.feed_id)
+     OR NOT EXISTS (SELECT 1 FROM team_member tm WHERE tm.id = r.team_member_id)) AS reaction_fk,
+  (SELECT count(*) FROM feed_comment c WHERE NOT EXISTS (SELECT 1 FROM feed f WHERE f.id = c.feed_id)
+     OR NOT EXISTS (SELECT 1 FROM team_member tm WHERE tm.id = c.team_member_id)
+     OR NOT EXISTS (SELECT 1 FROM feed_image i WHERE i.id = c.feed_image_id)) AS comment_fk,
+  (SELECT count(*) FROM notification n WHERE NOT EXISTS (SELECT 1 FROM member m WHERE m.id = n.member_id)
+     OR NOT EXISTS (SELECT 1 FROM team t WHERE t.id = n.team_id)
+     OR NOT EXISTS (SELECT 1 FROM feed f WHERE f.id = n.feed_id)
+     OR NOT EXISTS (SELECT 1 FROM team_member tm WHERE tm.id = n.actor_team_member_id)) AS notification_fk;
+\echo '== 결정성 비교용 지문 (두 번 넣은 결과가 같아야 한다)'
+SELECT * FROM (
+SELECT 'team' AS t, count(*) AS rows, sum(hashtextextended(x::text, 0)) AS fp FROM team x
+UNION ALL SELECT 'member', count(*), sum(hashtextextended(x::text, 0)) FROM member x
+UNION ALL SELECT 'team_member', count(*), sum(hashtextextended(x::text, 0)) FROM team_member x
+UNION ALL SELECT 'place', count(*), sum(hashtextextended(x::text, 0)) FROM place x
+UNION ALL SELECT 'feed', count(*), sum(hashtextextended(x::text, 0)) FROM feed x
+UNION ALL SELECT 'feed_image', count(*), sum(hashtextextended(x::text, 0)) FROM feed_image x
+UNION ALL SELECT 'feed_tag', count(*), sum(hashtextextended(x::text, 0)) FROM feed_tag x
+UNION ALL SELECT 'feed_reaction', count(*), sum(hashtextextended(x::text, 0)) FROM feed_reaction x
+UNION ALL SELECT 'feed_comment', count(*), sum(hashtextextended(x::text, 0)) FROM feed_comment x
+UNION ALL SELECT 'notification', count(*), sum(hashtextextended(x::text, 0)) FROM notification x
+UNION ALL SELECT 'notification_read', count(*), NULL FROM notification WHERE is_read
+) x ORDER BY t;
+SQL
+```
+
+#### 6-4-4. 결정성 확인 (소규모 2회)
+
+전체 규모를 두 번 넣는 대신 `teams=1000`으로 같은 salt·base_ts를 두 번 넣어 6-4-3 출력을 비교한다. 두 번째 전에는 시드 테이블만 비운다(question·flyway_schema_history는 남는다. `refresh_token` 등 member를 참조하는 빈 테이블 때문에 `CASCADE`가 필요하다).
+
+비우기 전에 이 폴더의 DB인지 확인하고, 다르면 아무것도 지우지 않고 멈춘다(`scripts/run-batch-measure.sh`의 확인과 같은 방식). `.env`에서 `LOADTEST_PROJECT`가 빠지면 `.env` 값과 compose 이름이 둘 다 기본값 `tikitak-loadtest`로 풀려 이름 비교만으로는 다른 폴더(#217) DB를 비울 수 있으므로, 기본값을 거부하고 postgres 컨테이너의 `working_dir` 라벨도 본다. 저장소 루트에서 Git Bash로 실행한다.
+
+```bash
+bash loadtest/scripts/measure-lock.sh bash -c '
+  set -euo pipefail
+  norm() { tr -d "\r" | tr "\\\\" "/" | sed "s#/*\$##" | tr "[:upper:]" "[:lower:]"; }
+  env_project="$(sed -n "s/^LOADTEST_PROJECT=//p" loadtest/.env | tr -d "\r" | tail -n 1)"
+  config_name="$(docker compose -f loadtest/docker-compose.yml config | tr -d "\r" | sed -n "s/^name: //p" | head -n 1)"
+  if [ -z "$env_project" ] || [ "$env_project" = tikitak-loadtest ] || [ "$config_name" != "$env_project" ]; then
+    echo "멈춤: compose name($config_name)과 .env LOADTEST_PROJECT($env_project)가 다르거나 기본값이다(10-1, 10-3)" >&2; exit 2
+  fi
+  pg_workdir="$(docker inspect -f "{{index .Config.Labels \"com.docker.compose.project.working_dir\"}}" "$env_project-postgres" | norm)"
+  this_dir="$( (pwd -W 2>/dev/null || pwd) | norm)/loadtest"
+  if [ -z "$pg_workdir" ] || [ "$pg_workdir" != "$this_dir" ]; then
+    echo "멈춤: $env_project-postgres 는 다른 폴더의 compose로 만든 컨테이너다(working_dir=$pg_workdir, 이 폴더=$this_dir)" >&2; exit 2
+  fi
+  docker compose -f loadtest/docker-compose.yml exec -T postgres psql -U tikitak -d tikitak -v ON_ERROR_STOP=1 -c \
+    "TRUNCATE notification, feed_comment, feed_reaction, feed_tag, feed_image, feed, place, team_member, member, team RESTART IDENTITY CASCADE"'
+```
+
+비교가 끝나면 같은 방법으로 비우고 전체 규모(`teams=15000`)를 한 번 넣는다.
+
+#### 6-4-5. k6 대상 추출 (growth)
+
+```bash
+bash loadtest/scripts/measure-lock.sh bash -c 'docker compose -f loadtest/docker-compose.yml exec -T postgres \
+  psql -U tikitak -d tikitak -At -v deep_teams=30 -v deep_positions=100,400,700 -v heavy_min=1000000 -v big_top_places=0 \
+  -f - < loadtest/sql/30_targets.sql > loadtest/k6/data/targets.json'
+bash loadtest/scripts/extract-comment-feeds.sh
+```
+
+growth에는 큰 팀과 댓글 많은 피드가 없으므로 k6는 `PICK=member BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0`으로 돌린다(8-3 k6 env). 예: `PICK=member BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0 bash loadtest/scripts/run-measure.sh mixed`.
+
+#### 6-4-6. 실행 기록
+
+소규모 결정성 확인(2026-11-27, `teams=1000`, `salt=232`, `base_ts=2026-11-27T17:00:00`). 두 번 모두 빈 시드 테이블에서 실행했다(1회차: pgdata 재생성 + Flyway 26건 직후, 2회차: 위 TRUNCATE 직후). 시간은 원시 파일 `results/raw/growth-small{1,2}-timing.txt`(파일별 시작·끝 시각, `date +%s` 차이)다.
+
+| 항목 | 1회차 | 2회차 |
+|---|---|---|
+| 00 / 10 / 20 / 확인 쿼리 | 2초 / 31초 / 18초 / 8초 | 3초 / 25초 / 17초 / 8초 |
+| 6-4-3 출력 | `growth-small1-check.txt` | `growth-small2-check.txt` (1회차와 줄 정렬 후 같음. 지문 표만 줄 순서가 달랐고 이후 `ORDER BY t`를 붙였다) |
+
+1회차 6-4-3 값(`growth-small1-check.txt`): 팀 1,000, 회원 6,464, team_member 6,834, 두 팀 소속 회원 0.0572, 1명 팀 0. 팀원 수 구간 2-3 0.100 / 4-5 0.200 / 6-8 0.468 / 9-12 0.232. 피드 119,034, 피드 0건 팀 0, 나이 6개월 이상 팀 845개의 피드 수/나이(월) p50 4.65 / p90 14.93 / 최대 23.000. 장소 0.5004, 2025-01-01 이후 데일리 0.2051, 댓글 최대 17, 작성자 태그 없음·이미지 순서 중복·데일리 key 오류·soft delete 0. 알림 634,678, 0건 회원 0.2994, 회원당 평균 98.19, 최대 1,300, `DAILY_QUESTION_OPENED` 0. 읽음: 안 읽은 알림 중 30일 이내 0.4170 ÷ 전체 알림 중 30일 이내 0.1229 = 3.393(기준 2 이상), 30일 이내 알림 10건 이상 회원 1,586명의 30일 이내 읽음 비율 표준편차 0.2814(기준 0.15 이상). 두 값은 확인 쿼리를 지금 형태로 바꾼 뒤 2회차 DB에서 다시 뽑았다(`growth-check-20261127-171952.txt`). FK 고아 0.
+
+처음 확인 쿼리의 두 읽음 기준(회원별 전체 읽음 비율 표준편차 ≥ 0.15: 0.1132, 안 읽은 알림 중 30일 이내 > 0.5: 0.4170)은 알림 시각이 3년에 균등한 이 분포에서 읽음 규칙 수치를 어떻게 잡아도 동시에 맞출 수 없어서, 2026-11-27 사람 결정으로 위 두 기준으로 바꿨다(분포·규칙은 그대로, 계약 완료 조건 참고).
+
+**전체 규모** (2026-11-27, `teams=15000`, `salt=232`, **`base_ts=2026-11-27T17:00:00`**). 소규모 2회차 DB를 6-4-4의 TRUNCATE로 비운 뒤 한 번 넣었다(Flyway 26건은 같은 날 17:11 pgdata 재생성 직후 적용). 이 측정 DB의 시드다.
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 00 / 10 / 20 | 21초 / 7분 26초(446초) / 5분 36초(336초). 세 파일 elapsed 합 803초(13분 23초). 벽시계 구간은 00 시작 17:20:14 ~ 20 끝 17:33:38 = 13분 24초(파일 사이 대기 포함) | `results/raw/growth-full-timing.txt` |
+| 6-4-3 확인 쿼리 | 2분 58초(178초) | 〃 (17:33:38 ~ 17:36:36) |
+| 30_targets(growth 변수) / `extract-comment-feeds.sh` | 8초 / 5초 | `results/raw/growth-full-targets.txt` |
+| DB 크기 | 6,565MB (`pg_database_size`) | `results/raw/growth-full-dbsize.txt` |
+
+6-4-3 값(`results/raw/growth-full-check.txt`, 각 시드 파일 출력은 `growth-full-{00_common,10_feed,20_notification}.txt`):
+
+| 조건 | 기준 | 값 |
+|---|---|---|
+| 팀 / 1명 팀 | 15,000 / 0 | 15,000 / 0 |
+| 팀원 수 구간 2-3 / 4-5 / 6-8 / 9-12 | 0.10 / 0.20 / 0.45 / 0.25 ±0.02 | 0.0987 / 0.1991 / 0.4523 / 0.2499 |
+| 회원 / team_member / 두 팀 소속 회원 | 3~7% | 98,850 / 104,032 / 0.0524 |
+| 피드 / 피드 0건 팀 | 0 | 1,824,108 / 0 (팀당 최대 826) |
+| 나이 6개월 이상 팀(12,476개) 피드 수/나이(월) p50 / p90 / 최대 | 4~6 / 13~19 / ≤23 | 4.78 / 15.71 / 23.000 |
+| 장소 있는 피드 / 2025-01-01 이후 데일리 | 0.45~0.55 / 0.15~0.25 | 0.5001 / 0.2040 (데일리 322,961건) |
+| 댓글 최대 / 작성자 태그 없음 / 이미지 순서 중복 / 데일리 key 오류 / soft delete | ≤17 / 0 / 0 / 0 / 0 | 17 / 0 / 0 / 0 / 0 |
+| place / 쓰인 place / feed_image / feed_tag / feed_reaction / feed_comment | — | 50,000 / 49,913 / 2,873,923 / 2,863,678 / 3,599,221 / 5,926,655 |
+| 알림 / 0건 회원 / 회원당 평균 / 최대 / `DAILY_QUESTION_OPENED` | 27~33% / 85~115 / ≤1,300 / 0 | 9,781,873 / 0.2993 / 98.96 / 1,300 / 0 |
+| 읽음 알림 | — | 8,606,252 |
+| 안 읽은 알림 30일 이내 비중 ÷ 전체 30일 이내 비중 | ≥ 2 | 0.4241 ÷ 0.1277 = 3.321 |
+| 30일 이내 알림 10건 이상 회원(24,305명)의 30일 이내 읽음 비율 표준편차 | ≥ 0.15 | 0.2773 |
+| FK 고아(team_member, member.active_team, feed, image, tag, reaction, comment, notification) | 0 | 모두 0 |
+| type 비율 | — | FEED_COMMENT 0.354, FEED_UPLOADED 0.243, DAILY_QUESTION_UPLOADED 0.161, FEED_TAGGED 0.139, FEED_COMMENT_REPLIED 0.104 (`growth-full-20_notification.txt`) |
+
+`targets.json`(6-4-5 변수, `deep_teams=30`): 21,796,218바이트(약 21MB. 콘솔 확인(`ls -l`), 원시 파일 없음), 팀 15,000(isBig 0), 장소 항목 314,965개(장소 없는 팀 168), 회원 98,850, `commentHeavyFeeds` 0, `deepCursors` 90(위치 100·400·700 각 30). `comment-feeds.json`: 2,950,875바이트, 팀 15,000. 출처 `results/raw/growth-full-targets.txt`(`comment-feeds.json` 크기는 `extract-comment-feeds.sh` 출력 줄, 항목 수는 node로 센 값).
+
+**스모크** (2026-11-27 17:38~17:41, 앱 1대, `PICK=member BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0 PREWARM_DURATION=30s WARMUP=10s DURATION=1m`, `run-measure.sh mixed`, RUN_ID `20261127-173815`). 동작 확인용이라 판정에 쓰지 않는다.
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 요청 / 4xx·5xx(`http_req_failed`) / checks | 4,172건 / 0건 / 9,180 통과·0 실패 (셋 다 mixed 안 10초 웜업 시나리오 포함 전체) | `20261127-173815-mixed-k6-summary.json` |
+| `pick_failures` | 0 (측정 전 웜업도 0) | 〃 `meta.pickFailures`, `-prewarm-k6.log` |
+| 토큰 서명 | 4,171회(VU별 캐시 합) | 〃 `meta.tokensSigned` |
+| k6 메모리(작업 집합) | 측정 전 웜업 k6 최대 770,848KB, 본 k6 최대 748,380KB(각각 약 750MB) | `growth-smoke-k6mem.csv` (`tasklist`를 1초 쉬고 다시 부르는 루프라 실제 기록 간격은 같은 k6 프로세스 안 2~6초, 두 k6 프로세스 사이 13초. 31샘플) |
+| 지연 | 모든 API P95 6.7~7.3초, `dropped_iterations` 2,029, Hikari active 최대 10·pending 최대 190 | `-k6.log`, `-hikari.csv`(48샘플, pending>0 29샘플) |
+| 외부 부하 | `CONTAMINATION: POSSIBLE`(외부 프로세스 평균 2.83 CPU), 호스트 여유 메모리 시작 1,059MB / 끝 1,299MB | `-contamination.txt` |
+
+스모크의 지연은 버퍼 캐시가 거의 빈 상태(웜업 30초, DB 6.5GB)에서 100 RPS를 건 결과라 측정값으로 쓰지 않는다. 같은 구간 `pg_stat_statements` 실행 시간 합은 117초(`-pgss.txt`, reset 뒤 전체)로, Hikari 샘플 구간(17:39:19 ~ 17:40:47 k6 끝, 약 88초) 평균 커넥션 약 1.3개분이다. pending이 쌓인 구간(29샘플)에 active 10이 찬 것보다 훨씬 작다. 앱 쪽 대기인지(호스트 여유 메모리 약 1GB, k6 약 750MB) 결과 문서 측정에서 2분 웜업 뒤 다시 본다(원인 미확인).
+`CONTAMINATION: POSSIBLE`에는 이전 측정(#220 5쌍, 이 스모크 1쌍)의 외부 부하 샘플러가 남긴 `docker stats`/awk 프로세스가 섞였을 수 있다(스모크 뒤 오케스트레이터가 모두 종료했다. 스크립트는 이번 범위 밖이라 고치지 않았다).
+2026-11-28 결과 문서 측정(2분 웜업 뒤)에서는 이 7초가 재현되지 않았다. 측정 결과와 남은 `docker stats` 누수는 [results/2026-11-28-growth-baseline.md](results/2026-11-28-growth-baseline.md) 1절에 있다.
+
+
 ### 7. 초기화
 
 ```bash
@@ -349,7 +613,7 @@ DB를 다시 시드할 때는 `pgdata` 볼륨만 지운다. `down -v`는 Prometh
 
 ### 8. 측정 (#217)
 
-개선 전후 측정 결과: 지도 핀 인덱스(#220) [results/2026-11-26-map-pins-index.md](results/2026-11-26-map-pins-index.md).
+개선 전후 측정 결과: 지도 핀 인덱스(#220) [results/2026-11-26-map-pins-index.md](results/2026-11-26-map-pins-index.md). 성장 시드 베이스라인(#232): [results/2026-11-28-growth-baseline.md](results/2026-11-28-growth-baseline.md).
 
 명령은 저장소 루트에서 Git Bash로 실행한다. 앱이 떠 있어야 한다(4·5번). k6는 v2.2.0에서 확인했다.
 
@@ -387,15 +651,15 @@ k6 `setup()`에서 API로 가져오지 않는 이유는, solo 측정의 `pg_stat
 | `notifications` | `GET /api/v1/me/notifications` | 10% | 팀 → 회원. `teamId` 없이 회원 전체 알림 |
 | `unread_count` | `GET /api/v1/me/notifications/unread-count` | 15% | 팀 → 회원. `teamId` 없이 |
 
-- "팀"은 30% 확률로 큰 팀 3개 중 하나, 70%는 일반 팀 2,000개 중 하나다. 회원은 고른 팀의 멤버 중 무작위다. 댓글 많은 피드와 깊은 커서는 그 피드의 팀 멤버 중에서 고른다(댓글 많은 피드는 약 30%가 큰 팀이다).
+- 위 표는 기본값(`PICK=team`, `BIG_TEAM_RATIO=0.3`, `HEAVY_COMMENT_RATIO=0.2`, 8-3 k6 env)일 때다. "팀"은 30% 확률로 큰 팀 3개 중 하나, 70%는 일반 팀 2,000개 중 하나다. 회원은 고른 팀의 멤버 중 무작위다. 댓글 많은 피드와 깊은 커서는 그 피드의 팀 멤버 중에서 고른다(댓글 많은 피드는 약 30%가 큰 팀이다).
 - `size`, `type` 등 나머지 쿼리 파라미터는 보내지 않는다(서버 기본값: 페이지 20건).
 - 댓글 많은 피드를 20%로 둔 이유: 실제 비율(피드의 0.1%)로 두면 측정 5분 동안 몇 건만 나와 그 경로의 지연이 보이지 않는다. 반대로 절반 이상이면 댓글 API 지연이 이 피드들로만 정해진다. 두 경우가 모두 P95에 드러나도록 고른 값이다.
 - 요청마다 `tags: {api, name}`을 붙인다(`name`은 경로 템플릿이라 URL별 시계열이 늘지 않는다). ramp에서는 `stage` 태그도 붙는다.
 - check: 상태 200, 응답 `success == true`, `feed_by_place`는 `data.items`가 1건 이상. 200이 아니면 응답 앞부분을 경고 로그로 남긴다(`LOG_ERRORS=0`이면 끈다).
 
-**토큰**: `setup()`이 `JWT_SECRET`으로 `targets.json`의 모든 회원(8,557명)에게 HS256 access token을 서명한다. 형식은 `TokenService.createToken`과 같다.
+**토큰**: 각 VU가 회원의 첫 요청 때 `JWT_SECRET`으로 HS256 access token을 서명하고 VU 안에 캐시한다(모든 `PICK`. #232 전에는 `setup()`이 `targets.json`의 모든 회원에게 서명했다). 서명은 `http.get` 전에 하므로 `http_req_duration`에 들어가지 않는다. 서명 횟수는 요약의 `tokens_signed`·`meta.tokensSigned`(VU마다 따로 센 합)다. 형식은 `TokenService.createToken`과 같다.
 header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"access","iat":..,"exp":..,"jti":"<uuid>"}`(만료 24시간), base64url 패딩 없음, 서명은 `crypto.hmac('sha256', secret, data, 'base64rawurl')`이다(k6 v2.2.0에서 `base64rawurl` 출력이 Java `Base64.getUrlEncoder().withoutPadding()`과 같은 것을 확인했다).
-앱은 서명을 문자열로 비교하므로 인코딩이 다르면 401(AUTH009)이 난다. k6 시작부터 첫 요청까지(init과 서명 포함) 약 1.5초 걸렸다(2026-11-24).
+앱은 서명을 문자열로 비교하므로 인코딩이 다르면 401(AUTH009)이 난다. k6 시작부터 첫 요청까지(init과 setup 전원 서명 포함) 약 1.5초 걸렸다(2026-11-24, setup에서 서명하던 때).
 
 #### 8-3. 모드
 
@@ -410,6 +674,20 @@ header `{"alg":"HS256","typ":"JWT"}`, payload `{"sub":"<memberId>","type":"acces
 - 공통 env: `BASE_URL`(API, 기본 `http://localhost:8080`), `MANAGEMENT_URL`(actuator, 기본 `http://localhost:8081`. setup의 health 확인), `MAX_VUS`(기본 300), `JWT_SECRET`(필수), `RUN_ID`, `SUMMARY_DIR`(기본 `loadtest/results/raw`).
 - mixed 웜업 시나리오 env: `WARMUP`(기본 1m), `WARMUP_RATE`(기본 20), `WARMUP_ONLY=1`(웜업 시나리오만 돌리고 판정하지 않는다. `run-measure.sh`의 측정 전 웜업이 쓴다).
 - 짧게 확인할 때는 `WARMUP=10s DURATION=30s`, `DURATION=10s`, `RAMP_RATES=5,10 STAGE_DURATION=10s TRANSITION=5s`처럼 줄이고, 측정 전 웜업도 `PREWARM_DURATION=20s`처럼 줄인다.
+
+**k6 env: 대상 고르기** (#232). 기본값은 이 스트레스 시드용이고, 기본값일 때 요청 비중·threshold·시나리오와 대상 고르는 방식은 #217과 같다. `run-measure.sh`는 env를 그대로 넘기므로(k6는 시스템 env를 `__ENV`로 읽는다) 앞에 붙여 실행한다. 예: `PICK=member BIG_TEAM_RATIO=0 HEAVY_COMMENT_RATIO=0 bash loadtest/scripts/run-measure.sh mixed`.
+
+| env | 기본값 | 뜻 |
+|---|---|---|
+| `PICK` | `team` | `team`: 팀을 먼저 고르고(`BIG_TEAM_RATIO` 확률로 큰 팀) 그 팀 회원 중 하나(8-2 표). `member`(growth 시드용): 회원 전체에서 균등하게 하나, 두 팀 소속이면 그중 한 팀. 회원→팀은 `targets.json`의 `teams[].members`로 만든다 |
+| `BIG_TEAM_RATIO` | `0.3` | `PICK=team`에서 큰 팀을 고를 확률(0~1). `PICK=member`는 쓰지 않으므로 `0`이어야 한다(아니면 init에서 실패) |
+| `HEAVY_COMMENT_RATIO` | `0.2` | `comments` 요청 중 `commentHeavyFeeds`를 고를 확률(0~1). 나머지는 팀 최신 피드 20개(`comment-feeds.json`) 중 하나 |
+
+- `PICK=member`에서 고른 팀에 그 API의 대상이 없으면(`feed_by_place`: 장소 없는 팀, `comments`: 최신 피드 없는 팀) 회원부터 다시 고른다. 20번 안에 못 찾으면 요청하지 않고 에러로 센다: `pick_failures` 카운터(api 태그)를 올리고 `checks`에 `target picked` 실패를 하나 넣는다. 요약 stdout의 `pick_failures: N` 줄과 `meta.pickFailures`에 항상 나온다(`PICK=team`은 항상 0).
+- 두 `PICK` 모두 `feed_deep`은 커서를 먼저 고르고, 댓글 많은 피드는 피드를 먼저 고른 뒤 그 팀 회원으로 요청한다.
+- 비율이 0보다 큰데 대상 배열이 비어 있으면 `setup()`이 원인을 모두 출력하고 실패한다(종료 코드 107). 검사하는 것: `PICK=team`의 큰 팀(`BIG_TEAM_RATIO > 0`)·일반 팀(`< 1`), `PICK=member`의 회원, `comments`를 요청할 때 `commentHeavyFeeds`(`HEAVY_COMMENT_RATIO > 0`), `feed_deep`을 요청할 때 `deepCursors`. solo는 그 API에 필요한 것만 본다. 실패해도 `handleSummary`는 돌아 요약 표(요청 0건)와 `thresholds: all passed`가 찍히므로 종료 코드와 `level=error` 줄로 판단한다.
+- `meta`에 실제로 쓴 `pick`, `bigTeamRatio`, `heavyCommentRatio`, `maxPickAttempts`, `pickFailures`, `targets`(배열별 개수)를 기록한다.
+- `targets.json`을 만드는 `30_targets.sql`의 변수는 6-2 표에 있다.
 
 #### 8-4. 실행
 

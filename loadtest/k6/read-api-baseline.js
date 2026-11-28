@@ -6,7 +6,7 @@
 //   JWT_SECRET=... MODE=solo API=map_pins k6 run loadtest/k6/read-api-baseline.js
 //
 // env
-//   JWT_SECRET      (필수) 앱과 같은 HS256 키. setup()이 회원마다 access token을 서명한다
+//   JWT_SECRET      (필수) 앱과 같은 HS256 키. VU가 회원의 첫 요청 때 access token을 서명해 VU 안에 캐시한다
 //   MODE            mixed(기본) | ramp | solo
 //   API             solo 대상 (아래 APIS 키)
 //   BASE_URL        API 주소(기본 http://localhost:8080)
@@ -23,6 +23,15 @@
 //   RUN_ID          요약 파일 이름 접두사(기본 실행 시각). scripts/run-measure.sh가 넘긴다
 //   SUMMARY_DIR     요약 저장 디렉터리(기본 loadtest/results/raw)
 //   TARGETS, COMMENT_FEEDS  입력 JSON 경로(이 파일 기준, 기본 ./data/targets.json, ./data/comment-feeds.json)
+//   PICK            요청 대상 고르는 방식. team(기본, #217 스트레스 시드) | member(growth 시드)
+//                     team  : 팀을 먼저 고르고(BIG_TEAM_RATIO 확률로 큰 팀) 그 팀 회원 중 하나
+//                     member: 회원 전체에서 균등하게 하나, 두 팀 소속이면 그중 한 팀. 그 팀에 API 대상이 없으면
+//                             회원을 다시 고르고(최대 MAX_PICK_ATTEMPTS번), 못 찾으면 요청하지 않고 에러로 센다
+//                             (pick_failures 카운터, checks 'target picked' 실패)
+//                     두 방식 모두 feed_deep은 커서를 먼저 고르고, 댓글 많은 피드는 피드를 먼저 고른 뒤 그 팀 회원으로 요청한다
+//   BIG_TEAM_RATIO  PICK=team에서 큰 팀을 고를 확률(기본 0.3). PICK=member에서는 쓰지 않으므로 0이어야 한다
+//   HEAVY_COMMENT_RATIO  댓글 요청 중 commentHeavyFeeds를 고를 확률(기본 0.2)
+//   비율이 0보다 큰데 그 대상 배열(큰 팀, 댓글 많은 피드, 깊은 커서 등)이 비어 있으면 setup()이 원인을 출력하고 실패한다
 
 import http from 'k6/http';
 import { check } from 'k6';
@@ -30,6 +39,7 @@ import { SharedArray } from 'k6/data';
 import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
 import exec from 'k6/execution';
+import { Counter } from 'k6/metrics';
 
 const MODE = (__ENV.MODE || 'mixed').toLowerCase();
 const BASE_URL = (__ENV.BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
@@ -37,8 +47,31 @@ const MANAGEMENT_URL = (__ENV.MANAGEMENT_URL || 'http://localhost:8081').replace
 const WARMUP_ONLY = MODE === 'mixed' && __ENV.WARMUP_ONLY === '1';
 const MAX_VUS = parseInt(__ENV.MAX_VUS || '300', 10);
 const SUMMARY_DIR = (__ENV.SUMMARY_DIR || 'loadtest/results/raw').replace(/\/+$/, '');
-const BIG_TEAM_RATIO = 0.3; // 요청의 30%는 큰 팀
-const HEAVY_COMMENT_RATIO = 0.2; // 댓글 요청 중 댓글 많은 피드(500~2,000개) 비율. 나머지는 팀 최신 피드 20개 중 하나
+const PICK = (__ENV.PICK || 'team').toLowerCase();
+if (PICK !== 'team' && PICK !== 'member') {
+	throw new Error(`알 수 없는 PICK: ${__ENV.PICK} (team | member)`);
+}
+
+function parseRatio(name, defaultValue) {
+	const rawValue = __ENV[name];
+	if (rawValue === undefined || rawValue === '') {
+		return defaultValue;
+	}
+	const v = Number(rawValue);
+	if (!Number.isFinite(v) || v < 0 || v > 1) {
+		throw new Error(`${name}는 0~1 사이 숫자여야 한다. 받은 값: ${rawValue}`);
+	}
+	return v;
+}
+
+// 스트레스 시드 기본값: 요청의 30%는 큰 팀
+const BIG_TEAM_RATIO = parseRatio('BIG_TEAM_RATIO', 0.3);
+// 댓글 요청 중 댓글 많은 피드(스트레스 시드는 500~2,000개) 비율. 나머지는 팀 최신 피드 20개 중 하나
+const HEAVY_COMMENT_RATIO = parseRatio('HEAVY_COMMENT_RATIO', 0.2);
+if (PICK === 'member' && BIG_TEAM_RATIO > 0) {
+	throw new Error(`PICK=member는 회원을 균등하게 고르므로 큰 팀 비율을 쓰지 않는다. BIG_TEAM_RATIO=0으로 둔다(받은 값: ${BIG_TEAM_RATIO})`);
+}
+const MAX_PICK_ATTEMPTS = 20; // PICK=member에서 API 대상이 있는 팀을 찾을 때까지 회원을 다시 고르는 최대 횟수
 const JWT_TTL_SECONDS = 24 * 60 * 60;
 
 // ---------------------------------------------------------------------------
@@ -119,6 +152,22 @@ const deepCursors = new SharedArray('deepCursors', () => {
 	const refs = teamRefs();
 	return raw().targets.deepCursors.map((c) => ({ ...c, teamRef: refs[c.teamId] }));
 });
+// PICK=member: 회원마다 소속 팀의 teamRef 목록. targets.json의 팀 배열에서 만든다(memberId 오름차순).
+const members = PICK === 'member' ? new SharedArray('members', () => {
+	const refs = teamRefs();
+	const byMember = {};
+	for (const t of raw().targets.teams) {
+		for (const m of t.members) {
+			(byMember[m.memberId] = byMember[m.memberId] || []).push(refs[t.teamId]);
+		}
+	}
+	return Object.keys(byMember).map(Number).sort((a, b) => a - b).map((id) => ({ memberId: id, teamRefs: byMember[id] }));
+}) : [];
+
+// 요청 대상을 못 고른 횟수(PICK=member, MAX_PICK_ATTEMPTS번 실패). summary에 0도 보이도록 항상 출력한다.
+const pickFailures = new Counter('pick_failures');
+// VU가 서명한 토큰 수(VU마다 따로 캐시하므로 같은 회원이 여러 VU에서 서명될 수 있다)
+const tokensSigned = new Counter('tokens_signed');
 
 // ---------------------------------------------------------------------------
 // 시나리오
@@ -311,30 +360,63 @@ function signAccessToken(memberId, secret, nowSeconds) {
 	return `${unsigned}.${crypto.hmac('sha256', secret, unsigned, 'base64rawurl')}`;
 }
 
+// VU마다 회원 ID → 토큰. 회원의 첫 요청 때 서명한다(setup()에서 전원을 서명하지 않는다).
+const tokenCache = {};
+
+function tokenFor(memberId) {
+	let token = tokenCache[memberId];
+	if (token === undefined) {
+		token = signAccessToken(memberId, __ENV.JWT_SECRET, Math.floor(Date.now() / 1000));
+		tokenCache[memberId] = token;
+		tokensSigned.add(1);
+	}
+	return token;
+}
+
+// 이번 실행에서 요청을 만들 API 목록(solo는 그 API 하나, mixed·ramp는 비중이 0보다 큰 API)
+function activeApis() {
+	return MODE === 'solo' ? [__ENV.API] : API_NAMES.filter((n) => APIS[n].weight > 0);
+}
+
+// 비율이 0보다 큰데 대상 배열이 비어 있으면 요청 중에 undefined 접근으로 깨지므로(코드로 확인, 실행은 안 함) setup()에서 막는다.
+function targetProblems() {
+	const apis = activeApis();
+	const problems = [];
+	const teamPicking = apis.some((a) => a !== 'feed_deep');
+	if (PICK === 'team' && teamPicking) {
+		if (BIG_TEAM_RATIO > 0 && bigTeams.length === 0) {
+			problems.push(`BIG_TEAM_RATIO=${BIG_TEAM_RATIO}인데 큰 팀(teams[].isBig=true)이 0개다. 큰 팀이 없는 시드면 BIG_TEAM_RATIO=0으로 둔다`);
+		}
+		if (BIG_TEAM_RATIO < 1 && normalTeams.length === 0) {
+			problems.push(`BIG_TEAM_RATIO=${BIG_TEAM_RATIO}(<1)인데 일반 팀(teams[].isBig=false)이 0개다`);
+		}
+	}
+	if (PICK === 'member' && teamPicking && members.length === 0) {
+		problems.push('PICK=member인데 teams[].members에 회원이 0명이다');
+	}
+	if (apis.includes('comments') && HEAVY_COMMENT_RATIO > 0 && heavyFeeds.length === 0) {
+		problems.push(`HEAVY_COMMENT_RATIO=${HEAVY_COMMENT_RATIO}인데 commentHeavyFeeds가 0건이다. 댓글 많은 피드가 없는 시드면 HEAVY_COMMENT_RATIO=0으로 둔다`);
+	}
+	if (apis.includes('feed_deep') && deepCursors.length === 0) {
+		problems.push('feed_deep을 요청하는데(solo 대상이거나 mixed·ramp 비중 > 0) deepCursors가 0건이다. 30_targets.sql의 deep_teams·deep_positions를 확인한다');
+	}
+	return problems;
+}
+
 export function setup() {
 	const secret = __ENV.JWT_SECRET;
 	if (!secret) {
 		throw new Error('JWT_SECRET env가 필요하다(loadtest/.env 값). scripts/run-measure.sh는 자동으로 넘긴다.');
 	}
+	const problems = targetProblems();
+	if (problems.length > 0) {
+		throw new Error(`요청 대상이 비어 있다(TARGETS=${TARGETS_PATH}, PICK=${PICK}):\n  - ${problems.join('\n  - ')}`);
+	}
 	const health = http.get(`${MANAGEMENT_URL}/actuator/health`, { tags: { api: 'setup' } });
 	if (health.status !== 200) {
 		throw new Error(`앱이 응답하지 않는다: ${MANAGEMENT_URL}/actuator/health status=${health.status}`);
 	}
-	const nowSeconds = Math.floor(Date.now() / 1000);
-	const tokens = {};
-	const sign = (memberId) => {
-		if (!tokens[memberId]) {
-			tokens[memberId] = signAccessToken(memberId, secret, nowSeconds);
-		}
-	};
-	for (let i = 0; i < bigTeams.length; i++) {
-		bigTeams[i].memberIds.forEach(sign);
-	}
-	for (let i = 0; i < normalTeams.length; i++) {
-		normalTeams[i].memberIds.forEach(sign);
-	}
 	return {
-		tokens,
 		startedAt: new Date().toISOString(),
 		startedAtMs: Date.now(),
 	};
@@ -351,7 +433,7 @@ function pick(arr) {
 	return arr[randInt(arr.length)];
 }
 
-// 30%는 큰 팀, 70%는 일반 팀. 팀 안에서 회원은 무작위.
+// PICK=team: BIG_TEAM_RATIO(기본 30%)는 큰 팀, 나머지는 일반 팀. 팀 안에서 회원은 무작위.
 function pickTeam() {
 	return Math.random() < BIG_TEAM_RATIO ? bigTeams[randInt(bigTeams.length)] : normalTeams[randInt(normalTeams.length)];
 }
@@ -360,20 +442,50 @@ function teamOf(ref) {
 	return ref.big ? bigTeams[ref.index] : normalTeams[ref.index];
 }
 
+// 팀과 그 팀 회원 하나를 고른다. hasTarget(team)이 false면 그 팀에는 이 API의 대상이 없다.
+//   PICK=team  : 팀을 고르고 그 팀 회원 중 하나. hasTarget은 보지 않는다(#217과 같다)
+//   PICK=member: 회원 전체에서 균등하게 하나, 소속 팀 중 하나. hasTarget이 false면 회원부터 다시 고르고,
+//                MAX_PICK_ATTEMPTS번 안에 못 찾으면 null(요청하지 않고 에러로 센다)
+function pickTarget(hasTarget) {
+	if (PICK === 'team') {
+		const team = pickTeam();
+		return { team, memberId: pick(team.memberIds) };
+	}
+	for (let i = 0; i < MAX_PICK_ATTEMPTS; i++) {
+		const m = members[randInt(members.length)];
+		const team = teamOf(pick(m.teamRefs));
+		if (!hasTarget || hasTarget(team)) {
+			return { team, memberId: m.memberId };
+		}
+	}
+	return null;
+}
+
 function req(path, team, memberId, name) {
 	return { url: `${BASE_URL}${path}`, teamId: team ? team.teamId : null, memberId, name };
 }
 
 function buildMapPins() {
-	const team = pickTeam();
-	return req(`/api/v1/teams/${team.teamId}/map/pins`, team, pick(team.memberIds), '/teams/{teamId}/map/pins');
+	const { team, memberId } = pickTarget(null);
+	return req(`/api/v1/teams/${team.teamId}/map/pins`, team, memberId, '/teams/{teamId}/map/pins');
 }
 
 function buildFeedByPlace() {
-	let team = pickTeam();
-	for (let i = 0; i < 10 && team.placeIds.length === 0; i++) {
-		team = pickTeam();
+	let target;
+	if (PICK === 'team') {
+		// #217과 같다: 장소 없는 팀이면 최대 10번 팀을 다시 고른다.
+		let team = pickTeam();
+		for (let i = 0; i < 10 && team.placeIds.length === 0; i++) {
+			team = pickTeam();
+		}
+		target = { team, memberId: pick(team.memberIds) };
+	} else {
+		target = pickTarget((t) => t.placeIds.length > 0);
+		if (target === null) {
+			return null;
+		}
 	}
+	const { team, memberId } = target;
 	// 장소의 피드 수에 비례해 고른다.
 	const r = Math.random() * team.placeCum[team.placeCum.length - 1];
 	let lo = 0;
@@ -387,16 +499,17 @@ function buildFeedByPlace() {
 		}
 	}
 	const placeId = team.placeIds[lo];
-	return req(`/api/v1/teams/${team.teamId}/feeds?placeId=${encodeURIComponent(placeId)}`, team, pick(team.memberIds),
+	return req(`/api/v1/teams/${team.teamId}/feeds?placeId=${encodeURIComponent(placeId)}`, team, memberId,
 		'/teams/{teamId}/feeds?placeId');
 }
 
 function buildFeedFirst() {
-	const team = pickTeam();
-	return req(`/api/v1/teams/${team.teamId}/feeds`, team, pick(team.memberIds), '/teams/{teamId}/feeds');
+	const { team, memberId } = pickTarget(null);
+	return req(`/api/v1/teams/${team.teamId}/feeds`, team, memberId, '/teams/{teamId}/feeds');
 }
 
-// 깊은 페이지는 큰 팀에만 있다(1만·5만·9만 번째 피드 다음 페이지).
+// 깊은 페이지는 팀의 속성이라 두 PICK 모두 커서를 먼저 고르고 그 팀 회원으로 요청한다.
+// (스트레스 시드: 큰 팀의 1만·5만·9만 번째 피드 다음 페이지. growth: 피드 수 상위 팀의 deep_positions번째, 30_targets.sql)
 function buildFeedDeep() {
 	const c = deepCursors[randInt(deepCursors.length)];
 	const team = teamOf(c.teamRef);
@@ -405,35 +518,43 @@ function buildFeedDeep() {
 }
 
 function buildBestAttendance() {
-	const team = pickTeam();
-	return req(`/api/v1/teams/${team.teamId}/home/best-attendance`, team, pick(team.memberIds),
+	const { team, memberId } = pickTarget(null);
+	return req(`/api/v1/teams/${team.teamId}/home/best-attendance`, team, memberId,
 		'/teams/{teamId}/home/best-attendance');
 }
 
 function buildComments() {
 	let team;
+	let memberId;
 	let feedId;
 	if (Math.random() < HEAVY_COMMENT_RATIO) {
+		// 댓글 많은 피드는 피드를 먼저 고르고 그 팀 회원으로 요청한다.
 		const f = heavyFeeds[randInt(heavyFeeds.length)];
 		team = teamOf(f.teamRef);
 		feedId = f.feedId;
+		memberId = pick(team.memberIds);
 	} else {
-		team = pickTeam();
+		const target = pickTarget((t) => t.recentFeedIds.length > 0);
+		if (target === null) {
+			return null;
+		}
+		team = target.team;
+		memberId = target.memberId;
 		feedId = pick(team.recentFeedIds);
 	}
-	return req(`/api/v1/teams/${team.teamId}/feeds/${feedId}/comments`, team, pick(team.memberIds),
+	return req(`/api/v1/teams/${team.teamId}/feeds/${feedId}/comments`, team, memberId,
 		'/teams/{teamId}/feeds/{feedId}/comments');
 }
 
-// 알림은 teamId 없이 회원 전체 알림을 조회한다.
+// 알림은 teamId 없이 회원 전체 알림을 조회한다. PICK=member면 알림 0건 회원도 같은 확률로 고른다.
 function buildNotifications() {
-	const team = pickTeam();
-	return req('/api/v1/me/notifications', null, pick(team.memberIds), '/me/notifications');
+	const { memberId } = pickTarget(null);
+	return req('/api/v1/me/notifications', null, memberId, '/me/notifications');
 }
 
 function buildUnreadCount() {
-	const team = pickTeam();
-	return req('/api/v1/me/notifications/unread-count', null, pick(team.memberIds), '/me/notifications/unread-count');
+	const { memberId } = pickTarget(null);
+	return req('/api/v1/me/notifications/unread-count', null, memberId, '/me/notifications/unread-count');
 }
 
 const CUM_WEIGHTS = (() => {
@@ -457,15 +578,28 @@ function pickApi() {
 	return API_NAMES[API_NAMES.length - 1];
 }
 
-export default function (data) {
+export default function () {
 	const api = pickApi();
 	const r = APIS[api].build();
+	if (r === null) {
+		// PICK=member에서 MAX_PICK_ATTEMPTS번 안에 대상이 있는 팀을 못 찾았다. 요청하지 않고 에러로 센다.
+		const failTags = { api };
+		if (MODE === 'ramp') {
+			failTags.stage = currentStage();
+		}
+		pickFailures.add(1, failTags);
+		check(null, { 'target picked': () => false }, failTags);
+		if (__ENV.LOG_ERRORS !== '0') {
+			console.warn(`${api} 대상 팀을 ${MAX_PICK_ATTEMPTS}번 안에 못 골랐다(PICK=${PICK})`);
+		}
+		return;
+	}
 	const tags = { api, name: r.name };
 	if (MODE === 'ramp') {
 		tags.stage = currentStage();
 	}
 	const res = http.get(r.url, {
-		headers: { Authorization: `Bearer ${data.tokens[r.memberId]}` },
+		headers: { Authorization: `Bearer ${tokenFor(r.memberId)}` },
 		tags,
 	});
 	let body = null;
@@ -538,6 +672,7 @@ export function handleSummary(data) {
 	const suffix = MODE === 'solo' ? `${MODE}-${__ENV.API}` : (WARMUP_ONLY ? 'prewarm' : MODE);
 	const file = `${SUMMARY_DIR}/${runId}-${suffix}-k6-summary.json`;
 	const setupData = data.setup_data || {};
+	const m = data.metrics;
 	const meta = {
 		mode: MODE,
 		api: __ENV.API || null,
@@ -547,15 +682,27 @@ export function handleSummary(data) {
 		scenarios: options.scenarios,
 		setupFinishedAt: setupData.startedAt || null,
 		setupFinishedAtMs: setupData.startedAtMs || null,
-		tokens: setupData.tokens ? Object.keys(setupData.tokens).length : 0,
+		// 토큰은 VU가 첫 요청 때 서명한다. tokensSigned는 VU마다 따로 센 합이라 회원 수보다 클 수 있다
+		tokenSigning: 'per-vu-lazy',
+		tokensSigned: m.tokens_signed ? m.tokens_signed.values.count : 0,
 		weights: Object.fromEntries(API_NAMES.map((n) => [n, APIS[n].weight])),
+		pick: PICK,
 		bigTeamRatio: BIG_TEAM_RATIO,
 		heavyCommentRatio: HEAVY_COMMENT_RATIO,
+		maxPickAttempts: PICK === 'member' ? MAX_PICK_ATTEMPTS : null,
+		pickFailures: m.pick_failures ? m.pick_failures.values.count : 0,
+		targets: {
+			path: TARGETS_PATH,
+			bigTeams: bigTeams.length,
+			normalTeams: normalTeams.length,
+			members: PICK === 'member' ? members.length : null,
+			commentHeavyFeeds: heavyFeeds.length,
+			deepCursors: deepCursors.length,
+		},
 		rampSchedule: MODE === 'ramp' ? rampSchedule() : null,
 	};
 	const out = { meta, state: data.state, metrics: data.metrics };
 
-	const m = data.metrics;
 	const dropped = m.dropped_iterations ? m.dropped_iterations.values.count : 0;
 	let text = `\n[${WARMUP_ONLY ? 'prewarm' : MODE}${__ENV.API ? ` ${__ENV.API}` : ''}] summary -> ${file}\n`;
 	if (MODE === 'mixed') {
@@ -567,6 +714,7 @@ export function handleSummary(data) {
 		text += rows(m, [__ENV.API], (api) => [`api:${api}`, 'scenario:solo']);
 	}
 	text += `\ndropped_iterations: ${dropped}\n`;
+	text += `pick: ${PICK}, bigTeamRatio: ${BIG_TEAM_RATIO}, heavyCommentRatio: ${HEAVY_COMMENT_RATIO}, pick_failures: ${meta.pickFailures}\n`;
 	const failed = Object.entries(m).filter(([, v]) => v.thresholds && Object.values(v.thresholds).some((t) => !t.ok)).map(([k]) => k);
 	text += failed.length === 0 ? 'thresholds: all passed\n' : `thresholds failed:\n  ${failed.join('\n  ')}\n`;
 
